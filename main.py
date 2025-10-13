@@ -3,41 +3,63 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# ✅ Autoriser le frontend (Vercel) à appeler l’API Render
+# Middleware CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://legenerateurdigital-front.vercel.app",  # ton front déployé
-        "http://localhost:3000",  # utile pour les tests locaux
+        "https://legenerateurdigital-front.vercel.app",
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Route de test (health check)
+# Stockage temporaire des utilisateurs (en mémoire)
+users = {
+    "contact@first-digital-academy.com": {
+        "name": "GenerateurDigital",
+        "password": "Steph@020367$",
+    }
+}
+
 @app.get("/")
 def root():
     return {"status": "ok", "message": "API opérationnelle"}
 
-# ✅ Route de connexion
+# ✅ Connexion
 @app.post("/auth/login")
 async def login(request: Request):
     data = await request.json()
     email = data.get("email")
     password = data.get("password")
 
-    # Simple logique de démo — tu pourras la remplacer par ta vraie base de données
-    if email == "contact@first-digital-academy.com" and password == "Steph@020367$":
+    user = users.get(email)
+    if user and user["password"] == password:
         return {
             "access_token": "fake-jwt-token-123456",
-            "token_type": "bearer",
-            "user": {"email": email}
+            "user": {"email": email, "name": user["name"]},
         }
 
     raise HTTPException(status_code=401, detail="Identifiants invalides")
 
-# ✅ Exemple d’une route protégée
+# ✅ Inscription
+@app.post("/auth/register")
+async def register(request: Request):
+    data = await request.json()
+    name = data.get("name")
+    email = data.get("email")
+    password = data.get("password")
+
+    if email in users:
+        raise HTTPException(status_code=400, detail="Utilisateur déjà existant")
+
+    # Créer un nouvel utilisateur
+    users[email] = {"name": name, "password": password}
+
+    return {"message": "Compte créé avec succès", "user": {"email": email, "name": name}}
+
+# Exemple route protégée
 @app.get("/dashboard")
 def dashboard():
     return {"message": "Bienvenue sur ton tableau de bord 🔒"}

@@ -28,7 +28,7 @@ async def login(request: Request):
     password = data.get("password")
 
     # Simple logique de démo — tu pourras la remplacer par ta vraie base de données
-    if email == "contact@first-digital-academy.com" and password == "123456":
+    if email == "contact@first-digital-academy.com" and password == "Steph@020367$":
         return {
             "access_token": "fake-jwt-token-123456",
             "token_type": "bearer",

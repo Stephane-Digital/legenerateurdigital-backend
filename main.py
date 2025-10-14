@@ -73,12 +73,8 @@ async def login(request: Request):
 @app.get("/dashboard")
 def dashboard():
     return {"message": "Bienvenue sur ton tableau de bord 🔒"}
-from fastapi import FastAPI
 
-app = FastAPI()
-
-# ... ici tes autres routes existantes (login, register, etc.)
-
+# ✅ Route de santé (bonne version)
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}

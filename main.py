@@ -18,8 +18,10 @@ app.add_middleware(
 )
 
 # --- Base de données SQLite ---
-DATABASE_URL = "sqlite:///./users.db"
-engine = create_engine(DATABASE_URL, echo=False)
+import os
+
+DATABASE_URL = os.getenv("legenerateurdigital-db") or os.getenv("DATABASE_URL", "sqlite:///database.db")
+engine = create_engine(DATABASE_URL)
 
 # --- Modèle User ---
 class User(SQLModel, table=True):

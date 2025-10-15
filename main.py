@@ -30,6 +30,41 @@ class User(SQLModel, table=True):
     email: str
     password: str
 
+# --- Routes Utilisateurs ---
+
+@app.post("/users/", response_model=User)
+def create_user(user: User):
+    with Session(engine) as session:
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+
+@app.get("/users/", response_model=list[User])
+def read_users():
+    with Session(engine) as session:
+        users = session.exec(select(User)).all()
+        return users
+
+@app.get("/users/{user_id}", response_model=User)
+def read_user(user_id: int):
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        return user
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int):
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        session.delete(user)
+        session.commit()
+        return {"ok": True}
+
+
 # --- Création automatique de la table ---
 SQLModel.metadata.create_all(engine)
 

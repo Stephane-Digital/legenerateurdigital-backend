@@ -1,8 +1,8 @@
 fastapi==0.115.0
-uvicorn[standard]==0.30.5
-python-dotenv==1.0.1
+uvicorn==0.30.6
 sqlmodel==0.0.22
-psycopg2-binary
-python-jose==3.3.0
+SQLAlchemy==2.0.32
+psycopg2-binary==2.9.9
 passlib[bcrypt]==1.7.4
-python-multipart
+python-jose[cryptography]==3.3.0
+typing-extensions==4.12.2

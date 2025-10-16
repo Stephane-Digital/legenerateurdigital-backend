@@ -1,9 +1,11 @@
 # main.py
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import os
-from typing import Optional, Iterable, List
+import time
+import logging
+from datetime import datetime, timedelta
+from typing import Optional, List
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,11 +14,17 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from sqlmodel import SQLModel, Field, Session, create_engine, select
 from sqlalchemy import text
+from sqlmodel import SQLModel, Field, Session, select, create_engine
 
 # -----------------------------------------------------------------------------
-# Config & CORS
+# Logging
+# -----------------------------------------------------------------------------
+logger = logging.getLogger("uvicorn")
+logger.setLevel(logging.INFO)
+
+# -----------------------------------------------------------------------------
+# App & CORS
 # -----------------------------------------------------------------------------
 def _split_env_list(value: Optional[str]) -> List[str]:
     if not value:
@@ -25,7 +33,6 @@ def _split_env_list(value: Optional[str]) -> List[str]:
 
 CORS_ORIGINS = _split_env_list(os.getenv("CORS_ORIGINS")) or [
     "http://localhost:3000",
-    "https://legeneratedigital-front.vercel.app",
 ]
 
 ALLOWED_METHODS = _split_env_list(os.getenv("ALLOWED_METHODS")) or ["*"]
@@ -47,42 +54,53 @@ app.add_middleware(
 )
 
 # -----------------------------------------------------------------------------
-# Database (PostgreSQL on Render with SSL)
+# Database (PostgreSQL on Render with SSL + retries)
 # -----------------------------------------------------------------------------
-RAW_DB_URL = os.getenv("DATABASE_URL", "sqlite:///database.db").strip()
+RAW_DB_URL = (os.getenv("DATABASE_URL") or "sqlite:///database.db").strip()
 
-# Force driver + SSL for Render Postgres
 def _normalize_pg_url(url: str) -> str:
-    # ensure psycopg2 driver in URL
+    # force psycopg2 driver for SQLAlchemy
     if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
 
-ENGINE_KW = {
-    # Render free tier can sleep; keep the pool healthy
-    "pool_pre_ping": True,
-    "pool_recycle": 1800,
-}
+ENGINE_KW = {"pool_pre_ping": True, "pool_recycle": 1800}
 
 if RAW_DB_URL.startswith("postgresql"):
     DB_URL = _normalize_pg_url(RAW_DB_URL)
     engine = create_engine(DB_URL, connect_args={"sslmode": "require"}, **ENGINE_KW)
 else:
-    # SQLite or other
     engine = create_engine(RAW_DB_URL, **ENGINE_KW)
 
-def get_session():
-    with Session(engine) as session:
-        yield session
+def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
+    """
+    Ping la DB et crée les tables. N'échoue pas l'app si la DB est lente à démarrer.
+    """
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("SELECT 1"))
+                SQLModel.metadata.create_all(bind=conn)
+            logger.info("✅ Database ready (attempt %s/%s).", attempt, max_attempts)
+            return True
+        except Exception as e:
+            logger.warning("DB not ready (attempt %s/%s): %s", attempt, max_attempts, e)
+            time.sleep(delay_sec)
+    logger.error("⚠️ DB still not reachable after %s attempts. Continuing without failing.", max_attempts)
+    return False
+
+@app.on_event("startup")
+def on_startup():
+    init_db_with_retry()
 
 # -----------------------------------------------------------------------------
 # Auth (JWT)
 # -----------------------------------------------------------------------------
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
-    raise RuntimeError(
-        "JWT_SECRET is missing. Set it in Render > Environment (a long random string)."
-    )
+    # Ne pas faire planter le déploiement si la variable manque : générer une clé éphémère
+    JWT_SECRET = os.urandom(48).hex()
+    logger.warning("JWT_SECRET is missing in environment. Using a temporary in-memory key.")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -126,13 +144,17 @@ class Token(SQLModel):
     token_type: str = "bearer"
 
 # -----------------------------------------------------------------------------
-# Dependencies
+# DB session dep
 # -----------------------------------------------------------------------------
+def get_session():
+    with Session(engine) as session:
+        yield session
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     session: Session = Depends(get_session),
 ) -> User:
-    credentials_exception = HTTPException(
+    cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
@@ -140,46 +162,37 @@ def get_current_user(
     try:
         payload = decode_token(token)
         email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
+        if not email:
+            raise cred_exc
     except JWTError:
-        raise credentials_exception
+        raise cred_exc
 
     user = session.exec(select(User).where(User.email == email)).first()
     if not user:
-        raise credentials_exception
+        raise cred_exc
     return user
 
 # -----------------------------------------------------------------------------
-# Startup: create tables
-# -----------------------------------------------------------------------------
-@app.on_event("startup")
-def on_startup():
-    SQLModel.metadata.create_all(engine)
-
-# -----------------------------------------------------------------------------
-# Routes: base & health
+# Routes de base & santé
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
     return {"ok": True, "service": "LegenerateurDigital API"}
 
+# Health checks SANS accès DB (pour Render)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.get("/healthz")
 def healthz():
-    # App health + DB ping
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return {"status": "ok", "db": "up"}
-    except Exception:
-        return {"status": "ok", "db": "down"}
+    return {"status": "ok"}
 
 # -----------------------------------------------------------------------------
-# Auth routes
+# Auth API minimale
 # -----------------------------------------------------------------------------
 @app.post("/auth/register", response_model=Token, status_code=201)
 def register(payload: UserCreate, session: Session = Depends(get_session)):
-    # Check email uniqueness
     existing = session.exec(select(User).where(User.email == payload.email)).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")

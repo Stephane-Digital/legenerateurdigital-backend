@@ -25,8 +25,16 @@ app.add_middleware(
 )
 
 # --- Base de données ---
-DATABASE_URL = os.getenv("legenerateurdigital-db") or os.getenv("DATABASE_URL", "sqlite:///database.db")
-engine = create_engine(DATABASE_URL)
+from sqlalchemy.engine import URL
+
+raw_url = os.getenv("DATABASE_URL", "sqlite:///database.db")
+
+# 🔒 Forcer SSL pour PostgreSQL sur Render
+if raw_url.startswith("postgresql"):
+    connect_url = URL.create(raw_url)
+    engine = create_engine(str(connect_url), connect_args={"sslmode": "require"})
+else:
+    engine = create_engine(raw_url)
 
 # --- Sécurité JWT ---
 SECRET_KEY = "ton_secret_à_changer"  # ⚠️ Change cette clé par une valeur longue et unique

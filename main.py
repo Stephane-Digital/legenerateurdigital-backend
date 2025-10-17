@@ -27,11 +27,18 @@ logger.setLevel(logging.INFO)
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-# Origines supplémentaires optionnelles depuis la variable d'env CORS_ORIGINS (séparées par des virgules)
-extra_origins = (
-    [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-    if os.getenv("CORS_ORIGINS")
-    else []
+# Origines explicites si tu veux en ajouter via variable d'env (facultatif)
+extra_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+
+app.add_middleware(
+    CORSMiddleware,
+    # Autorise tous les sous-domaines vercel.app (préviews + prod)
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
+    # Et ces origines explicites si tu en mets (localhost, domaine custom…)
+    allow_origins=["http://localhost:3000", "https://localhost:3000", *[o.strip() for o in extra_origins]],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.add_middleware(

@@ -24,18 +24,17 @@ logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
 
 # --- CORS ---
-from fastapi.middleware.cors import CORSMiddleware
 import os
-
-# Origines explicites si tu veux en ajouter via variable d'env (facultatif)
-extra_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    # Autorise tous les sous-domaines vercel.app (préviews + prod)
-    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
-    # Et ces origines explicites si tu en mets (localhost, domaine custom…)
-    allow_origins=["http://localhost:3000", "https://localhost:3000", *[o.strip() for o in extra_origins]],
+    allow_origin_regex=r"https://.*\.vercel\.app",   # autorise tous les *.vercel.app
+    allow_origins=[                                   # + whitelist explicite (optionnel)
+        "http://localhost:3000",
+        "https://localhost:3000",
+        os.getenv("FRONT_URL", ""),                   # si tu veux pointer une URL précise en env
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

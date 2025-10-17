@@ -23,34 +23,30 @@ from sqlmodel import SQLModel, Field, Session, select, create_engine
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
 
-# -----------------------------------------------------------------------------
-# App & CORS
-# -----------------------------------------------------------------------------
-def _split_env_list(value: Optional[str]) -> List[str]:
-    if not value:
-        return []
-    return [v.strip() for v in value.split(",") if v.strip()]
+# --- CORS ---
+from fastapi.middleware.cors import CORSMiddleware
+import os
 
-CORS_ORIGINS = _split_env_list(os.getenv("CORS_ORIGINS")) or [
-    "http://localhost:3000",
-]
-
-ALLOWED_METHODS = _split_env_list(os.getenv("ALLOWED_METHODS")) or ["*"]
-ALLOWED_HEADERS = _split_env_list(os.getenv("ALLOWED_HEADERS")) or ["*"]
-
-app = FastAPI(
-    title="LegenerateurDigital API",
-    version="1.0.0",
-    docs_url="/docs",
-    openapi_url="/openapi.json",
+# Origines supplémentaires optionnelles depuis la variable d'env CORS_ORIGINS (séparées par des virgules)
+extra_origins = (
+    [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+    if os.getenv("CORS_ORIGINS")
+    else []
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    # Autoriser toutes les URLs *.vercel.app (les URL Vercel changent souvent)
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    # Autoriser aussi localhost pour les tests + origines fixes si tu en ajoutes
+    allow_origins=[
+        "http://localhost:3000",
+        "https://localhost:3000",
+        *extra_origins,
+    ],
     allow_credentials=True,
-    allow_methods=ALLOWED_METHODS,
-    allow_headers=ALLOWED_HEADERS,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # -----------------------------------------------------------------------------

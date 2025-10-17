@@ -27,13 +27,16 @@ logger.setLevel(logging.INFO)
 import os
 from fastapi.middleware.cors import CORSMiddleware
 
+extra_origins = os.getenv("CORS_ORIGINS", "")
+extra = [o.strip() for o in extra_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app",   # autorise tous les *.vercel.app
-    allow_origins=[                                   # + whitelist explicite (optionnel)
+    allow_origin_regex=r"https://.*\.vercel\.app",  # toutes tes previews + prod Vercel
+    allow_origins=[
         "http://localhost:3000",
         "https://localhost:3000",
-        os.getenv("FRONT_URL", ""),                   # si tu veux pointer une URL précise en env
+        *extra,
     ],
     allow_credentials=True,
     allow_methods=["*"],

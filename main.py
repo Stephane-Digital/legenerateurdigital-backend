@@ -1,5 +1,9 @@
 # main.py
 from __future__ import annotations
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()  # ✅ création de l’instance FastAPI avant tout
 
 import os
 import time
@@ -7,8 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from jose import JWTError, jwt
@@ -16,6 +19,7 @@ from passlib.context import CryptContext
 
 from sqlalchemy import text
 from sqlmodel import SQLModel, Field, Session, select, create_engine
+
 
 # -----------------------------------------------------------------------------
 # Logging

@@ -1,42 +1,37 @@
-# main.py
 from __future__ import annotations
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()  # ✅ création de l’instance FastAPI avant tout
-
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy import text
+from sqlmodel import SQLModel, Field, Session, select, create_engine
 import os
 import time
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+# ----------------------------------------------------------------------------- #
+# Initialisation FastAPI
+# ----------------------------------------------------------------------------- #
+app = FastAPI(title="LeGenerateurDigital API")
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-
-from sqlalchemy import text
-from sqlmodel import SQLModel, Field, Session, select, create_engine
-
-
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Logging
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
 
-# --- CORS ---
-import os
-from fastapi.middleware.cors import CORSMiddleware
-
+# ----------------------------------------------------------------------------- #
+# CORS
+# ----------------------------------------------------------------------------- #
 extra_origins = os.getenv("CORS_ORIGINS", "")
 extra = [o.strip() for o in extra_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app",  # toutes tes previews + prod Vercel
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_origins=[
         "http://localhost:3000",
         "https://localhost:3000",
@@ -47,28 +42,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    # Autoriser toutes les URLs *.vercel.app (les URL Vercel changent souvent)
-    allow_origin_regex=r"https://.*\.vercel\.app",
-    # Autoriser aussi localhost pour les tests + origines fixes si tu en ajoutes
-    allow_origins=[
-        "http://localhost:3000",
-        "https://localhost:3000",
-        *extra_origins,
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# -----------------------------------------------------------------------------
-# Database (PostgreSQL on Render with SSL + retries)
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# Database (PostgreSQL + SSL)
+# ----------------------------------------------------------------------------- #
 RAW_DB_URL = (os.getenv("DATABASE_URL") or "sqlite:///database.db").strip()
 
 def _normalize_pg_url(url: str) -> str:
-    # force psycopg2 driver for SQLAlchemy
+    """Assure la compatibilité psycopg2 avec SQLAlchemy."""
     if url.startswith("postgresql://"):
         return url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
@@ -77,13 +57,22 @@ ENGINE_KW = {"pool_pre_ping": True, "pool_recycle": 1800}
 
 if RAW_DB_URL.startswith("postgresql"):
     DB_URL = _normalize_pg_url(RAW_DB_URL)
-    engine = create_engine(DB_URL, connect_args={"sslmode": "require"}, **ENGINE_KW)
+    # ✅ Connexion sécurisée SSL pour Render
+    engine = create_engine(
+        DB_URL,
+        connect_args={
+            "sslmode": "require",
+            "sslrootcert": "/etc/ssl/certs/ca-certificates.crt"
+        },
+        **ENGINE_KW,
+    )
 else:
     engine = create_engine(RAW_DB_URL, **ENGINE_KW)
 
 def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
     """
-    Ping la DB et crée les tables. N'échoue pas l'app si la DB est lente à démarrer.
+    Essaie de pinger la DB plusieurs fois avant d'abandonner.
+    Cela évite que Render plante si la DB démarre lentement.
     """
     for attempt in range(1, max_attempts + 1):
         try:
@@ -95,21 +84,20 @@ def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
         except Exception as e:
             logger.warning("DB not ready (attempt %s/%s): %s", attempt, max_attempts, e)
             time.sleep(delay_sec)
-    logger.error("⚠️ DB still not reachable after %s attempts. Continuing without failing.", max_attempts)
+    logger.error("⚠️ Database still unreachable after %s attempts.", max_attempts)
     return False
 
 @app.on_event("startup")
 def on_startup():
     init_db_with_retry()
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Auth (JWT)
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
-    # Ne pas faire planter le déploiement si la variable manque : générer une clé éphémère
     JWT_SECRET = os.urandom(48).hex()
-    logger.warning("JWT_SECRET is missing in environment. Using a temporary in-memory key.")
+    logger.warning("⚠️ JWT_SECRET manquant — clé temporaire générée.")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -132,9 +120,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def decode_token(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Models
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
@@ -152,9 +140,9 @@ class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
 
-# -----------------------------------------------------------------------------
-# DB session dep
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# Dépendances DB
+# ----------------------------------------------------------------------------- #
 def get_session():
     with Session(engine) as session:
         yield session
@@ -181,14 +169,13 @@ def get_current_user(
         raise cred_exc
     return user
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Routes de base & santé
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 @app.get("/")
 def root():
     return {"ok": True, "service": "LegenerateurDigital API"}
 
-# Health checks SANS accès DB (pour Render)
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -197,9 +184,9 @@ def health():
 def healthz():
     return {"status": "ok"}
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Auth API minimale
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 @app.post("/auth/register", response_model=Token, status_code=201)
 def register(payload: UserCreate, session: Session = Depends(get_session)):
     existing = session.exec(select(User).where(User.email == payload.email)).first()
@@ -225,6 +212,10 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     token = create_access_token({"sub": user.email})
     return Token(access_token=token)
+
+@app.get("/users/me", response_model=User)
+def me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 @app.get("/users/me", response_model=User)
 def me(current_user: User = Depends(get_current_user)):

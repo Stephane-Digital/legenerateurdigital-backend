@@ -55,12 +55,15 @@ app.add_middleware(
 # ----------------------------------------------------------------------
 RAW_DB_URL = (os.getenv("DATABASE_URL") or "sqlite:///database.db").strip()
 
+
 def _normalize_pg_url(url: str) -> str:
+    """Normalise la chaîne PostgreSQL pour SQLAlchemy."""
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     elif url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
+
 
 ENGINE_KW = {"pool_pre_ping": True, "pool_recycle": 1800}
 
@@ -70,13 +73,15 @@ if "postgres" in RAW_DB_URL:
 else:
     engine = create_engine(RAW_DB_URL, **ENGINE_KW)
 
+
 def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
-    """Essaye de pinger la base plusieurs fois avant d'abandonner."""
+    """Essaye de pinger la base et crée les tables avant de continuer."""
     for attempt in range(1, max_attempts + 1):
         try:
-            with engine.begin() as conn:
+            with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-                SQLModel.metadata.create_all(bind=conn)
+            # ✅ Création des tables directement via l'engine
+            SQLModel.metadata.create_all(bind=engine)
             logger.info("✅ Database ready (attempt %s/%s).", attempt, max_attempts)
             return True
         except Exception as e:
@@ -84,6 +89,7 @@ def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
             time.sleep(delay_sec)
     logger.error("❌ Database still unreachable after %s attempts.", max_attempts)
     return False
+
 
 @app.on_event("startup")
 def on_startup():
@@ -116,17 +122,21 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
+
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
@@ -142,10 +152,12 @@ class User(SQLModel, table=True):
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+
 class UserCreate(SQLModel):
     email: str
     password: str
     full_name: Optional[str] = None
+
 
 class Token(SQLModel):
     access_token: str
@@ -157,6 +169,7 @@ class Token(SQLModel):
 def get_session():
     with Session(engine) as session:
         yield session
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -187,9 +200,11 @@ def get_current_user(
 def root():
     return {"ok": True, "service": "LeGenerateurDigital API"}
 
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.get("/healthz")
 def healthz():
@@ -216,6 +231,7 @@ def register(payload: UserCreate, session: Session = Depends(get_session)):
     token = create_access_token({"sub": user.email})
     return Token(access_token=token)
 
+
 @app.post("/auth/login", response_model=Token)
 def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.email == form.username)).first()
@@ -223,6 +239,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     token = create_access_token({"sub": user.email})
     return Token(access_token=token)
+
 
 @app.get("/users/me", response_model=User)
 def me(current_user: User = Depends(get_current_user)):

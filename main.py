@@ -301,3 +301,24 @@ def debug_db_drop():
         return {"ok": True, "message": "All tables dropped."}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.get("/debug/version")
+def debug_version():
+    """
+    Retourne la version du backend déployé (utile pour Render).
+    Ne modifie rien en base de données.
+    """
+    try:
+        import platform
+        import sys
+        from fastapi import __version__ as fastapi_version
+
+        return {
+            "ok": True,
+            "service": "LeGenerateurDigital API",
+            "python_version": platform.python_version(),
+            "fastapi_version": fastapi_version,
+            "build_time": datetime.utcnow().isoformat() + "Z",
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

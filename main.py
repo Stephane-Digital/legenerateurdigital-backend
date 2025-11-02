@@ -5,7 +5,6 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-
 from sqlmodel import SQLModel, Field, Session, select, create_engine
 from sqlalchemy import text
 
@@ -28,7 +27,7 @@ app = FastAPI(
     title="LeGenerateurDigital API",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
 )
 
 # ----------------------------------------------------------------------
@@ -39,7 +38,7 @@ extra = [o.strip() for o in extra_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app",  # autoriser toutes les URLs *.vercel.app
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_origins=[
         "http://localhost:3000",
         "https://localhost:3000",
@@ -55,12 +54,14 @@ app.add_middleware(
 # ----------------------------------------------------------------------
 RAW_DB_URL = (os.getenv("DATABASE_URL") or "sqlite:///database.db").strip()
 
+
 def _normalize_pg_url(url: str) -> str:
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     elif url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
+
 
 ENGINE_KW = {"pool_pre_ping": True, "pool_recycle": 1800}
 
@@ -69,6 +70,7 @@ if "postgres" in RAW_DB_URL:
     engine = create_engine(DB_URL, connect_args={"sslmode": "require"}, **ENGINE_KW)
 else:
     engine = create_engine(RAW_DB_URL, **ENGINE_KW)
+
 
 def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
     """Essaye plusieurs connexions avant de créer les tables."""
@@ -84,6 +86,7 @@ def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
             time.sleep(delay_sec)
     logger.error(f"❌ Database still unreachable after {max_attempts} attempts.")
     return False
+
 
 @app.on_event("startup")
 def on_startup():
@@ -115,17 +118,21 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
+
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
@@ -141,10 +148,12 @@ class User(SQLModel, table=True):
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+
 class UserCreate(SQLModel):
     email: str
     password: str
     full_name: Optional[str] = None
+
 
 class Token(SQLModel):
     access_token: str
@@ -156,6 +165,7 @@ class Token(SQLModel):
 def get_session():
     with Session(engine) as session:
         yield session
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -186,34 +196,48 @@ def get_current_user(
 def root():
     return {"ok": True, "service": "LeGenerateurDigital API"}
 
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
 
 # ----------------------------------------------------------------------
-# AUTH ROUTES
+# AUTH ROUTES (avec debug log)
 # ----------------------------------------------------------------------
 @app.post("/auth/register", response_model=Token, status_code=201)
 def register(payload: UserCreate, session: Session = Depends(get_session)):
-    existing = session.exec(select(User).where(User.email == payload.email)).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    try:
+        logger.info(f"📩 Tentative d'inscription : {payload.email}")
+        existing = session.exec(select(User).where(User.email == payload.email)).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
 
-    user = User(
-        email=payload.email,
-        full_name=payload.full_name,
-        hashed_password=get_password_hash(payload.password),
-    )
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+        hashed = get_password_hash(payload.password)
+        logger.info(f"✅ Mot de passe haché pour {payload.email}")
 
-    token = create_access_token({"sub": user.email})
-    return Token(access_token=token)
+        user = User(
+            email=payload.email,
+            full_name=payload.full_name,
+            hashed_password=hashed,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        token = create_access_token({"sub": user.email})
+        logger.info(f"✅ Utilisateur créé avec succès : {user.email}")
+
+        return Token(access_token=token)
+
+    except Exception as e:
+        logger.error(f"❌ Erreur dans /auth/register : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/auth/login", response_model=Token)
 def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
@@ -223,16 +247,16 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
     token = create_access_token({"sub": user.email})
     return Token(access_token=token)
 
+
 @app.get("/users/me", response_model=User)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 # ----------------------------------------------------------------------
-# DEBUG ROUTES (à supprimer ensuite)
+# DEBUG ROUTES
 # ----------------------------------------------------------------------
 @app.get("/debug/db-tables")
 def debug_list_tables():
-    """Liste les tables présentes dans la base"""
     try:
         with engine.connect() as conn:
             res = conn.exec_driver_sql(
@@ -243,14 +267,6 @@ def debug_list_tables():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/debug/db-drop")
-def debug_db_drop():
-    """⚠️ Supprime toutes les tables (debug uniquement)"""
-    try:
-        SQLModel.metadata.drop_all(bind=engine)
-        return {"ok": True, "message": "All tables dropped."}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
 
 @app.get("/debug/db-columns")
 def debug_db_columns():
@@ -265,3 +281,12 @@ def debug_db_columns():
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.get("/debug/db-drop")
+def debug_db_drop():
+    """⚠️ Supprime toutes les tables (debug uniquement)"""
+    try:
+        SQLModel.metadata.drop_all(bind=engine)
+        return {"ok": True, "message": "All tables dropped."}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

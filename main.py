@@ -4,13 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select, create_engine
 from sqlalchemy import text, Column, Text
 
 import os
 import time
 import logging
+import bcrypt
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -115,23 +115,29 @@ if not JWT_SECRET:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
 
 # ----------------------------------------------------------------------
 # PASSWORD HELPERS
 # ----------------------------------------------------------------------
 def get_password_hash(password: str) -> str:
-    """Hache le mot de passe après troncature à 72 octets (limite bcrypt)."""
-    safe_password = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.hash(safe_password)
+    """Hache un mot de passe avec troncature stricte à 72 octets (bcrypt natif)."""
+    if not password:
+        raise ValueError("Password cannot be empty")
+
+    password_bytes = password.encode("utf-8")[:72]
+    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Vérifie un mot de passe avec troncature sécurisée."""
-    safe_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.verify(safe_password, hashed_password)
+    """Vérifie un mot de passe avec troncature stricte à 72 octets."""
+    try:
+        password_bytes = plain_password.encode("utf-8")[:72]
+        return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+    except Exception as e:
+        logger.error(f"Erreur vérification bcrypt : {e}")
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -151,7 +157,7 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     full_name: Optional[str] = None
-    hashed_password: str = Field(sa_column=Column(Text, nullable=False))  # ✅ Corrigé
+    hashed_password: str = Field(sa_column=Column(Text, nullable=False))
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

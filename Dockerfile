@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copier tout le reste du code
 COPY . .
 
-# Exposer le port (Render utilisera PORT automatiquement)
+# Exposer le port (Render utilisera automatiquement la variable $PORT)
 EXPOSE 8000
 
-# ✅ Lancer directement Uvicorn sans sous-shell
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Lancer l'application FastAPI
+CMD ["sh", "-c", "echo '🚀 Lancement du backend sur le port ${PORT:-8000}...' && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

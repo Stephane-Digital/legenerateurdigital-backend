@@ -251,3 +251,17 @@ def debug_db_drop():
         return {"ok": True, "message": "All tables dropped."}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.get("/debug/db-columns")
+def debug_db_columns():
+    """Liste les colonnes de la table user"""
+    try:
+        with engine.connect() as conn:
+            res = conn.exec_driver_sql(
+                "SELECT column_name, data_type FROM information_schema.columns WHERE table_name='user';"
+            )
+            cols = [dict(name=r[0], type=r[1]) for r in res]
+            return {"columns": cols}
+    except Exception as e:
+        return {"error": str(e)}
+

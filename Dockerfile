@@ -20,6 +20,5 @@ COPY . .
 # Exposer le port (Render utilisera PORT automatiquement)
 EXPOSE 8000
 
-# Lancer l'application
-CMD ["sh", "-c", "echo 'Lancement du backend...' && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
-
+# ✅ Lancer directement Uvicorn sans sous-shell
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

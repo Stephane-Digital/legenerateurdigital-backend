@@ -277,3 +277,12 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
 @app.get("/users/me", response_model=User)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@app.get("/debug/db-drop")
+def debug_db_drop():
+    """Supprime toutes les tables (⚠️ irréversible)"""
+    try:
+        SQLModel.metadata.drop_all(bind=engine)
+        return {"ok": True, "message": "All tables dropped."}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

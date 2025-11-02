@@ -73,27 +73,38 @@ if "postgres" in RAW_DB_URL:
 else:
     engine = create_engine(RAW_DB_URL, **ENGINE_KW)
 
-
+# ----------------------------------------------------------------------
+# INIT DB + TABLES
+# ----------------------------------------------------------------------
 def init_db_with_retry(max_attempts: int = 12, delay_sec: int = 5) -> bool:
-    """Essaye de pinger la base et crée les tables avant de continuer."""
+    """Essaye plusieurs fois de se connecter à la DB, puis crée les tables."""
     for attempt in range(1, max_attempts + 1):
         try:
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-            # ✅ Création des tables directement via l'engine
+            logger.info("✅ Database reachable (attempt %s/%s).", attempt, max_attempts)
+
+            # ✅ Création des tables ici
             SQLModel.metadata.create_all(bind=engine)
-            logger.info("✅ Database ready (attempt %s/%s).", attempt, max_attempts)
+            logger.info("✅ Tables created or already exist.")
             return True
+
         except Exception as e:
-            logger.warning("⚠️ DB not ready (attempt %s/%s): %s", attempt, max_attempts, e)
+            logger.warning("⚠️ Database not ready (attempt %s/%s): %s", attempt, max_attempts, e)
             time.sleep(delay_sec)
-    logger.error("❌ Database still unreachable after %s attempts.", max_attempts)
+
+    logger.error("❌ Could not connect to database after %s attempts.", max_attempts)
     return False
 
 
 @app.on_event("startup")
-def on_startup():
-    init_db_with_retry()
+def startup_event():
+    """Démarrage de l’app - attend que la DB soit prête avant de continuer"""
+    if init_db_with_retry():
+        logger.info("🚀 Application started and database initialized.")
+    else:
+        logger.error("❌ Failed to initialize database.")
+
 
 # ----------------------------------------------------------------------
 # TEST CONNEXION DB
@@ -107,6 +118,24 @@ def test_db_connection():
             return {"ok": True, "message": "Connexion OK ✅", "server_time": str(result[0])}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ----------------------------------------------------------------------
+# DEBUG TABLES (optionnel)
+# ----------------------------------------------------------------------
+@app.get("/debug/db-tables")
+def debug_db_tables():
+    """Permet de vérifier si les tables existent."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+            ))
+            tables = [row[0] for row in result]
+        return {"tables": tables}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # ----------------------------------------------------------------------
 # AUTHENTIFICATION (JWT)
@@ -141,6 +170,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def decode_token(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
 
+
 # ----------------------------------------------------------------------
 # MODELES SQLMODEL
 # ----------------------------------------------------------------------
@@ -162,6 +192,7 @@ class UserCreate(SQLModel):
 class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
+
 
 # ----------------------------------------------------------------------
 # DB SESSION & AUTH HELPERS
@@ -193,6 +224,7 @@ def get_current_user(
         raise cred_exc
     return user
 
+
 # ----------------------------------------------------------------------
 # ROUTES PRINCIPALES
 # ----------------------------------------------------------------------
@@ -209,6 +241,7 @@ def health():
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
+
 
 # ----------------------------------------------------------------------
 # ROUTES AUTH

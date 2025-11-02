@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select, create_engine
-from sqlalchemy import text
+from sqlalchemy import text, Column, Text
 
 import os
 import time
@@ -144,7 +144,8 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     full_name: Optional[str] = None
-    hashed_password: str
+    # ✅ FIX: Utilise un champ TEXT pour éviter les erreurs bcrypt
+    hashed_password: str = Field(sa_column=Column(Text, nullable=False))
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

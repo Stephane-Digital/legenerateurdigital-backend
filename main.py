@@ -119,12 +119,19 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
+# ----------------------------------------------------------------------
+# PASSWORD HELPERS
+# ----------------------------------------------------------------------
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hache le mot de passe après troncature à 72 octets (limite bcrypt)."""
+    safe_password = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return pwd_context.hash(safe_password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Vérifie un mot de passe avec troncature sécurisée."""
+    safe_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return pwd_context.verify(safe_password, hashed_password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -144,8 +151,7 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     full_name: Optional[str] = None
-    # ✅ FIX: Utilise un champ TEXT pour éviter les erreurs bcrypt
-    hashed_password: str = Field(sa_column=Column(Text, nullable=False))
+    hashed_password: str = Field(sa_column=Column(Text, nullable=False))  # ✅ Corrigé
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -208,7 +214,7 @@ def healthz():
     return {"status": "ok"}
 
 # ----------------------------------------------------------------------
-# AUTH ROUTES (avec debug log)
+# AUTH ROUTES
 # ----------------------------------------------------------------------
 @app.post("/auth/register", response_model=Token, status_code=201)
 def register(payload: UserCreate, session: Session = Depends(get_session)):
@@ -271,7 +277,6 @@ def debug_list_tables():
 
 @app.get("/debug/db-columns")
 def debug_db_columns():
-    """Liste les colonnes de la table user"""
     try:
         with engine.connect() as conn:
             res = conn.exec_driver_sql(
@@ -285,7 +290,6 @@ def debug_db_columns():
 
 @app.get("/debug/db-drop")
 def debug_db_drop():
-    """⚠️ Supprime toutes les tables (debug uniquement)"""
     try:
         SQLModel.metadata.drop_all(bind=engine)
         return {"ok": True, "message": "All tables dropped."}

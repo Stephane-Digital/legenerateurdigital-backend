@@ -12,7 +12,8 @@ import time
 import logging
 import bcrypt
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 
 # ----------------------------------------------------------------------
 # LOGGING
@@ -93,18 +94,6 @@ def on_startup():
     init_db_with_retry()
 
 # ----------------------------------------------------------------------
-# TEST DATABASE CONNECTION
-# ----------------------------------------------------------------------
-@app.get("/db-test")
-def test_db_connection():
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT NOW()")).fetchone()
-            return {"ok": True, "message": "Connexion OK ✅", "server_time": str(result[0])}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-# ----------------------------------------------------------------------
 # AUTHENTIFICATION (JWT)
 # ----------------------------------------------------------------------
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -172,6 +161,17 @@ class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
 
+
+# === MODÈLE IDÉE D’ENTREPRISE ===
+class IdeeEntreprise(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    userId: Optional[int] = Field(default=None, foreign_key="user.id")
+    titre: str
+    description: str
+    marche: str
+    promesse: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
 # ----------------------------------------------------------------------
 # DB SESSION HELPERS
 # ----------------------------------------------------------------------
@@ -225,14 +225,11 @@ def healthz():
 @app.post("/auth/register", response_model=Token, status_code=201)
 def register(payload: UserCreate, session: Session = Depends(get_session)):
     try:
-        logger.info(f"📩 Tentative d'inscription : {payload.email}")
         existing = session.exec(select(User).where(User.email == payload.email)).first()
         if existing:
             raise HTTPException(status_code=400, detail="Email already registered")
 
         hashed = get_password_hash(payload.password)
-        logger.info(f"✅ Mot de passe haché pour {payload.email}")
-
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -243,8 +240,6 @@ def register(payload: UserCreate, session: Session = Depends(get_session)):
         session.refresh(user)
 
         token = create_access_token({"sub": user.email})
-        logger.info(f"✅ Utilisateur créé avec succès : {user.email}")
-
         return Token(access_token=token)
 
     except Exception as e:
@@ -266,59 +261,61 @@ def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 # ----------------------------------------------------------------------
-# DEBUG ROUTES
+# ENTREPRISE ROUTES — CRÉER SON ENTREPRISE
 # ----------------------------------------------------------------------
-@app.get("/debug/db-tables")
-def debug_list_tables():
+class IdeeEntrepriseCreate(BaseModel):
+    titre: str
+    description: str
+    marche: str
+    promesse: str
+
+
+@app.post("/api/entreprise/idee", response_model=dict)
+def create_idee(
+    data: IdeeEntrepriseCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Crée une idée d’entreprise pour l’utilisateur connecté."""
     try:
-        with engine.connect() as conn:
-            res = conn.exec_driver_sql(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
-            )
-            tables = [r[0] for r in res]
-            return {"tables": tables}
+        idee = IdeeEntreprise(
+            userId=current_user.id,
+            titre=data.titre,
+            description=data.description,
+            marche=data.marche,
+            promesse=data.promesse,
+        )
+        session.add(idee)
+        session.commit()
+        session.refresh(idee)
+        return {"ok": True, "id": idee.id, "message": "Idée enregistrée avec succès ✅"}
     except Exception as e:
-        return {"error": str(e)}
+        session.rollback()
+        logger.error(f"❌ Erreur création idée : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/debug/db-columns")
-def debug_db_columns():
+@app.get("/api/entreprise/idee", response_model=List[dict])
+def list_idees(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Retourne toutes les idées enregistrées par l’utilisateur."""
     try:
-        with engine.connect() as conn:
-            res = conn.exec_driver_sql(
-                "SELECT column_name, data_type FROM information_schema.columns WHERE table_name='user';"
-            )
-            cols = [dict(name=r[0], type=r[1]) for r in res]
-            return {"columns": cols}
+        idees = session.exec(
+            select(IdeeEntreprise).where(IdeeEntreprise.userId == current_user.id)
+        ).all()
+        return [
+            {
+                "id": i.id,
+                "titre": i.titre,
+                "description": i.description,
+                "marche": i.marche,
+                "promesse": i.promesse,
+                "created_at": i.created_at,
+            }
+            for i in idees
+        ]
     except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/debug/db-drop")
-def debug_db_drop():
-    try:
-        SQLModel.metadata.drop_all(bind=engine)
-        return {"ok": True, "message": "All tables dropped."}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-@app.get("/debug/version")
-def debug_version():
-    """
-    Retourne la version du backend déployé (utile pour Render).
-    Ne modifie rien en base de données.
-    """
-    try:
-        import platform
-        import sys
-        from fastapi import __version__ as fastapi_version
-
-        return {
-            "ok": True,
-            "service": "LeGenerateurDigital API",
-            "python_version": platform.python_version(),
-            "fastapi_version": fastapi_version,
-            "build_time": datetime.utcnow().isoformat() + "Z",
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        logger.error(f"❌ Erreur récupération idées : {e}")
+        raise HTTPException(status_code=500, detail=str(e))

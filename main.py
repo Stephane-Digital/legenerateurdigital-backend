@@ -319,3 +319,30 @@ def list_idees(
     except Exception as e:
         logger.error(f"❌ Erreur récupération idées : {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/entreprise/idee/{idee_id}", response_model=dict)
+def delete_idee(
+    idee_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Supprime une idée d’entreprise appartenant à l’utilisateur connecté."""
+    try:
+        idee = session.exec(
+            select(IdeeEntreprise)
+            .where(IdeeEntreprise.id == idee_id)
+            .where(IdeeEntreprise.userId == current_user.id)
+        ).first()
+
+        if not idee:
+            raise HTTPException(status_code=404, detail="Idée introuvable ou non autorisée")
+
+        session.delete(idee)
+        session.commit()
+        return {"ok": True, "message": "Idée supprimée avec succès 🗑️"}
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"❌ Erreur suppression idée : {e}")
+        raise HTTPException(status_code=500, detail=str(e))

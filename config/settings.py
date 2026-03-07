@@ -2,9 +2,12 @@
 #  LGD — Settings / Environment Loader (Pydantic v2)
 # ============================================================
 
+from __future__ import annotations
+
+import json
 from typing import List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -103,6 +106,32 @@ class Settings(BaseSettings):
     SYSTEMEIO_PRICEPLAN_ESSENTIEL_IDS: str = ""
     SYSTEMEIO_PRICEPLAN_PRO_IDS: str = ""
     SYSTEMEIO_PRICEPLAN_ULTIME_IDS: str = ""
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value):
+        if value is None or value == "":
+            return []
+
+        if isinstance(value, list):
+            return [str(v).strip() for v in value if str(v).strip()]
+
+        if isinstance(value, str):
+            raw = value.strip()
+
+            if not raw:
+                return []
+
+            # Support JSON array string
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(v).strip() for v in parsed if str(v).strip()]
+
+            # Support comma-separated string
+            return [item.strip() for item in raw.split(",") if item.strip()]
+
+        return value
 
 
 settings = Settings()

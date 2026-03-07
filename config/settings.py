@@ -19,6 +19,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        enable_decoding=False,
     )
 
     # --------------------------------------------------------
@@ -110,7 +111,7 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, value):
-        if value is None or value == "":
+        if value is None:
             return []
 
         if isinstance(value, list):
@@ -118,17 +119,17 @@ class Settings(BaseSettings):
 
         if isinstance(value, str):
             raw = value.strip()
-
             if not raw:
                 return []
 
-            # Support JSON array string
             if raw.startswith("["):
-                parsed = json.loads(raw)
-                if isinstance(parsed, list):
-                    return [str(v).strip() for v in parsed if str(v).strip()]
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(v).strip() for v in parsed if str(v).strip()]
+                except Exception:
+                    pass
 
-            # Support comma-separated string
             return [item.strip() for item in raw.split(",") if item.strip()]
 
         return value

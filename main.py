@@ -130,6 +130,14 @@ app.include_router(systemeio_webhook_router)
 # ✅ Jobs
 app.include_router(jobs_publish_due_router)
 
+@app.get("/")
+def home():
+    return {"status": "LGD Backend Running", "version": settings.APP_VERSION}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 # ============================================================
 # DEBUG (safe) — list loaded routes in logs
 # ============================================================

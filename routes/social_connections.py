@@ -110,11 +110,29 @@ def _user_id_from_current_user(current_user: Any) -> int:
 
 
 def _ensure_schema(db: Session) -> None:
-    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS page_id VARCHAR(64);")) 
-    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS page_name VARCHAR(255);")) 
-    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS page_access_token TEXT;")) 
-    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE;")) 
-    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS fb_user_id VARCHAR(64);")) 
+    db.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS social_connections (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                network VARCHAR(50) NOT NULL,
+                access_token TEXT,
+                refresh_token TEXT,
+                expires_at TIMESTAMP WITHOUT TIME ZONE,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+            );
+            '''
+        )
+    )
+
+    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS page_id VARCHAR(64);"))
+    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS page_name VARCHAR(255);"))
+    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS page_access_token TEXT;"))
+    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE;"))
+    db.execute(text("ALTER TABLE social_connections ADD COLUMN IF NOT EXISTS fb_user_id VARCHAR(64);"))
+
     db.execute(
         text(
             '''
@@ -123,6 +141,7 @@ def _ensure_schema(db: Session) -> None:
             '''
         )
     )
+
     db.commit()
 
 
@@ -219,7 +238,7 @@ def _verify_state(state: str) -> dict:
 
 
 def _graph_get(path: str, params: dict) -> dict:
-    r = requests.get(f"{GRAPH}/{GRAPH_V}/{path.lstrip('/')}" , params=params, timeout=25)
+    r = requests.get(f"{GRAPH}/{GRAPH_V}/{path.lstrip('/')}", params=params, timeout=25)
     if not r.ok:
         try:
             j = r.json()
@@ -251,14 +270,19 @@ def _exchange_long_lived(short_token: str) -> dict:
 
 @router.get("/debug")
 def debug(db: Session = Depends(get_db)):
-    _ensure_schema(db)
-    return {
-        "ok": True,
-        "table": "social_connections",
-        "redirect_uri_runtime": _normalized_redirect_uri(),
-        "callback_path_expected": "/social-connections/facebook/callback",
-        "app_id_runtime": FB_APP_ID,
-    }
+    try:
+        _ensure_schema(db)
+        return {
+            "ok": True,
+            "table": "social_connections",
+            "redirect_uri_runtime": _normalized_redirect_uri(),
+            "callback_path_expected": "/social-connections/facebook/callback",
+            "app_id_runtime": FB_APP_ID,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"social_connections_debug_error: {str(e)}")
 
 
 @router.get("/status")

@@ -1,0 +1,6 @@
+# PATCH (à appliquer dans ton backend main.py)
+# 1) Import :
+# from routes.coach_ia import router as coach_ia_router
+#
+# 2) Include :
+# app.include_router(coach_ia_router)

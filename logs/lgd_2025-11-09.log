@@ -1,0 +1,14 @@
+[10:32:35] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[10:32:35] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[10:32:35] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[10:32:38] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[10:32:38] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[10:32:38] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[10:32:41] 💎 LGD | INFO | HTTP Request: GET http://localhost:63833/status "HTTP/1.1 200 OK"
+[11:42:50] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[11:42:50] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[11:42:50] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[11:42:52] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[11:42:52] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[11:42:52] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[11:42:55] 💎 LGD | INFO | HTTP Request: GET http://localhost:59885/status "HTTP/1.1 200 OK"

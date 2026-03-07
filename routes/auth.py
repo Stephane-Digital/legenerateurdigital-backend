@@ -1,0 +1,149 @@
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+
+from database import get_db
+from schemas.user_schema import UserCreate
+from services.auth_service import (
+    authenticate_user,
+    create_access_token,
+    hash_password
+)
+from models.user_model import User
+from config.settings import settings
+
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+# ============================================================
+# 🧪 REGISTER
+# ============================================================
+@router.post("/register")
+def register_user(payload: UserCreate, db: Session = Depends(get_db)):
+
+    exists = db.query(User).filter(User.email == payload.email.lower()).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Cet email est déjà utilisé.")
+
+    new_user = User(
+        email=payload.email.lower(),
+        password=hash_password(payload.password),
+        full_name=payload.full_name
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {"message": "Compte créé", "user_id": new_user.id}
+
+
+# ============================================================
+# 🔐 LOGIN
+# ============================================================
+@router.post("/login")
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    user = authenticate_user(db, form_data.username, form_data.password)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Identifiants invalides")
+
+    token = create_access_token({"sub": str(user.id)})
+    response = JSONResponse({"message": "Connexion réussie", "token": token})
+
+    response.set_cookie(
+        key="lgd_token",
+        value=token,
+        httponly=True,
+        secure=False,
+        samesite="Lax",
+        max_age=60 * 60 * 24 * 7,
+        path="/"
+    )
+
+    return response
+
+
+# ============================================================
+# 🚪 LOGOUT
+# ============================================================
+@router.post("/logout")
+def logout():
+    response = JSONResponse({"message": "Déconnexion réussie"})
+    response.delete_cookie(key="lgd_token", path="/")
+    return response
+
+
+# ============================================================
+# 👤 ME
+# ============================================================
+@router.get("/me")
+def me(request: Request, db: Session = Depends(get_db)):
+    token = request.cookies.get("lgd_token")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+
+    from jose import jwt, JWTError
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        user_id = int(payload.get("sub"))
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name
+    }
+
+
+# ============================================================
+# ⭐ get_current_user — Cookie FIRST, Header Bearer fallback
+# ============================================================
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    """
+    Auth LGD — source of truth:
+    1) Cookie 'lgd_token' (frontend Next)
+    2) Fallback: Authorization: Bearer <token> (Swagger / tools / edge cases)
+    """
+    token = request.cookies.get("lgd_token")
+
+    if not token:
+        auth = request.headers.get("authorization") or request.headers.get("Authorization")
+        if auth and auth.lower().startswith("bearer "):
+            token = auth.split(" ", 1)[1].strip()
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+
+    from jose import jwt, JWTError
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        user_id = int(payload.get("sub"))
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    return user

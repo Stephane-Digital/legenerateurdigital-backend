@@ -63,8 +63,8 @@ def _env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
 
 
-FB_APP_ID = _env("FACEBOOK_APP_ID") or _env("FACEBOOK_CLIENT_ID")
-FB_APP_SECRET = _env("FACEBOOK_APP_SECRET") or _env("FACEBOOK_CLIENT_SECRET")
+FB_APP_ID = _env("FACEBOOK_APP_ID")
+FB_APP_SECRET = _env("FACEBOOK_APP_SECRET")
 FB_REDIRECT_URI = _env("FACEBOOK_REDIRECT_URI")
 FB_STATE_SECRET = _env("FACEBOOK_STATE_SECRET", "change_me_long_random")
 

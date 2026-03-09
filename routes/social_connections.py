@@ -7,12 +7,16 @@ import os
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
+from urllib.parse import urlencode
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from config.settings import settings
 
 
 def _get_db_dep():
@@ -81,6 +85,18 @@ def _normalized_redirect_uri() -> str:
     return uri
 
 
+def _frontend_planner_url(extra: Optional[Dict[str, Any]] = None) -> str:
+    base = (
+        (getattr(settings, "FRONTEND_URL", "") or "").strip()
+        or _env("FRONTEND_URL")
+        or "http://localhost:3000"
+    ).rstrip("/")
+    path = "/dashboard/automatisations/reseaux_sociaux/planner"
+    query = dict(extra or {})
+    query["ts"] = str(int(time.time()))
+    return f"{base}{path}?{urlencode(query)}"
+
+
 def _require_facebook_env() -> None:
     redirect_uri = _normalized_redirect_uri()
     missing = []
@@ -112,7 +128,7 @@ def _user_id_from_current_user(current_user: Any) -> int:
 def _ensure_schema(db: Session) -> None:
     db.execute(
         text(
-            '''
+            """
             CREATE TABLE IF NOT EXISTS social_connections (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -123,7 +139,7 @@ def _ensure_schema(db: Session) -> None:
                 is_active BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
             );
-            '''
+            """
         )
     )
 
@@ -135,10 +151,10 @@ def _ensure_schema(db: Session) -> None:
 
     db.execute(
         text(
-            '''
+            """
             CREATE UNIQUE INDEX IF NOT EXISTS ux_social_connections_user_network
             ON social_connections (user_id, network);
-            '''
+            """
         )
     )
 
@@ -176,7 +192,7 @@ def _upsert_connection(db: Session, payload: SaveConnectionIn) -> None:
 
     db.execute(
         text(
-            '''
+            """
             INSERT INTO social_connections (
                 user_id, network, access_token, refresh_token, expires_at, is_active,
                 created_at, updated_at, page_id, page_name, page_access_token, fb_user_id
@@ -196,7 +212,7 @@ def _upsert_connection(db: Session, payload: SaveConnectionIn) -> None:
                 page_name = COALESCE(EXCLUDED.page_name, social_connections.page_name),
                 page_access_token = COALESCE(EXCLUDED.page_access_token, social_connections.page_access_token),
                 fb_user_id = COALESCE(EXCLUDED.fb_user_id, social_connections.fb_user_id);
-            '''
+            """
         ),
         {
             "user_id": payload.user_id,
@@ -278,6 +294,8 @@ def debug(db: Session = Depends(get_db)):
             "redirect_uri_runtime": _normalized_redirect_uri(),
             "callback_path_expected": "/social-connections/facebook/callback",
             "app_id_runtime": FB_APP_ID,
+            "frontend_planner_url": _frontend_planner_url({"facebook": "connected"}),
+            "LGD_DEBUG_VERSION": "FORCE-REDIRECT-2026-03-09",
         }
     except HTTPException:
         raise
@@ -286,11 +304,12 @@ def debug(db: Session = Depends(get_db)):
 
 
 @router.get("/status")
-def status(db: Session = Depends(get_db)):
+def status(current_user: Any = Depends(get_current_user), db: Session = Depends(get_db)):
     _ensure_schema(db)
+    uid = _user_id_from_current_user(current_user)
     rows = db.execute(
         text(
-            '''
+            """
             SELECT
                 network,
                 MAX(CASE WHEN is_active AND LENGTH(COALESCE(access_token,'')) > 0 THEN 1 ELSE 0 END) AS ok,
@@ -304,9 +323,11 @@ def status(db: Session = Depends(get_db)):
                     END
                 ) AS fb_page_ok
             FROM social_connections
+            WHERE user_id=:uid
             GROUP BY network
-            '''
-        )
+            """
+        ),
+        {"uid": uid},
     ).mappings().all()
 
     out: Dict[str, Any] = {"ok": True, "networks": {}}
@@ -332,7 +353,7 @@ def disconnect(network: str, current_user: Any = Depends(get_current_user), db: 
     uid = _user_id_from_current_user(current_user)
     db.execute(
         text(
-            '''
+            """
             UPDATE social_connections
             SET is_active=false,
                 updated_at=NOW(),
@@ -340,7 +361,7 @@ def disconnect(network: str, current_user: Any = Depends(get_current_user), db: 
                 page_name=NULL,
                 page_access_token=NULL
             WHERE user_id=:uid AND network=:net
-            '''
+            """
         ),
         {"uid": uid, "net": net},
     )
@@ -370,7 +391,15 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
         f"&response_type=code"
     )
 
-    return {"ok": True, "auth_url": auth_url, "debug": {"redirect_uri_runtime": redirect_uri, "app_id_runtime": FB_APP_ID}}
+    return {
+        "ok": True,
+        "auth_url": auth_url,
+        "debug": {
+            "redirect_uri_runtime": redirect_uri,
+            "app_id_runtime": FB_APP_ID,
+            "frontend_planner_url": _frontend_planner_url({"facebook": "connected"}),
+        },
+    }
 
 
 def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
@@ -465,14 +494,66 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     }
 
 
+def _redirect_html(target_url: str) -> HTMLResponse:
+    print("LGD REDIRECT TARGET =", target_url)
+    html = f"""
+    <!doctype html>
+    <html lang="fr">
+      <head>
+        <meta charset="utf-8">
+        <meta http-equiv="refresh" content="0;url={target_url}">
+        <title>Redirection LGD…</title>
+        <script>
+          window.location.replace({target_url!r});
+        </script>
+      </head>
+      <body style="background:#0b0b0c;color:#f5f5f5;font-family:Arial,sans-serif;padding:40px;">
+        <h1 style="color:#facc15;">Connexion Facebook réussie</h1>
+        <p>Redirection vers le Planner LGD…</p>
+        <p><a href="{target_url}" style="color:#facc15;">Cliquer ici si la redirection ne démarre pas</a></p>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+
 @router.get("/facebook/callback")
 def facebook_callback(code: str, state: str, db: Session = Depends(get_db)):
-    return _handle_facebook_callback(code=code, state=state, db=db)
+    print("LGD CALLBACK FACEBOOK HIT")
+    result = _handle_facebook_callback(code=code, state=state, db=db)
+    print("LGD CALLBACK RESULT =", result)
+
+    if result.get("ok") and result.get("token_saved"):
+        target_url = _frontend_planner_url(
+            {
+                "facebook": "connected",
+                "page_id": result.get("page_id") or "",
+                "page_name": result.get("page_name") or "",
+            }
+        )
+        return _redirect_html(target_url)
+
+    return _redirect_html(_frontend_planner_url({"facebook": "warning"}))
 
 
 @router.get("/{network}/callback")
 def callback(network: str, request: Request, code: str, state: str, db: Session = Depends(get_db)):
+    print("LGD GENERIC CALLBACK HIT", network)
     net = _normalize_network(network)
     if net != "facebook":
         raise HTTPException(status_code=501, detail=f"Callback OAuth non implémenté pour '{net}'.")
-    return _handle_facebook_callback(code=code, state=state, db=db)
+
+    result = _handle_facebook_callback(code=code, state=state, db=db)
+    print("LGD GENERIC CALLBACK RESULT =", result)
+
+    if result.get("ok") and result.get("token_saved"):
+        target_url = _frontend_planner_url(
+            {
+                "facebook": "connected",
+                "page_id": result.get("page_id") or "",
+                "page_name": result.get("page_name") or "",
+            }
+        )
+        return _redirect_html(target_url)
+
+    return _redirect_html(_frontend_planner_url({"facebook": "warning"}))

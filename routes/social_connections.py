@@ -67,6 +67,10 @@ def _env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
 
 
+# ============================================================
+# ENV FACEBOOK / INSTAGRAM / META
+# ============================================================
+
 FB_APP_ID = _env("FACEBOOK_APP_ID")
 FB_APP_SECRET = _env("FACEBOOK_APP_SECRET")
 FB_REDIRECT_URI = _env("FACEBOOK_REDIRECT_URI")
@@ -83,6 +87,10 @@ STATE_SECRET = _env("FACEBOOK_STATE_SECRET", "change_me_long_random")
 GRAPH = "https://graph.facebook.com"
 GRAPH_V = "v20.0"
 
+
+# ============================================================
+# URL HELPERS
+# ============================================================
 
 def _normalized_facebook_redirect_uri() -> str:
     uri = (FB_REDIRECT_URI or "").strip()
@@ -119,6 +127,10 @@ def _frontend_planner_url(extra: Optional[Dict[str, Any]] = None) -> str:
     return f"{base}{path}?{urlencode(query)}"
 
 
+# ============================================================
+# ENV CHECKS
+# ============================================================
+
 def _require_facebook_env() -> None:
     redirect_uri = _normalized_facebook_redirect_uri()
     missing = []
@@ -145,6 +157,10 @@ def _require_instagram_env() -> None:
         raise HTTPException(status_code=500, detail=f"Env Instagram manquants: {', '.join(missing)}")
 
 
+# ============================================================
+# AUTH / USER
+# ============================================================
+
 def _user_id_from_current_user(current_user: Any) -> int:
     if current_user is None:
         raise HTTPException(status_code=401, detail="Non authentifié")
@@ -159,6 +175,10 @@ def _user_id_from_current_user(current_user: Any) -> int:
     except Exception:
         raise HTTPException(status_code=401, detail="Utilisateur authentifié invalide (id non exploitable)")
 
+
+# ============================================================
+# DB
+# ============================================================
 
 def _ensure_schema(db: Session) -> None:
     db.execute(
@@ -265,6 +285,10 @@ def _upsert_connection(db: Session, payload: SaveConnectionIn) -> None:
     db.commit()
 
 
+# ============================================================
+# STATE
+# ============================================================
+
 def _sign_state(payload: dict) -> str:
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     sig = hmac.new(STATE_SECRET.encode("utf-8"), raw, hashlib.sha256).hexdigest()
@@ -287,6 +311,10 @@ def _verify_state(state: str) -> dict:
     except Exception:
         raise HTTPException(status_code=400, detail="State invalide ou expiré.")
 
+
+# ============================================================
+# META GRAPH
+# ============================================================
 
 def _graph_get(path: str, params: dict) -> dict:
     r = requests.get(f"{GRAPH}/{GRAPH_V}/{path.lstrip('/')}", params=params, timeout=25)
@@ -339,17 +367,73 @@ def _exchange_long_lived_ig(short_token: str) -> dict:
     return r.json()
 
 
-def _extract_instagram_from_page(page: dict) -> tuple[str, str, str]:
-    ig = page.get("instagram_business_account") or page.get("connected_instagram_account") or {}
-    ig_id = str(ig.get("id") or "").strip()
-    ig_username = str(ig.get("username") or "").strip()
-    source = ""
-    if page.get("instagram_business_account") and ig_id:
-        source = "instagram_business_account"
-    elif page.get("connected_instagram_account") and ig_id:
-        source = "connected_instagram_account"
-    return ig_id, ig_username, source
+def _pick_instagram_from_pages(pages: list[dict]) -> dict:
+    picked = {
+        "ig_account_id": "",
+        "ig_username": "",
+        "source": "",
+        "page_id": "",
+        "page_name": "",
+        "pages_debug": [],
+    }
 
+    for page in pages:
+        page_id = str(page.get("id") or "").strip()
+        page_name = str(page.get("name") or "").strip()
+
+        ig_business = page.get("instagram_business_account") or {}
+        ig_connected = page.get("connected_instagram_account") or {}
+
+        ig_business_id = str(ig_business.get("id") or "").strip()
+        ig_business_username = str(ig_business.get("username") or "").strip()
+        ig_connected_id = str(ig_connected.get("id") or "").strip()
+        ig_connected_username = str(ig_connected.get("username") or "").strip()
+
+        picked["pages_debug"].append(
+            {
+                "page_id": page_id,
+                "page_name": page_name,
+                "instagram_business_account": {
+                    "id": ig_business_id or None,
+                    "username": ig_business_username or None,
+                },
+                "connected_instagram_account": {
+                    "id": ig_connected_id or None,
+                    "username": ig_connected_username or None,
+                },
+            }
+        )
+
+        if ig_business_id:
+            picked.update(
+                {
+                    "ig_account_id": ig_business_id,
+                    "ig_username": ig_business_username,
+                    "source": "instagram_business_account",
+                    "page_id": page_id,
+                    "page_name": page_name,
+                }
+            )
+            return picked
+
+        if ig_connected_id:
+            picked.update(
+                {
+                    "ig_account_id": ig_connected_id,
+                    "ig_username": ig_connected_username,
+                    "source": "connected_instagram_account",
+                    "page_id": page_id,
+                    "page_name": page_name,
+                }
+            )
+            return picked
+
+    return picked
+
+
+# ============================================================
+# DEBUG
+# ============================================================
 
 @router.get("/debug")
 def debug(db: Session = Depends(get_db)):
@@ -366,13 +450,17 @@ def debug(db: Session = Depends(get_db)):
             "ig_app_id_runtime": IG_CLIENT_ID,
             "frontend_planner_url_facebook": _frontend_planner_url({"facebook": "connected"}),
             "frontend_planner_url_instagram": _frontend_planner_url({"instagram": "connected"}),
-            "LGD_DEBUG_VERSION": "IG-STATUS-HARDENED-2026-03-09",
+            "LGD_DEBUG_VERSION": "IG-FB-COEXIST-LOCK-2026-03-09",
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"social_connections_debug_error: {str(e)}")
 
+
+# ============================================================
+# STATUS
+# ============================================================
 
 @router.get("/status")
 def status(current_user: Any = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -410,23 +498,24 @@ def status(current_user: Any = Depends(get_current_user), db: Session = Depends(
         fb_page_ok = bool(r.get("fb_page_ok") or 0)
 
         connected = token_ok
-        needs_linked_business_account = False
-
-        if net == "facebook":
-            connected = token_ok and fb_page_ok
-        elif net == "instagram":
+        if net == "instagram":
             connected = token_ok and page_ok
-            needs_linked_business_account = token_ok and not page_ok
+        elif net == "facebook":
+            connected = token_ok
 
         out["networks"][net] = {
             "connected": connected,
             "token_ok": token_ok,
-            "page_link_ok": page_ok if net == "instagram" else (fb_page_ok if net == "facebook" else page_ok),
+            "page_link_ok": page_ok,
             "facebook_page_ready": fb_page_ok if net == "facebook" else None,
-            "needs_linked_business_account": needs_linked_business_account if net == "instagram" else None,
+            "needs_linked_business_account": (token_ok and not page_ok) if net == "instagram" else False,
         }
     return out
 
+
+# ============================================================
+# SAVE / DISCONNECT
+# ============================================================
 
 @router.post("/save")
 def save_connection(payload: SaveConnectionIn, db: Session = Depends(get_db)):
@@ -457,6 +546,10 @@ def disconnect(network: str, current_user: Any = Depends(get_current_user), db: 
     return {"ok": True}
 
 
+# ============================================================
+# CONNECT
+# ============================================================
+
 @router.post("/{network}/connect")
 def connect(network: str, current_user: Any = Depends(get_current_user)):
     net = _normalize_network(network)
@@ -466,13 +559,16 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
         _require_facebook_env()
         redirect_uri = _normalized_facebook_redirect_uri()
         state = _sign_state({"uid": uid, "net": "facebook", "ts": int(time.time())})
-        scope = ",".join([
-            "email",
-            "public_profile",
-            "pages_show_list",
-            "pages_read_engagement",
-            "pages_manage_posts",
-        ])
+        scope = ",".join(
+            [
+                "email",
+                "public_profile",
+                "pages_show_list",
+                "pages_read_engagement",
+                "pages_manage_posts",
+            ]
+        )
+
         auth_url = (
             f"https://www.facebook.com/{GRAPH_V}/dialog/oauth"
             f"?client_id={FB_APP_ID}"
@@ -481,6 +577,7 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
             f"&scope={requests.utils.quote(scope, safe='')}"
             f"&response_type=code"
         )
+
         return {
             "ok": True,
             "auth_url": auth_url,
@@ -496,12 +593,15 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
         _require_instagram_env()
         redirect_uri = _normalized_instagram_redirect_uri()
         state = _sign_state({"uid": uid, "net": "instagram", "ts": int(time.time())})
-        scope = ",".join([
-            "instagram_basic",
-            "instagram_content_publish",
-            "pages_show_list",
-            "business_management",
-        ])
+        scope = ",".join(
+            [
+                "instagram_basic",
+                "instagram_content_publish",
+                "pages_show_list",
+                "business_management",
+            ]
+        )
+
         auth_url = (
             f"https://www.facebook.com/{GRAPH_V}/dialog/oauth"
             f"?client_id={IG_CLIENT_ID}"
@@ -510,6 +610,7 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
             f"&scope={requests.utils.quote(scope, safe='')}"
             f"&response_type=code"
         )
+
         return {
             "ok": True,
             "auth_url": auth_url,
@@ -523,6 +624,10 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
 
     raise HTTPException(status_code=501, detail=f"OAuth non implémenté pour '{net}'.")
 
+
+# ============================================================
+# FACEBOOK CALLBACK
+# ============================================================
 
 def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     _require_facebook_env()
@@ -556,7 +661,10 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     expires_at = datetime.utcnow() + timedelta(seconds=expires_in or 60 * 60 * 24 * 60)
     me = _graph_get("/me", {"access_token": long_token, "fields": "id,name"})
     fb_user_id = str(me.get("id") or "").strip()
-    pages = _graph_get("/me/accounts", {"access_token": long_token, "fields": "id,name,access_token"}).get("data") or []
+    pages = _graph_get(
+        "/me/accounts",
+        {"access_token": long_token, "fields": "id,name,access_token"},
+    ).get("data") or []
 
     if not pages:
         _upsert_connection(
@@ -616,6 +724,10 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     }
 
 
+# ============================================================
+# INSTAGRAM CALLBACK
+# ============================================================
+
 def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
     _require_instagram_env()
     redirect_uri = _normalized_instagram_redirect_uri()
@@ -655,34 +767,12 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
         },
     ).get("data") or []
 
-    ig_account_id = ""
-    ig_username = ""
-    ig_source = ""
-    matched_page_id = ""
-    matched_page_name = ""
-    pages_debug = []
-
-    for page in pages:
-        page_id = str(page.get("id") or "").strip()
-        page_name = str(page.get("name") or "").strip()
-        found_id, found_username, source = _extract_instagram_from_page(page)
-        pages_debug.append(
-            {
-                "page_id": page_id,
-                "page_name": page_name,
-                "has_instagram_business_account": bool((page.get("instagram_business_account") or {}).get("id")),
-                "has_connected_instagram_account": bool((page.get("connected_instagram_account") or {}).get("id")),
-                "detected_ig_id": found_id or None,
-                "detected_ig_username": found_username or None,
-                "source": source or None,
-            }
-        )
-        if found_id and not ig_account_id:
-            ig_account_id = found_id
-            ig_username = found_username
-            ig_source = source
-            matched_page_id = page_id
-            matched_page_name = page_name
+    picked = _pick_instagram_from_pages(pages)
+    ig_account_id = str(picked.get("ig_account_id") or "").strip()
+    ig_username = str(picked.get("ig_username") or "").strip()
+    source = str(picked.get("source") or "").strip()
+    page_id = str(picked.get("page_id") or "").strip()
+    page_name = str(picked.get("page_name") or "").strip()
 
     if not ig_account_id:
         _upsert_connection(
@@ -702,7 +792,8 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
             "instagram_connected": False,
             "ig_id": None,
             "ig_username": None,
-            "pages_debug": pages_debug,
+            "selected_source": None,
+            "pages_debug": picked.get("pages_debug") or [],
         }
 
     _upsert_connection(
@@ -725,13 +816,17 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
         "instagram_connected": True,
         "ig_id": ig_account_id,
         "ig_username": ig_username,
-        "ig_source": ig_source,
-        "matched_page_id": matched_page_id,
-        "matched_page_name": matched_page_name,
+        "selected_source": source,
+        "matched_page_id": page_id,
+        "matched_page_name": page_name,
         "token_saved": True,
-        "pages_debug": pages_debug,
+        "pages_debug": picked.get("pages_debug") or [],
     }
 
+
+# ============================================================
+# REDIRECT HTML
+# ============================================================
 
 def _redirect_html(target_url: str, title: str, message: str) -> HTMLResponse:
     print("LGD REDIRECT TARGET =", target_url)
@@ -776,6 +871,10 @@ def _instagram_error_redirect(
         error_message or "La connexion Instagram a été interrompue ou refusée.",
     )
 
+
+# ============================================================
+# CALLBACKS
+# ============================================================
 
 @router.get("/facebook/callback")
 def facebook_callback(
@@ -900,9 +999,86 @@ def callback(
     net = _normalize_network(network)
 
     if net == "facebook":
-        return facebook_callback(code, state, error, error_code, error_message, error_reason, db)
+        if error or error_code or error_message or error_reason:
+            return _redirect_html(
+                _frontend_planner_url(
+                    {
+                        "facebook": "warning",
+                        "facebook_error": error or error_reason or "oauth_error",
+                        "facebook_error_code": error_code or "",
+                        "facebook_error_message": error_message or "",
+                    }
+                ),
+                "Alerte Facebook",
+                error_message or "La connexion Facebook a été interrompue ou refusée.",
+            )
+
+        if not code or not state:
+            return _redirect_html(
+                _frontend_planner_url({"facebook": "warning"}),
+                "Alerte Facebook",
+                "Le callback Facebook n'a pas reçu les paramètres OAuth attendus.",
+            )
+
+        result = _handle_facebook_callback(code=code, state=state, db=db)
+        print("LGD GENERIC CALLBACK FACEBOOK RESULT =", result)
+
+        if result.get("ok") and result.get("token_saved"):
+            target_url = _frontend_planner_url(
+                {
+                    "facebook": "connected",
+                    "page_id": result.get("page_id") or "",
+                    "page_name": result.get("page_name") or "",
+                }
+            )
+            return _redirect_html(
+                target_url,
+                "Connexion Facebook réussie",
+                "Redirection vers le Planner LGD…",
+            )
+
+        return _redirect_html(
+            _frontend_planner_url({"facebook": "warning"}),
+            "Alerte Facebook",
+            "Connexion Facebook créée, mais la validation de la page a échoué.",
+        )
 
     if net == "instagram":
-        return instagram_callback(code, state, error, error_code, error_message, error_reason, db)
+        if error or error_code or error_message or error_reason:
+            return _instagram_error_redirect(
+                error=error,
+                error_code=error_code,
+                error_message=error_message,
+                error_reason=error_reason,
+            )
+
+        if not code or not state:
+            return _instagram_error_redirect(
+                error="missing_oauth_params",
+                error_message="Le callback Instagram n'a pas reçu les paramètres OAuth attendus.",
+            )
+
+        result = _handle_instagram_callback(code=code, state=state, db=db)
+        print("LGD GENERIC CALLBACK INSTAGRAM RESULT =", result)
+
+        if result.get("ok") and result.get("token_saved") and result.get("instagram_connected"):
+            target_url = _frontend_planner_url(
+                {
+                    "instagram": "connected",
+                    "ig_id": result.get("ig_id") or "",
+                    "ig_name": result.get("ig_username") or "",
+                }
+            )
+            return _redirect_html(
+                target_url,
+                "Connexion Instagram réussie",
+                "Redirection vers le Planner LGD…",
+            )
+
+        return _redirect_html(
+            _frontend_planner_url({"instagram": "warning"}),
+            "Alerte Instagram",
+            "Connexion Instagram créée, mais aucun compte professionnel lié n'a été trouvé.",
+        )
 
     raise HTTPException(status_code=501, detail=f"Callback OAuth non implémenté pour '{net}'.")

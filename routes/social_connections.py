@@ -273,7 +273,7 @@ def _upsert_connection(db: Session, payload: SaveConnectionIn) -> None:
             "user_id": payload.user_id,
             "network": net,
             "access_token": payload.access_token,
-            "refresh_token": payload.refresh_token,
+            "refresh_token": payload.refresh_token or "",
             "expires_at": exp,
             "is_active": bool(payload.is_active),
             "page_id": payload.page_id,
@@ -367,70 +367,6 @@ def _exchange_long_lived_ig(short_token: str) -> dict:
     return r.json()
 
 
-def _pick_instagram_from_pages(pages: list[dict]) -> dict:
-    picked = {
-        "ig_account_id": "",
-        "ig_username": "",
-        "source": "",
-        "page_id": "",
-        "page_name": "",
-        "pages_debug": [],
-    }
-
-    for page in pages:
-        page_id = str(page.get("id") or "").strip()
-        page_name = str(page.get("name") or "").strip()
-
-        ig_business = page.get("instagram_business_account") or {}
-        ig_connected = page.get("connected_instagram_account") or {}
-
-        ig_business_id = str(ig_business.get("id") or "").strip()
-        ig_business_username = str(ig_business.get("username") or "").strip()
-        ig_connected_id = str(ig_connected.get("id") or "").strip()
-        ig_connected_username = str(ig_connected.get("username") or "").strip()
-
-        picked["pages_debug"].append(
-            {
-                "page_id": page_id,
-                "page_name": page_name,
-                "instagram_business_account": {
-                    "id": ig_business_id or None,
-                    "username": ig_business_username or None,
-                },
-                "connected_instagram_account": {
-                    "id": ig_connected_id or None,
-                    "username": ig_connected_username or None,
-                },
-            }
-        )
-
-        if ig_business_id:
-            picked.update(
-                {
-                    "ig_account_id": ig_business_id,
-                    "ig_username": ig_business_username,
-                    "source": "instagram_business_account",
-                    "page_id": page_id,
-                    "page_name": page_name,
-                }
-            )
-            return picked
-
-        if ig_connected_id:
-            picked.update(
-                {
-                    "ig_account_id": ig_connected_id,
-                    "ig_username": ig_connected_username,
-                    "source": "connected_instagram_account",
-                    "page_id": page_id,
-                    "page_name": page_name,
-                }
-            )
-            return picked
-
-    return picked
-
-
 # ============================================================
 # DEBUG
 # ============================================================
@@ -450,7 +386,7 @@ def debug(db: Session = Depends(get_db)):
             "ig_app_id_runtime": IG_CLIENT_ID,
             "frontend_planner_url_facebook": _frontend_planner_url({"facebook": "connected"}),
             "frontend_planner_url_instagram": _frontend_planner_url({"instagram": "connected"}),
-            "LGD_DEBUG_VERSION": "IG-FB-COEXIST-LOCK-2026-03-09-TRACE",
+            "LGD_DEBUG_VERSION": "IG-CALLBACK-ERROR-HANDLED-2026-03-09",
         }
     except HTTPException:
         raise
@@ -466,15 +402,12 @@ def debug(db: Session = Depends(get_db)):
 def status(current_user: Any = Depends(get_current_user), db: Session = Depends(get_db)):
     _ensure_schema(db)
     uid = _user_id_from_current_user(current_user)
-    print("LGD STATUS USER =", uid)
-
     rows = db.execute(
         text(
             """
             SELECT
                 network,
-                MAX(CASE WHEN is_active AND access_token IS NOT NULL AND access_token <> '' THEN 1 ELSE 0 END) AS token_ok,
-                MAX(CASE WHEN is_active AND COALESCE(page_id,'') <> '' THEN 1 ELSE 0 END) AS page_ok,
+                MAX(CASE WHEN is_active AND LENGTH(COALESCE(access_token,'')) > 0 THEN 1 ELSE 0 END) AS ok,
                 MAX(
                     CASE
                         WHEN network='facebook'
@@ -495,25 +428,10 @@ def status(current_user: Any = Depends(get_current_user), db: Session = Depends(
     out: Dict[str, Any] = {"ok": True, "networks": {}}
     for r in rows:
         net = str(r.get("network") or "")
-        token_ok = bool(r.get("token_ok") or 0)
-        page_ok = bool(r.get("page_ok") or 0)
-        fb_page_ok = bool(r.get("fb_page_ok") or 0)
-
-        connected = token_ok
-        if net == "instagram":
-            connected = token_ok and page_ok
-        elif net == "facebook":
-            connected = token_ok
-
         out["networks"][net] = {
-            "connected": connected,
-            "token_ok": token_ok,
-            "page_link_ok": page_ok,
-            "facebook_page_ready": fb_page_ok if net == "facebook" else None,
-            "needs_linked_business_account": (token_ok and not page_ok) if net == "instagram" else False,
+            "connected": bool(r.get("ok") or 0),
+            "facebook_page_ready": bool(r.get("fb_page_ok") or 0) if net == "facebook" else None,
         }
-
-    print("LGD STATUS OUT =", out)
     return out
 
 
@@ -638,7 +556,6 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     redirect_uri = _normalized_facebook_redirect_uri()
     payload = _verify_state(state)
     user_id = int(payload["uid"])
-    print("LGD FB STATE USER =", user_id)
 
     tok = requests.get(
         f"{GRAPH}/{GRAPH_V}/oauth/access_token",
@@ -659,7 +576,6 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
 
     long_data = _exchange_long_lived_fb(short_token)
     long_token = str(long_data.get("access_token") or "").strip()
-    print("LGD FB TOKEN OK =", bool(long_token))
     expires_in = int(long_data.get("expires_in") or 0)
     if not long_token:
         raise HTTPException(status_code=400, detail="Facebook access_token manquant (long-lived).")
@@ -673,7 +589,6 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     ).get("data") or []
 
     if not pages:
-        print("LGD FB NO PAGE FOUND FOR USER =", user_id)
         _upsert_connection(
             db,
             SaveConnectionIn(
@@ -696,9 +611,6 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     page_id = str(first.get("id") or "").strip()
     page_name = str(first.get("name") or "").strip()
     page_access_token = str(first.get("access_token") or "").strip()
-
-    print("LGD FB PAGE FOUND =", page_id, page_name)
-    print("LGD FB SAVING CONNECTION FOR USER =", user_id)
 
     _upsert_connection(
         db,
@@ -773,16 +685,19 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
         "/me/accounts",
         {
             "access_token": long_token,
-            "fields": "id,name,instagram_business_account{id,username},connected_instagram_account{id,username}",
+            "fields": "id,name,connected_instagram_account{id,username}",
         },
     ).get("data") or []
 
-    picked = _pick_instagram_from_pages(pages)
-    ig_account_id = str(picked.get("ig_account_id") or "").strip()
-    ig_username = str(picked.get("ig_username") or "").strip()
-    source = str(picked.get("source") or "").strip()
-    page_id = str(picked.get("page_id") or "").strip()
-    page_name = str(picked.get("page_name") or "").strip()
+    ig_account_id = ""
+    ig_username = ""
+
+    for page in pages:
+        ig = page.get("connected_instagram_account") or {}
+        if ig and ig.get("id"):
+            ig_account_id = str(ig.get("id") or "").strip()
+            ig_username = str(ig.get("username") or "").strip()
+            break
 
     if not ig_account_id:
         _upsert_connection(
@@ -802,8 +717,6 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
             "instagram_connected": False,
             "ig_id": None,
             "ig_username": None,
-            "selected_source": None,
-            "pages_debug": picked.get("pages_debug") or [],
         }
 
     _upsert_connection(
@@ -826,11 +739,7 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
         "instagram_connected": True,
         "ig_id": ig_account_id,
         "ig_username": ig_username,
-        "selected_source": source,
-        "matched_page_id": page_id,
-        "matched_page_name": page_name,
         "token_saved": True,
-        "pages_debug": picked.get("pages_debug") or [],
     }
 
 

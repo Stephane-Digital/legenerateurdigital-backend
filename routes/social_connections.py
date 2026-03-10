@@ -67,10 +67,6 @@ def _env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
 
 
-# ============================================================
-# ENV FACEBOOK / INSTAGRAM / META
-# ============================================================
-
 FB_APP_ID = _env("FACEBOOK_APP_ID")
 FB_APP_SECRET = _env("FACEBOOK_APP_SECRET")
 FB_REDIRECT_URI = _env("FACEBOOK_REDIRECT_URI")
@@ -87,10 +83,6 @@ STATE_SECRET = _env("FACEBOOK_STATE_SECRET", "change_me_long_random")
 GRAPH = "https://graph.facebook.com"
 GRAPH_V = "v20.0"
 
-
-# ============================================================
-# URL HELPERS
-# ============================================================
 
 def _normalized_facebook_redirect_uri() -> str:
     uri = (FB_REDIRECT_URI or "").strip()
@@ -127,10 +119,6 @@ def _frontend_planner_url(extra: Optional[Dict[str, Any]] = None) -> str:
     return f"{base}{path}?{urlencode(query)}"
 
 
-# ============================================================
-# ENV CHECKS
-# ============================================================
-
 def _require_facebook_env() -> None:
     redirect_uri = _normalized_facebook_redirect_uri()
     missing = []
@@ -147,19 +135,15 @@ def _require_facebook_env() -> None:
 def _require_instagram_env() -> None:
     redirect_uri = _normalized_instagram_redirect_uri()
     missing = []
-    if not IG_CLIENT_ID:
-        missing.append("INSTAGRAM_CLIENT_ID ou META_APP_ID")
-    if not IG_CLIENT_SECRET:
-        missing.append("INSTAGRAM_CLIENT_SECRET ou META_APP_SECRET")
+    if not FB_APP_ID and not META_APP_ID:
+        missing.append("FACEBOOK_APP_ID ou META_APP_ID")
+    if not FB_APP_SECRET and not META_APP_SECRET:
+        missing.append("FACEBOOK_APP_SECRET ou META_APP_SECRET")
     if not redirect_uri:
         missing.append("INSTAGRAM_REDIRECT_URI")
     if missing:
         raise HTTPException(status_code=500, detail=f"Env Instagram manquants: {', '.join(missing)}")
 
-
-# ============================================================
-# AUTH / USER
-# ============================================================
 
 def _user_id_from_current_user(current_user: Any) -> int:
     if current_user is None:
@@ -175,10 +159,6 @@ def _user_id_from_current_user(current_user: Any) -> int:
     except Exception:
         raise HTTPException(status_code=401, detail="Utilisateur authentifié invalide (id non exploitable)")
 
-
-# ============================================================
-# DB
-# ============================================================
 
 def _ensure_schema(db: Session) -> None:
     db.execute(
@@ -317,10 +297,6 @@ def _get_existing_facebook_context(db: Session, user_id: int) -> Dict[str, str]:
     return extra
 
 
-# ============================================================
-# STATE
-# ============================================================
-
 def _sign_state(payload: dict) -> str:
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     sig = hmac.new(STATE_SECRET.encode("utf-8"), raw, hashlib.sha256).hexdigest()
@@ -354,10 +330,6 @@ def _safe_user_id_from_state(state: Optional[str]) -> Optional[int]:
         return None
 
 
-# ============================================================
-# META GRAPH
-# ============================================================
-
 def _graph_get(path: str, params: dict) -> dict:
     r = requests.get(f"{GRAPH}/{GRAPH_V}/{path.lstrip('/')}", params=params, timeout=25)
     if not r.ok:
@@ -390,12 +362,15 @@ def _exchange_long_lived_fb(short_token: str) -> dict:
 
 
 def _exchange_long_lived_ig(short_token: str) -> dict:
+    runtime_client_id = FB_APP_ID or META_APP_ID or IG_CLIENT_ID
+    runtime_client_secret = FB_APP_SECRET or META_APP_SECRET or IG_CLIENT_SECRET
+
     r = requests.get(
         f"{GRAPH}/{GRAPH_V}/oauth/access_token",
         params={
             "grant_type": "fb_exchange_token",
-            "client_id": IG_CLIENT_ID,
-            "client_secret": IG_CLIENT_SECRET,
+            "client_id": runtime_client_id,
+            "client_secret": runtime_client_secret,
             "fb_exchange_token": short_token,
         },
         timeout=25,
@@ -473,10 +448,6 @@ def _pick_instagram_from_pages(pages: list[dict]) -> dict:
     return picked
 
 
-# ============================================================
-# DEBUG
-# ============================================================
-
 @router.get("/debug")
 def debug(db: Session = Depends(get_db)):
     try:
@@ -490,19 +461,16 @@ def debug(db: Session = Depends(get_db)):
             "callback_path_expected_instagram": "/social-connections/instagram/callback",
             "fb_app_id_runtime": FB_APP_ID,
             "ig_app_id_runtime": IG_CLIENT_ID,
+            "ig_oauth_client_id_runtime": FB_APP_ID or META_APP_ID or IG_CLIENT_ID,
             "frontend_planner_url_facebook": _frontend_planner_url({"facebook": "connected"}),
             "frontend_planner_url_instagram": _frontend_planner_url({"instagram": "connected"}),
-            "LGD_DEBUG_VERSION": "IG-FB-STABLE-KEEP-FB-2026-03-10",
+            "LGD_DEBUG_VERSION": "IG-FB-STABLE-KEEP-FB-2026-03-10-PATCH2",
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"social_connections_debug_error: {str(e)}")
 
-
-# ============================================================
-# STATUS
-# ============================================================
 
 @router.get("/status")
 def status(current_user: Any = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -557,10 +525,6 @@ def status(current_user: Any = Depends(get_current_user), db: Session = Depends(
     return out
 
 
-# ============================================================
-# SAVE / DISCONNECT
-# ============================================================
-
 @router.post("/save")
 def save_connection(payload: SaveConnectionIn, db: Session = Depends(get_db)):
     _upsert_connection(db, payload)
@@ -589,10 +553,6 @@ def disconnect(network: str, current_user: Any = Depends(get_current_user), db: 
     db.commit()
     return {"ok": True}
 
-
-# ============================================================
-# CONNECT
-# ============================================================
 
 @router.post("/{network}/connect")
 def connect(network: str, current_user: Any = Depends(get_current_user)):
@@ -638,10 +598,7 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
         redirect_uri = _normalized_instagram_redirect_uri()
         state = _sign_state({"uid": uid, "net": "instagram", "ts": int(time.time())})
 
-        # IMPORTANT
-        # On réduit volontairement le scope au strict minimum accepté
-        # pour récupérer le compte pro lié via les pages Facebook.
-        # Cela évite l'erreur Meta "Invalid Scopes" observée.
+        runtime_client_id = FB_APP_ID or META_APP_ID or IG_CLIENT_ID
         scope = ",".join(
             [
                 "pages_show_list",
@@ -651,7 +608,7 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
 
         auth_url = (
             f"https://www.facebook.com/{GRAPH_V}/dialog/oauth"
-            f"?client_id={IG_CLIENT_ID}"
+            f"?client_id={runtime_client_id}"
             f"&redirect_uri={requests.utils.quote(redirect_uri, safe='')}"
             f"&state={requests.utils.quote(state, safe='')}"
             f"&scope={requests.utils.quote(scope, safe='')}"
@@ -664,7 +621,7 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
             "debug": {
                 "network": "instagram",
                 "redirect_uri_runtime": redirect_uri,
-                "app_id_runtime": IG_CLIENT_ID,
+                "app_id_runtime": runtime_client_id,
                 "scope_runtime": scope,
                 "frontend_planner_url": _frontend_planner_url({"instagram": "connected"}),
             },
@@ -672,10 +629,6 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
 
     raise HTTPException(status_code=501, detail=f"OAuth non implémenté pour '{net}'.")
 
-
-# ============================================================
-# FACEBOOK CALLBACK
-# ============================================================
 
 def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     _require_facebook_env()
@@ -772,21 +725,20 @@ def _handle_facebook_callback(code: str, state: str, db: Session) -> dict:
     }
 
 
-# ============================================================
-# INSTAGRAM CALLBACK
-# ============================================================
-
 def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
     _require_instagram_env()
     redirect_uri = _normalized_instagram_redirect_uri()
     payload = _verify_state(state)
     user_id = int(payload["uid"])
 
+    runtime_client_id = FB_APP_ID or META_APP_ID or IG_CLIENT_ID
+    runtime_client_secret = FB_APP_SECRET or META_APP_SECRET or IG_CLIENT_SECRET
+
     tok = requests.get(
         f"{GRAPH}/{GRAPH_V}/oauth/access_token",
         params={
-            "client_id": IG_CLIENT_ID,
-            "client_secret": IG_CLIENT_SECRET,
+            "client_id": runtime_client_id,
+            "client_secret": runtime_client_secret,
             "redirect_uri": redirect_uri,
             "code": code,
         },
@@ -872,10 +824,6 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
     }
 
 
-# ============================================================
-# REDIRECT HTML
-# ============================================================
-
 def _redirect_html(target_url: str, title: str, message: str) -> HTMLResponse:
     print("LGD REDIRECT TARGET =", target_url)
     html = f"""
@@ -925,10 +873,6 @@ def _instagram_error_redirect(
         error_message or "La connexion Instagram a été interrompue ou refusée.",
     )
 
-
-# ============================================================
-# CALLBACKS
-# ============================================================
 
 @router.get("/facebook/callback")
 def facebook_callback(

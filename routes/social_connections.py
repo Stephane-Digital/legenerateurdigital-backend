@@ -64,7 +64,18 @@ router = APIRouter(prefix="/social-connections", tags=["Social Connections"])
 
 
 def _env(name: str, default: str = "") -> str:
-    return (os.getenv(name) or default).strip()
+    value = os.getenv(name)
+    if value is not None and str(value).strip() != "":
+        return str(value).strip()
+
+    try:
+        settings_value = getattr(settings, name, None)
+        if settings_value is not None and str(settings_value).strip() != "":
+            return str(settings_value).strip()
+    except Exception:
+        pass
+
+    return default.strip()
 
 
 FB_APP_ID = _env("FACEBOOK_APP_ID")
@@ -78,10 +89,13 @@ IG_CLIENT_ID = _env("INSTAGRAM_CLIENT_ID") or META_APP_ID or FB_APP_ID
 IG_CLIENT_SECRET = _env("INSTAGRAM_CLIENT_SECRET") or META_APP_SECRET or FB_APP_SECRET
 IG_REDIRECT_URI = _env("INSTAGRAM_REDIRECT_URI")
 
+FB_LOGIN_CONFIG_ID = _env("FACEBOOK_LOGIN_CONFIG_ID") or _env("META_CONFIG_ID") or _env("FACEBOOK_CONFIG_ID")
+IG_LOGIN_CONFIG_ID = _env("INSTAGRAM_LOGIN_CONFIG_ID") or FB_LOGIN_CONFIG_ID
+
 STATE_SECRET = _env("FACEBOOK_STATE_SECRET", "change_me_long_random")
 
 GRAPH = "https://graph.facebook.com"
-GRAPH_V = "v20.0"
+GRAPH_V = "v25.0"
 
 
 def _normalized_facebook_redirect_uri() -> str:
@@ -457,6 +471,8 @@ def debug(db: Session = Depends(get_db)):
             "table": "social_connections",
             "fb_redirect_uri_runtime": _normalized_facebook_redirect_uri(),
             "ig_redirect_uri_runtime": _normalized_instagram_redirect_uri(),
+            "fb_login_config_id_runtime": FB_LOGIN_CONFIG_ID,
+            "ig_login_config_id_runtime": IG_LOGIN_CONFIG_ID,
             "callback_path_expected_facebook": "/social-connections/facebook/callback",
             "callback_path_expected_instagram": "/social-connections/instagram/callback",
             "fb_app_id_runtime": FB_APP_ID,
@@ -464,7 +480,7 @@ def debug(db: Session = Depends(get_db)):
             "ig_oauth_client_id_runtime": FB_APP_ID or META_APP_ID or IG_CLIENT_ID,
             "frontend_planner_url_facebook": _frontend_planner_url({"facebook": "connected"}),
             "frontend_planner_url_instagram": _frontend_planner_url({"instagram": "connected"}),
-            "LGD_DEBUG_VERSION": "IG-FB-STABLE-KEEP-FB-2026-03-10-PATCH2",
+            "LGD_DEBUG_VERSION": "IG-FB-STANDARD-OAUTH-NO-CONFIG-ID-2026-03-16",
         }
     except HTTPException:
         raise
@@ -565,21 +581,24 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
         state = _sign_state({"uid": uid, "net": "facebook", "ts": int(time.time())})
         scope = ",".join(
             [
-                "email",
-                "public_profile",
                 "pages_show_list",
                 "pages_read_engagement",
                 "pages_manage_posts",
             ]
         )
 
-        auth_url = (
-            f"https://www.facebook.com/{GRAPH_V}/dialog/oauth"
-            f"?client_id={FB_APP_ID}"
-            f"&redirect_uri={requests.utils.quote(redirect_uri, safe='')}"
-            f"&state={requests.utils.quote(state, safe='')}"
-            f"&scope={requests.utils.quote(scope, safe='')}"
-            f"&response_type=code"
+        auth_url = "https://www.facebook.com/{version}/dialog/oauth?{query}".format(
+            version=GRAPH_V,
+            query=urlencode(
+                {
+                    "client_id": FB_APP_ID,
+                    "redirect_uri": redirect_uri,
+                    "state": state,
+                    "scope": scope,
+                    "response_type": "code",
+                    "auth_type": "rerequest",
+                }
+            ),
         )
 
         return {
@@ -587,8 +606,11 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
             "auth_url": auth_url,
             "debug": {
                 "network": "facebook",
+                "oauth_mode": "standard",
                 "redirect_uri_runtime": redirect_uri,
                 "app_id_runtime": FB_APP_ID,
+                "config_id_runtime": FB_LOGIN_CONFIG_ID or None,
+                "scope_runtime": scope,
                 "frontend_planner_url": _frontend_planner_url({"facebook": "connected"}),
             },
         }
@@ -602,17 +624,25 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
         scope = ",".join(
             [
                 "pages_show_list",
-                "business_management",
+                "pages_read_engagement",
+                "pages_manage_posts",
+                "instagram_basic",
+                "instagram_manage_comments",
             ]
         )
 
-        auth_url = (
-            f"https://www.facebook.com/{GRAPH_V}/dialog/oauth"
-            f"?client_id={runtime_client_id}"
-            f"&redirect_uri={requests.utils.quote(redirect_uri, safe='')}"
-            f"&state={requests.utils.quote(state, safe='')}"
-            f"&scope={requests.utils.quote(scope, safe='')}"
-            f"&response_type=code"
+        auth_url = "https://www.facebook.com/{version}/dialog/oauth?{query}".format(
+            version=GRAPH_V,
+            query=urlencode(
+                {
+                    "client_id": runtime_client_id,
+                    "redirect_uri": redirect_uri,
+                    "state": state,
+                    "scope": scope,
+                    "response_type": "code",
+                    "auth_type": "rerequest",
+                }
+            ),
         )
 
         return {
@@ -620,8 +650,10 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
             "auth_url": auth_url,
             "debug": {
                 "network": "instagram",
+                "oauth_mode": "standard",
                 "redirect_uri_runtime": redirect_uri,
                 "app_id_runtime": runtime_client_id,
+                "config_id_runtime": IG_LOGIN_CONFIG_ID or None,
                 "scope_runtime": scope,
                 "frontend_planner_url": _frontend_planner_url({"instagram": "connected"}),
             },

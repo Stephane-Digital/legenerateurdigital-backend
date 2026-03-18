@@ -76,6 +76,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.responses import Response
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return Response(status_code=200)
+
 Base.metadata.create_all(bind=engine)
 
 

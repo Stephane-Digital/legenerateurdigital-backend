@@ -10,7 +10,7 @@ from database import Base, engine
 
 # ✅ IMPORTANT: import the model modules BEFORE create_all()
 from models.coach_profile_model import CoachProfile  # noqa: F401
-
+from models.email_campaign_model import EmailCampaign  # noqa: F401
 
 # ROUTES
 from routes.auth import router as auth_router

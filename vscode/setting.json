@@ -1,0 +1,21 @@
+{
+  // ✅ Empêche VSCode de couper les longues lignes (.env, JSON, etc.)
+  "editor.wordWrap": "off",
+
+  // ✅ Désactive les retours automatiques Windows (\r\n)
+  "files.eol": "\n",
+
+  // ✅ Force l'encodage UTF-8 sans BOM
+  "files.encoding": "utf8",
+
+  // ✅ Empêche VSCode d’ajouter des fins de ligne
+  "files.insertFinalNewline": false,
+
+  // ✅ Empêche VSCode de formater automatiquement les fichiers texte (.env)
+  "[dotenv]": {
+    "editor.formatOnSave": false
+  },
+
+  // ✅ Préserve ton environnement stable pour Python
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+}

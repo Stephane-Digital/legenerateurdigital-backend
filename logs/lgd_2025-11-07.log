@@ -1,0 +1,314 @@
+[10:11:35] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[10:11:35] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[10:11:35] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[10:11:36] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 1/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:38] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 2/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:40] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 3/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:42] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 4/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:44] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 5/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:46] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 6/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:48] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 7/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:50] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 8/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:52] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 9/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:54] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 10/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:56] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 11/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:11:58] 💎 LGD | WARNING | ⚠️ DB not ready (attempt 12/12): (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[10:12:00] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[11:09:59] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[11:09:59] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[11:09:59] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[11:10:01] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[11:10:01] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[11:10:05] 💎 LGD | INFO | 🛑 Arrêt propre du backend LGD...
+[14:06:18] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:06:18] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:06:18] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[14:19:59] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:19:59] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:19:59] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[14:43:20] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:43:20] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV, JWT_SECRET
+[14:46:35] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:46:35] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:46:35] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[14:52:28] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:52:28] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:52:28] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[14:58:33] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:58:33] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:58:33] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[15:15:19] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:15:19] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[15:15:19] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[15:22:35] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:22:35] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV, DATABASE_URL, JWT_SECRET
+[15:25:57] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:25:57] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV, DATABASE_URL, JWT_SECRET
+[15:28:11] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:28:11] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[15:36:34] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:36:34] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[15:36:34] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:50:14] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:15] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:16] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:16] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:16] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:16] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:16] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:16] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:19] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:20] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:21] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:23] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:23] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:23] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:23] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:23] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:50:34] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:50:34] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:53:19] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:53:19] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV
+[16:57:04] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:57:04] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:57:05] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:57:06] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:57:06] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:57:06] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:57:06] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:57:06] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:57:08] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:57:08] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:57:08] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:57:08] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:57:08] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:57:08] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:57:10] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:57:10] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:57:10] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:57:10] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:57:11] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:12] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:16] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:16] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:18] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:19] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:19] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:19] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:19] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:20] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:22] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:23] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:23] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:23] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:24] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:24] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:26] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:27] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:27] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:27] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:28] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:28] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:30] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:31] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:31] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:31] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:32] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:33] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:34] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:35] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:35] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:35] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:38] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:38] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:40] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:43] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:43] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:43] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:44] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:46] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:46] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:47] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:47] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:52] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:53] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:55] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:55] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:56] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:56] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[16:57:57] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:57:59] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[16:57:59] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:58:00] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:58:00] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[16:58:00] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[16:58:01] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[16:58:02] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[16:59:44] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:59:45] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:59:45] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:59:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:59:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[16:59:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:03] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:07] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:11] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:19] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:24] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:29] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:32] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.oregon-postgres.render.com" (35.227.164.209), port 5432 failed: FATAL:  password authentication failed for user "legenerateurdigital_db_user"
+
+[17:00:38] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[17:08:45] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[17:08:47] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[17:08:47] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[17:08:49] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:08:53] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:08:56] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:08:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:01] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:04] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:07] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:09] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:12] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:17] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:20] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : connection to server at "dpg-d3nkqmu3jp1c73c0h240-a.frankfurt-postgres.render.com" (18.196.138.205), port 5432 failed: FATAL:  database "legenerateurdigital_dblegenerateurdigital_db" does not exist
+
+[17:09:22] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[17:30:40] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[17:30:42] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[17:30:42] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[17:30:46] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[17:30:48] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[17:30:48] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[17:30:52] 💎 LGD | INFO | HTTP Request: GET http://localhost:57384/status "HTTP/1.1 200 OK"

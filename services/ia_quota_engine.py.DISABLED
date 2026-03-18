@@ -1,0 +1,346 @@
+# services/ia_quota_engine.py
+from __future__ import annotations
+from datetime import date
+from typing import Dict, Literal, Optional
+
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+
+# -----------------------------
+# CONFIG (référence verrouillée)
+# -----------------------------
+
+PLAN_LIMITS = {
+    "essentiel": {
+        "monthly": 200_000,
+        "daily": 5_000,
+    },
+    "pro": {
+        "monthly": 800_000,
+        "daily": 20_000,
+    },
+    "ultime": {
+        "monthly": 2_000_000,   # fair use
+        "daily": 80_000,
+    },
+}
+
+MODULE_PRIORITY = {
+    "coach": 1,
+    "editor": 2,
+    "carrousel": 3,
+    "audit": 4,
+}
+
+ModuleName = Literal["coach", "editor", "carrousel", "audit"]
+
+
+# -----------------------------
+# UTILS
+# -----------------------------
+
+def estimate_tokens(text: str) -> int:
+    # Estimation stable V1
+    return max(1, len(text) // 4)
+
+
+# -----------------------------
+# CORE ENGINE
+# -----------------------------
+
+def _get_monthly_usage(db: Session, user_id: int) -> int:
+    row = db.execute(
+        text("""
+            SELECT COALESCE(SUM(tokens_estimated), 0)
+            FROM ia_usage
+            WHERE user_id = :uid
+              AND date_trunc('month', created_at) = date_trunc('month', NOW())
+        """),
+        {"uid": user_id},
+    ).scalar()
+    return int(row or 0)
+
+
+def _get_daily_usage(db: Session, user_id: int) -> int:
+    row = db.execute(
+        text("""
+            SELECT COALESCE(SUM(tokens_estimated), 0)
+            FROM ia_usage
+            WHERE user_id = :uid
+              AND DATE(created_at) = CURRENT_DATE
+        """),
+        {"uid": user_id},
+    ).scalar()
+    return int(row or 0)
+
+
+def can_consume(
+    *,
+    db: Session,
+    user_id: int,
+    plan: str,
+    module: ModuleName,
+    tokens_needed: int,
+) -> Dict:
+    """
+    Décide si la requête IA peut passer.
+    Ne bloque brutalement QUE sur cap journalier ou mensuel.
+    """
+    plan_cfg = PLAN_LIMITS.get(plan)
+    if not plan_cfg:
+        return {"allowed": False, "reason": "unknown_plan"}
+
+    monthly_used = _get_monthly_usage(db, user_id)
+    daily_used = _get_daily_usage(db, user_id)
+
+    if monthly_used + tokens_needed > plan_cfg["monthly"]:
+        return {
+            "allowed": False,
+            "reason": "monthly_cap",
+            "remaining": max(0, plan_cfg["monthly"] - monthly_used),
+        }
+
+    if daily_used + tokens_needed > plan_cfg["daily"]:
+        return {
+            "allowed": False,
+            "reason": "daily_cap",
+            "remaining": max(0, plan_cfg["daily"] - daily_used),
+        }
+
+    # OK
+    return {
+        "allowed": True,
+        "monthly_remaining": plan_cfg["monthly"] - monthly_used,
+        "daily_remaining": plan_cfg["daily"] - daily_used,
+        "priority": MODULE_PRIORITY.get(module, 99),
+    }
+
+
+def log_usage(
+    *,
+    db: Session,
+    user_id: int,
+    module: ModuleName,
+    feature: str,
+    tokens_estimated: int,
+):
+    """
+    Trace un usage IA unifié.
+    """
+    db.execute(
+        text("""
+            INSERT INTO ia_usage (user_id, module, feature, tokens_estimated, created_at)
+            VALUES (:uid, :module, :feature, :tokens, NOW())
+        """),
+        {
+            "uid": user_id,
+            "module": module,
+            "feature": feature,
+            "tokens": tokens_estimated,
+        },
+    )
+    db.commit()
+
+# =============================================================================
+# Compatibility helpers for the centralized adapter (ai_quota_adapter.py)
+# -----------------------------------------------------------------------------
+# The project evolved from "credits remaining" to "monthly token budgets".
+# Some modules rely on ai_quota_adapter which expects these functions:
+#   - normalize_plan
+#   - get_limits
+#   - get_usage_snapshot
+#   - consume_tokens
+# We implement them here in a backward-compatible way.
+# =============================================================================
+
+from sqlalchemy import func  # type: ignore
+
+
+def normalize_plan(plan: Optional[str]) -> str:
+    """Normalize plan names to LGD canonical values."""
+    v = (plan or "").strip().lower()
+    if v in {"essential", "essentiel", "essentielle", "essentials"}:
+        return "essentiel"
+    if v in {"pro", "professional"}:
+        return "pro"
+    if v in {"ultime", "ultimate"}:
+        return "ultime"
+    return v or "essentiel"
+
+
+def get_limits(plan: Optional[str], module: Optional[str] = None) -> Dict[str, Any]:
+    """Return monthly token limits for a given plan.
+
+    Business decision (shared monthly budget across IA modules):
+      - Essentiel: 200k tokens / month
+      - Pro: 800k tokens / month
+      - Ultime: 2M tokens / month (fair use)
+    """
+    p = normalize_plan(plan)
+    if p == "ultime":
+        limit = 2_000_000
+    elif p == "pro":
+        limit = 800_000
+    else:
+        limit = 200_000
+
+    return {
+        "plan": p,
+        "module": (module or "all"),
+        "window": "month",
+        "tokens_limit": int(limit),
+    }
+
+
+def _month_window(dt: datetime) -> Tuple[datetime, datetime]:
+    start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return start, end
+
+
+def get_usage_snapshot(db: Session, user_id: int, module: Optional[str] = None) -> Dict[str, Any]:
+    """Return current-month usage snapshot.
+
+    Tries:
+      1) ORM query on IAUsageLog (if available)
+      2) raw SQL on common usage-log table names
+      3) fallback 0
+    """
+    now = datetime.utcnow()
+    start, end = _month_window(now)
+    mod = (module or "all").strip().lower()
+
+    # 1) ORM usage (if IAUsageLog model exists in this deployment)
+    try:
+        if IAUsageLog is not None:
+            q = db.query(IAUsageLog).filter(IAUsageLog.user_id == user_id)
+
+            if hasattr(IAUsageLog, "module") and mod not in {"", "all"}:
+                q = q.filter(IAUsageLog.module == mod)
+
+            if hasattr(IAUsageLog, "created_at"):
+                q = q.filter(IAUsageLog.created_at >= start).filter(IAUsageLog.created_at < end)
+
+            if hasattr(IAUsageLog, "tokens"):
+                used = int(q.with_entities(func.coalesce(func.sum(IAUsageLog.tokens), 0)).scalar() or 0)
+            elif hasattr(IAUsageLog, "tokens_estimated"):
+                used = int(q.with_entities(func.coalesce(func.sum(IAUsageLog.tokens_estimated), 0)).scalar() or 0)
+            else:
+                used = 0
+
+            return {"tokens_used": used, "window": "month", "from": start, "to": end}
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    # 2) raw SQL fallbacks (won't crash if table doesn't exist)
+    try:
+        from sqlalchemy import text  # type: ignore
+
+        table_candidates = ["ia_usage_logs", "ia_usage_log", "ai_usage_logs", "ai_usage_log"]
+        col_candidates = ["tokens", "tokens_estimated", "tokens_used"]
+        for tbl in table_candidates:
+            for col in col_candidates:
+                try:
+                    if mod not in {"", "all"}:
+                        sql = text(
+                            f"""
+                            SELECT COALESCE(SUM({col}), 0) AS s
+                            FROM {tbl}
+                            WHERE user_id = :uid
+                              AND module = :m
+                              AND created_at >= :start
+                              AND created_at < :end
+                            """
+                        )
+                        used = db.execute(sql, {"uid": user_id, "m": mod, "start": start, "end": end}).scalar()
+                    else:
+                        sql = text(
+                            f"""
+                            SELECT COALESCE(SUM({col}), 0) AS s
+                            FROM {tbl}
+                            WHERE user_id = :uid
+                              AND created_at >= :start
+                              AND created_at < :end
+                            """
+                        )
+                        used = db.execute(sql, {"uid": user_id, "start": start, "end": end}).scalar()
+
+                    return {"tokens_used": int(used or 0), "window": "month", "from": start, "to": end}
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    return {"tokens_used": 0, "window": "month", "from": start, "to": end}
+
+
+def consume_tokens(
+    db: Session,
+    user_id: int,
+    plan: Optional[str],
+    module: str,
+    tokens: int,
+    feature: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Consume tokens and return an adapter-style decision dict."""
+    p = normalize_plan(plan)
+    limits = get_limits(p, module)
+    snap = get_usage_snapshot(db, user_id, module=(module or None))
+    used = int(snap.get("tokens_used", 0) or 0)
+    limit = int(limits.get("tokens_limit", 0) or 0)
+    need = max(0, int(tokens or 0))
+
+    if used + need > limit:
+        return {
+            "allowed": False,
+            "reason": "quota_exceeded",
+            "plan": p,
+            "module": module,
+            "tokens_used": used,
+            "tokens_limit": limit,
+            "tokens_remaining": max(0, limit - used),
+        }
+
+    # Log usage using existing log_usage() (single source of truth)
+    try:
+        log_usage(
+            db=db,
+            user_id=user_id,
+            module=module,
+            feature=feature or "consume",
+            tokens_estimated=need,
+            meta=meta or {},
+        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {
+            "allowed": False,
+            "reason": "usage_log_failed",
+            "plan": p,
+            "module": module,
+            "tokens_used": used,
+            "tokens_limit": limit,
+            "tokens_remaining": max(0, limit - used),
+        }
+
+    new_used = used + need
+    return {
+        "allowed": True,
+        "reason": "ok",
+        "plan": p,
+        "module": module,
+        "tokens_used": new_used,
+        "tokens_limit": limit,
+        "tokens_remaining": max(0, limit - new_used),
+    }

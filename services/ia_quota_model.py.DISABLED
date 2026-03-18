@@ -1,0 +1,29 @@
+# ===============================================================
+# 💎 LE GÉNÉRATEUR DIGITAL — IA QUOTA MODEL (GLOBAL TOKENS)
+# ===============================================================
+# Table réelle détectée (PostgreSQL) : ia_quota
+# Colonnes: id, user_id, tokens_used, tokens_limit, updated_at
+# ⚠️ Pas de colonne "feature" (1 ligne = quota global par user)
+
+from __future__ import annotations
+
+from sqlalchemy import Column, Integer, DateTime, func
+from sqlalchemy.orm import declarative_base
+
+Base = declarative_base()
+
+
+class IaQuota(Base):
+    __tablename__ = "ia_quota"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False, unique=True)
+
+    tokens_used = Column(Integer, nullable=False, default=0)
+    tokens_limit = Column(Integer, nullable=False, default=0)
+
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# Backward-compat alias (some modules used IaQuotaCredits name)
+IaQuotaCredits = IaQuota

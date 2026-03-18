@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Optional, Dict
+
+from sqlalchemy import text
+
+
+class QuotaExceededError(RuntimeError):
+    """Raised when a user has no remaining credits/tokens for a feature."""
+
+
+def _plan_default_limit(plan: str) -> int:
+    """Return the default monthly token/credit limit for a plan.
+
+    Single source of truth for the **global** IA quota when running in the
+    "credits" mode (table `ia_quota(credits)` in Postgres).
+
+    LGD business rules:
+    - Essentiel : 200 000 tokens
+    - Pro       : 400 000 tokens
+    - Ultime    : 800 000 tokens
+    """
+    p = (plan or "essentiel").lower().strip()
+    if p in {"ultimate", "ultime"}:
+        return 800_000
+    if p in {"pro", "professional"}:
+        return 400_000
+    return 200_000
+
+
+# Public helper (used by admin syncing and adapters)
+def plan_default_limit(plan: str) -> int:
+    return _plan_default_limit(plan)
+
+
+def _ensure_row(db: Any, user_id: int, limit: int) -> int:
+    """Ensure a row exists in ia_quota for user_id. Returns current credits."""
+    row = db.execute(
+        text("SELECT credits FROM ia_quota WHERE user_id = :uid"),
+        {"uid": user_id},
+    ).mappings().first()
+
+    if row is None:
+        # initialize with full limit
+        db.execute(
+            text("INSERT INTO ia_quota (user_id, credits) VALUES (:uid, :credits)"),
+            {"uid": user_id, "credits": int(limit)},
+        )
+        db.commit()
+        return int(limit)
+
+    return int(row.get("credits") or 0)
+
+
+def get_quota(*, db: Any, user_id: Optional[int], plan: Optional[str]) -> Dict[str, int]:
+    """Return current quota snapshot for the user.
+
+    Notes:
+      - Current DB schema is credits-only (global).
+      - We expose a tokens-like interface to keep the rest of the app stable.
+    """
+    if not user_id:
+        # anonymous: no quota tracking
+        lim = _plan_default_limit(plan or "essentiel")
+        return {"tokens_limit": lim, "tokens_remaining": lim, "tokens_used": 0}
+
+    lim = _plan_default_limit(plan or "essentiel")
+    remaining = _ensure_row(db, int(user_id), lim)
+    used = max(0, lim - remaining)
+    return {"tokens_limit": lim, "tokens_remaining": remaining, "tokens_used": used}
+
+
+def consume_tokens(*, db: Any, user_id: Optional[int], feature: str, tokens: int, plan: Optional[str] = None) -> Dict[str, int]:
+    """Consume tokens/credits for a feature.
+
+    Current implementation:
+      - credits-only schema => a single global pool per user
+      - feature is accepted for forward-compat but not stored
+
+    Raises:
+      QuotaExceededError if user has insufficient remaining credits.
+    """
+    if tokens is None:
+        tokens = 0
+    tokens = int(tokens)
+    if tokens <= 0:
+        snap = get_quota(db=db, user_id=user_id, plan=plan)
+        return snap
+
+    # if no user_id, do not block (shouldn't happen for protected routes)
+    if not user_id:
+        lim = _plan_default_limit(plan or "essentiel")
+        used = min(lim, tokens)
+        remaining = max(0, lim - used)
+        return {"tokens_limit": lim, "tokens_remaining": remaining, "tokens_used": used}
+
+    lim = _plan_default_limit(plan or "essentiel")
+    uid = int(user_id)
+
+    # Ensure row exists
+    remaining = _ensure_row(db, uid, lim)
+
+    if remaining < tokens:
+        raise QuotaExceededError(
+            f"IA quota exceeded for user_id={uid}. Remaining={remaining}, requested={tokens}."
+        )
+
+    # Atomic update (ensure we don't go below 0)
+    db.execute(
+        text(
+            "UPDATE ia_quota SET credits = credits - :t "
+            "WHERE user_id = :uid AND credits >= :t"
+        ),
+        {"uid": uid, "t": tokens},
+    )
+    db.commit()
+
+    remaining2 = max(0, remaining - tokens)
+    used = max(0, lim - remaining2)
+    return {"tokens_limit": lim, "tokens_remaining": remaining2, "tokens_used": used}

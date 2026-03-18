@@ -1,0 +1,285 @@
+[09:15:05] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[09:15:05] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[09:15:05] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[09:15:07] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[09:15:08] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[09:15:08] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[09:15:10] 💎 LGD | INFO | HTTP Request: GET http://localhost:55317/status "HTTP/1.1 200 OK"
+[09:16:23] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[09:16:23] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[09:16:23] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[09:16:25] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[09:16:26] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[09:16:26] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[09:16:27] 💎 LGD | INFO | HTTP Request: GET http://localhost:55340/status "HTTP/1.1 200 OK"
+[09:24:42] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[09:24:42] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[09:24:42] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[09:24:44] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[09:24:45] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[09:24:45] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[09:24:45] 💎 LGD | INFO | HTTP Request: GET http://localhost:55683/status "HTTP/1.1 200 OK"
+[09:27:55] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[09:27:55] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[09:27:55] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[09:27:57] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[09:27:57] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[09:27:57] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[09:27:58] 💎 LGD | INFO | HTTP Request: GET http://localhost:55832/status "HTTP/1.1 200 OK"
+[09:32:41] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[09:32:41] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[09:32:41] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[09:32:44] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[09:32:44] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[09:32:44] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[09:32:45] 💎 LGD | INFO | HTTP Request: GET http://localhost:56034/status "HTTP/1.1 200 OK"
+[11:56:01] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[11:56:01] 💎 LGD | ERROR | ❌ Variables critiques manquantes : APP_ENV, DATABASE_URL, JWT_SECRET
+[11:58:53] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[11:58:53] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[11:58:53] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[11:58:54] 💎 LGD | ERROR | 🛑 DATABASE_URL invalide ou manquante.
+[12:05:22] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[12:05:22] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[12:05:22] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[12:05:24] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:27] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:30] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:33] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:45] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:51] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:05:57] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:06:00] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[12:11:38] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[12:11:38] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[12:11:38] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[12:11:41] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:11:44] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:11:47] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:11:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:11:53] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:11:56] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:11:59] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:12:02] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:12:05] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:12:09] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:12:12] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:12:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:12:17] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[12:18:46] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[12:18:46] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[12:18:46] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[12:18:47] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:18:51] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:18:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:18:57] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:00] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:03] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:06] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:09] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:12] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:18] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:21] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[12:19:23] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[14:01:56] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:01:56] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:01:56] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:29:10] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:29:10] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:29:10] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:29:11] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:13] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:15] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:17] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:19] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:21] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:23] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:25] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:27] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:29] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:31] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:33] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:29:35] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[14:40:39] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:40:39] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:40:39] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:40:40] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:44] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:46] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:52] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:56] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:40:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:41:00] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:41:02] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:41:04] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[14:43:34] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:43:34] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:43:34] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:43:35] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:35] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:43:35] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:43:36] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:43:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:37] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:38] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:40] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:41] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:43] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:44] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:45] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:46] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:47] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:49] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:50] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:51] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:52] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:53] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:54] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:55] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:56] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:57] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 56: invalid continuation byte
+[14:43:59] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[14:44:00] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[14:51:22] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:51:22] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:51:22] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:51:24] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:27] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:30] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:33] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:45] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:51] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:55] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:51:58] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 12/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:52:00] 💎 LGD | ERROR | 🛑 Impossible de se connecter à la base de données après plusieurs tentatives.
+[14:58:17] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[14:58:17] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[14:58:17] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'https://le-generateur-digital.vercel.app']
+[14:58:20] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 1/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:23] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 2/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:26] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 3/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:29] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 4/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:33] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 5/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:36] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 6/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:39] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 7/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:42] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 8/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:45] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 9/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:48] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 10/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[14:58:51] 💎 LGD | WARNING | ⚠️ DB not ready (tentative 11/12) : 'utf-8' codec can't decode byte 0xf4 in position 72: invalid continuation byte
+[15:12:56] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:12:56] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[15:12:56] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[15:12:59] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[15:13:00] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[15:13:00] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[15:13:02] 💎 LGD | INFO | HTTP Request: GET http://localhost:63565/status "HTTP/1.1 200 OK"
+[15:49:02] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:49:03] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[15:49:03] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[15:49:07] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[15:49:08] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[15:49:08] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[15:49:10] 💎 LGD | INFO | HTTP Request: GET http://localhost:59176/status "HTTP/1.1 200 OK"
+[15:53:26] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:53:27] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[15:53:27] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[15:53:30] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[15:53:31] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[15:53:31] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[15:53:32] 💎 LGD | INFO | HTTP Request: GET http://localhost:59269/status "HTTP/1.1 200 OK"
+[15:57:51] 💎 LGD | INFO | 🛑 Arrêt propre du backend LGD...
+[15:59:49] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[15:59:49] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[15:59:49] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[15:59:52] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[15:59:53] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[15:59:53] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[15:59:55] 💎 LGD | INFO | HTTP Request: GET http://localhost:61347/status "HTTP/1.1 200 OK"
+[16:05:36] 💎 LGD | INFO | 🛑 Arrêt propre du backend LGD...
+[16:06:02] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:06:02] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:06:02] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:06:04] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:06:06] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:06:06] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:06:07] 💎 LGD | INFO | HTTP Request: GET http://localhost:60490/status "HTTP/1.1 200 OK"
+[16:09:21] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:09:21] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:09:21] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:09:25] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:09:26] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:09:26] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:09:28] 💎 LGD | INFO | HTTP Request: GET http://localhost:60657/status "HTTP/1.1 200 OK"
+[16:14:48] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:14:48] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:14:48] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'https://le-generateur-digital.vercel.app']
+[16:14:51] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:14:52] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:14:52] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:14:55] 💎 LGD | INFO | HTTP Request: GET http://localhost:60923/status "HTTP/1.1 200 OK"
+[16:18:11] 💎 LGD | INFO | 🛑 Arrêt propre du backend LGD...
+[16:18:13] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:18:13] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:18:13] 💎 LGD | INFO | 🌍 CORS configuré : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://0.0.0.0:3000', 'https://le-generateur-digital.vercel.app']
+[16:18:17] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:18:17] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:18:17] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:18:18] 💎 LGD | INFO | HTTP Request: GET http://localhost:60982/status "HTTP/1.1 200 OK"
+[16:19:35] 💎 LGD | INFO | 🛑 Arrêt propre du backend LGD...
+[16:19:36] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:19:36] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:19:36] 💎 LGD | INFO | 🌍 CORS configuré pour : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://0.0.0.0:3000', 'https://le-generateur-digital.vercel.app']
+[16:19:39] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:19:39] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:19:39] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:19:40] 💎 LGD | INFO | HTTP Request: GET http://localhost:61022/status "HTTP/1.1 200 OK"
+[16:20:00] 💎 LGD | INFO | 🛑 Arrêt propre du backend LGD...
+[16:20:11] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:20:11] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:20:11] 💎 LGD | INFO | 🌍 CORS configuré pour : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://0.0.0.0:3000', 'https://le-generateur-digital.vercel.app']
+[16:20:13] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:20:13] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:20:13] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:20:14] 💎 LGD | INFO | HTTP Request: GET http://localhost:61050/status "HTTP/1.1 200 OK"
+[16:30:03] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:30:03] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:30:03] 💎 LGD | INFO | 🌍 CORS configuré pour : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://0.0.0.0:3000', 'https://le-generateur-digital.vercel.app']
+[16:30:05] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:30:06] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:30:06] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:30:08] 💎 LGD | INFO | HTTP Request: GET http://localhost:61419/status "HTTP/1.1 200 OK"
+[16:45:47] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:45:47] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:45:47] 💎 LGD | INFO | 🌍 CORS configuré pour : ('http://localhost:3000', 'http://127.0.0.1:3000', 'http://0.0.0.0:3000', 'https://le-generateur-digital.vercel.app')
+[16:45:50] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:45:51] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:45:51] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:45:53] 💎 LGD | INFO | HTTP Request: GET http://localhost:62867/status "HTTP/1.1 200 OK"
+[16:49:45] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:49:45] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:51:35] 💎 LGD | INFO | Initialisation du backend FastAPI LGD...
+[16:51:35] 💎 LGD | INFO | ✅ Vérification environnement réussie !
+[16:51:35] 💎 LGD | INFO | 🌍 CORS universel activé (mode développement)
+[16:51:37] 💎 LGD | INFO | ✅ Connexion à la base de données établie.
+[16:51:37] 💎 LGD | WARNING | ⚠️ Module 'auth' non trouvé : No module named 'routes.auth'
+[16:51:38] 💎 LGD | INFO | 🧩 Module 'Automatisations intelligentes' chargé avec succès.
+[16:51:38] 💎 LGD | INFO | 🚀 Démarrage du backend LGD...
+[16:51:40] 💎 LGD | INFO | HTTP Request: GET http://localhost:63129/status "HTTP/1.1 200 OK"

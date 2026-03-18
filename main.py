@@ -53,11 +53,20 @@ default_origins = [
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://legenerateurdigital-front.vercel.app",
     "https://le-generateur-digital.vercel.app",
+    "https://legenerateurdigital-front-git-main-stephanes-projects-4f681f66.vercel.app",
+    "https://legenerateurdigital-front-fx7bfjv8g-stephanes-projects-4f681f66.vercel.app",
 ]
 
 settings_origins = settings.CORS_ORIGINS or []
+if isinstance(settings_origins, str):
+    settings_origins = [o.strip() for o in settings_origins.split(",") if o.strip()]
+
 allow_origins = list(dict.fromkeys([*default_origins, *settings_origins]))
+
+print("CORS_ORIGINS settings :", settings_origins)
+print("CORS_ORIGINS effectifs :", allow_origins)
 
 app.add_middleware(
     CORSMiddleware,

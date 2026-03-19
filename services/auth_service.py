@@ -136,10 +136,21 @@ def authenticate_user(db: Session, email: str, password: str):
     if not user:
         return False
 
-    # ✅ CAS 1 : NOUVEAU SYSTEME
     if user.hashed_password:
         try:
             if verify_password(password, user.hashed_password):
                 return user
         except Exception:
             return False
+
+    if user.password:
+        try:
+            if verify_password(password, user.password):
+                return user
+        except Exception:
+            pass
+
+        if user.password == password:
+            return user
+
+    return False

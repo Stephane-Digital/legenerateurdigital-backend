@@ -33,7 +33,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
         name=payload.full_name,
         full_name=payload.full_name,
         hashed_password=hashed,
-        password=None,  # ✅ on ne stocke plus le mot de passe ici
+        password=None,
         is_active=True,
         is_admin=False,
     )
@@ -55,25 +55,16 @@ async def login(request: Request, db: Session = Depends(get_db)):
     email = None
     password = None
 
-    # --------------------------------------------------------
-    # CAS 1 — x-www-form-urlencoded
-    # --------------------------------------------------------
     if "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
         email = form.get("username") or form.get("email")
         password = form.get("password")
 
-    # --------------------------------------------------------
-    # CAS 2 — JSON
-    # --------------------------------------------------------
     elif "application/json" in content_type:
         body = await request.json()
         email = body.get("email") or body.get("username")
         password = body.get("password")
 
-    # --------------------------------------------------------
-    # CAS 3 — fallback tolérant
-    # --------------------------------------------------------
     else:
         try:
             body = await request.json()
@@ -100,25 +91,27 @@ async def login(request: Request, db: Session = Depends(get_db)):
 
     token = create_access_token({"sub": str(user.id)})
 
-    response = JSONResponse({
-        "message": "Connexion réussie",
-        "token": token,
-        "access_token": token,
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "full_name": user.full_name or user.name,
-            "plan": user.plan,
-            "is_active": user.is_active,
-            "is_admin": user.is_admin,
-        },
-    })
+    response = JSONResponse(
+        {
+            "message": "Connexion réussie",
+            "token": token,
+            "access_token": token,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name or user.name,
+                "plan": user.plan,
+                "is_active": user.is_active,
+                "is_admin": user.is_admin,
+            },
+        }
+    )
 
     response.set_cookie(
         key="lgd_token",
         value=token,
         httponly=True,
-        secure=False,   # ✅ prod HTTPS ok plus tard on pourra le mettre à True si tout est stabilisé
+        secure=False,
         samesite="Lax",
         max_age=60 * 60 * 24 * 7,
         path="/",

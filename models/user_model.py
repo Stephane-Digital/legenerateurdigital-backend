@@ -10,14 +10,13 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
 
-    # Colonnes réellement présentes dans la base
-    name = Column(String(255), nullable=True)
+    # ✅ Base Render réelle : full_name existe, name n'existe pas
     full_name = Column(String(255), nullable=True)
 
-    # Source de vérité pour l'auth
+    # ✅ Auth
     hashed_password = Column(String(255), nullable=True)
 
-    # Colonne legacy encore présente dans la DB
+    # ✅ Legacy encore présent pour certains anciens comptes
     password = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())

@@ -12,6 +12,8 @@ from services.auth_service import (
     hash_password,
 )
 
+print("AUTH ROUTES FILE LOADED")
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -30,7 +32,6 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
 
     new_user = User(
         email=email,
-        name=payload.full_name,
         full_name=payload.full_name,
         hashed_password=hashed,
         password=None,
@@ -66,6 +67,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
                 body = await request.json()
             except Exception:
                 raise HTTPException(status_code=400, detail="JSON invalide")
+
             email = body.get("email") or body.get("username")
             password = body.get("password")
 
@@ -103,7 +105,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
                 "user": {
                     "id": user.id,
                     "email": user.email,
-                    "full_name": user.full_name or user.name,
+                    "full_name": user.full_name,
                     "plan": user.plan,
                     "is_active": user.is_active,
                     "is_admin": user.is_admin,
@@ -131,6 +133,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
             status_code=500,
             content={"detail": f"LOGIN_DEBUG: {repr(e)}"},
         )
+
 
 # ============================================================
 # 🚪 LOGOUT
@@ -181,7 +184,7 @@ def me(request: Request, db: Session = Depends(get_db)):
     return {
         "id": user.id,
         "email": user.email,
-        "full_name": user.full_name or user.name,
+        "full_name": user.full_name,
         "plan": user.plan,
         "is_active": user.is_active,
         "is_admin": user.is_admin,

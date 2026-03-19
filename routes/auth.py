@@ -62,7 +62,10 @@ async def login(request: Request, db: Session = Depends(get_db)):
             password = form.get("password")
 
         elif "application/json" in content_type:
-            body = await request.json()
+            try:
+                body = await request.json()
+            except Exception:
+                raise HTTPException(status_code=400, detail="JSON invalide")
             email = body.get("email") or body.get("username")
             password = body.get("password")
 

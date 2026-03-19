@@ -2,16 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from config.settings import settings
 from database import get_db
+from models.user_model import User
 from schemas.user_schema import UserCreate
 from services.auth_service import (
     authenticate_user,
     create_access_token,
-    hash_password
+    hash_password,
 )
-from models.user_model import User
-from config.settings import settings
-
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -21,16 +20,24 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # ============================================================
 @router.post("/register")
 def register_user(payload: UserCreate, db: Session = Depends(get_db)):
+    email = payload.email.lower().strip()
 
-    exists = db.query(User).filter(User.email == payload.email.lower()).first()
+    exists = db.query(User).filter(User.email == email).first()
     if exists:
         raise HTTPException(status_code=400, detail="Cet email est déjà utilisé.")
 
+    hashed = hash_password(payload.password)
+
     new_user = User(
-        email=payload.email.lower(),
-        password=hash_password(payload.password),
-        full_name=payload.full_name
+        email=email,
+        name=payload.full_name,
+        full_name=payload.full_name,
+        hashed_password=hashed,
+        password=None,
+        is_active=True,
+        is_admin=False,
     )
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -48,25 +55,16 @@ async def login(request: Request, db: Session = Depends(get_db)):
     email = None
     password = None
 
-    # --------------------------------------------------------
-    # CAS 1 — x-www-form-urlencoded
-    # --------------------------------------------------------
     if "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
         email = form.get("username") or form.get("email")
         password = form.get("password")
 
-    # --------------------------------------------------------
-    # CAS 2 — JSON
-    # --------------------------------------------------------
     elif "application/json" in content_type:
         body = await request.json()
         email = body.get("email") or body.get("username")
         password = body.get("password")
 
-    # --------------------------------------------------------
-    # CAS 3 — fallback tolérant
-    # --------------------------------------------------------
     else:
         try:
             body = await request.json()
@@ -92,7 +90,22 @@ async def login(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Identifiants invalides")
 
     token = create_access_token({"sub": str(user.id)})
-    response = JSONResponse({"message": "Connexion réussie", "token": token})
+
+    response = JSONResponse(
+        {
+            "message": "Connexion réussie",
+            "token": token,
+            "access_token": token,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name or user.name,
+                "plan": user.plan,
+                "is_active": user.is_active,
+                "is_admin": user.is_admin,
+            },
+        }
+    )
 
     response.set_cookie(
         key="lgd_token",
@@ -101,7 +114,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
         secure=False,
         samesite="Lax",
         max_age=60 * 60 * 24 * 7,
-        path="/"
+        path="/",
     )
 
     return response
@@ -115,7 +128,7 @@ def logout():
     response = JSONResponse({"message": "Déconnexion réussie"})
     response.delete_cookie(
         key="lgd_token",
-        path="/"
+        path="/",
     )
     return response
 
@@ -135,7 +148,7 @@ def me(request: Request, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=401, detail="Non authentifié")
 
-    from jose import jwt, JWTError
+    from jose import JWTError, jwt
 
     try:
         payload = jwt.decode(
@@ -156,7 +169,10 @@ def me(request: Request, db: Session = Depends(get_db)):
     return {
         "id": user.id,
         "email": user.email,
-        "full_name": user.full_name
+        "full_name": user.full_name or user.name,
+        "plan": user.plan,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
     }
 
 
@@ -164,11 +180,6 @@ def me(request: Request, db: Session = Depends(get_db)):
 # ⭐ get_current_user — Cookie FIRST, Header Bearer fallback
 # ============================================================
 def get_current_user(request: Request, db: Session = Depends(get_db)):
-    """
-    Auth LGD — source of truth:
-    1) Cookie 'lgd_token' (frontend Next)
-    2) Fallback: Authorization: Bearer <token> (Swagger / tools / edge cases)
-    """
     token = request.cookies.get("lgd_token")
 
     if not token:
@@ -179,7 +190,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=401, detail="Non authentifié")
 
-    from jose import jwt, JWTError
+    from jose import JWTError, jwt
 
     try:
         payload = jwt.decode(

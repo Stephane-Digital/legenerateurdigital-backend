@@ -50,75 +50,84 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
 # ============================================================
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db)):
-    content_type = (request.headers.get("content-type") or "").lower()
+    try:
+        content_type = (request.headers.get("content-type") or "").lower()
 
-    email = None
-    password = None
+        email = None
+        password = None
 
-    if "application/x-www-form-urlencoded" in content_type:
-        form = await request.form()
-        email = form.get("username") or form.get("email")
-        password = form.get("password")
+        if "application/x-www-form-urlencoded" in content_type:
+            form = await request.form()
+            email = form.get("username") or form.get("email")
+            password = form.get("password")
 
-    elif "application/json" in content_type:
-        body = await request.json()
-        email = body.get("email") or body.get("username")
-        password = body.get("password")
-
-    else:
-        try:
+        elif "application/json" in content_type:
             body = await request.json()
             email = body.get("email") or body.get("username")
             password = body.get("password")
-        except Exception:
+
+        else:
             try:
-                form = await request.form()
-                email = form.get("username") or form.get("email")
-                password = form.get("password")
+                body = await request.json()
+                email = body.get("email") or body.get("username")
+                password = body.get("password")
             except Exception:
-                pass
+                try:
+                    form = await request.form()
+                    email = form.get("username") or form.get("email")
+                    password = form.get("password")
+                except Exception:
+                    pass
 
-    email = (email or "").strip().lower()
-    password = password or ""
+        email = (email or "").strip().lower()
+        password = password or ""
 
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="Email ou mot de passe manquant")
+        if not email or not password:
+            raise HTTPException(status_code=400, detail="Email ou mot de passe manquant")
 
-    user = authenticate_user(db, email, password)
+        user = authenticate_user(db, email, password)
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Identifiants invalides")
+        if not user:
+            raise HTTPException(status_code=401, detail="Identifiants invalides")
 
-    token = create_access_token({"sub": str(user.id)})
+        token = create_access_token({"sub": str(user.id)})
 
-    response = JSONResponse(
-        {
-            "message": "Connexion réussie",
-            "token": token,
-            "access_token": token,
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "full_name": user.full_name or user.name,
-                "plan": user.plan,
-                "is_active": user.is_active,
-                "is_admin": user.is_admin,
-            },
-        }
-    )
+        response = JSONResponse(
+            {
+                "message": "Connexion réussie",
+                "token": token,
+                "access_token": token,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "full_name": user.full_name or user.name,
+                    "plan": user.plan,
+                    "is_active": user.is_active,
+                    "is_admin": user.is_admin,
+                },
+            }
+        )
 
-    response.set_cookie(
-        key="lgd_token",
-        value=token,
-        httponly=True,
-        secure=False,
-        samesite="Lax",
-        max_age=60 * 60 * 24 * 7,
-        path="/",
-    )
+        response.set_cookie(
+            key="lgd_token",
+            value=token,
+            httponly=True,
+            secure=False,
+            samesite="Lax",
+            max_age=60 * 60 * 24 * 7,
+            path="/",
+        )
 
-    return response
+        return response
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("LOGIN DEBUG ERROR:", repr(e))
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"LOGIN_DEBUG: {repr(e)}"},
+        )
 
 # ============================================================
 # 🚪 LOGOUT

@@ -109,14 +109,47 @@ def authenticate_user(db: Session, email: str, password: str):
     if not user:
         return False
 
-    # ✅ Source de vérité actuelle
+    # ✅ CAS 1 : NOUVEAU SYSTEME
     if user.hashed_password:
-        if verify_password(password, user.hashed_password):
+        try:
+            if verify_password(password, user.hashed_password):
+                return user
+        except Exception:
+            return False
+
+    # ✅ CAS 2 : ANCIEN SYSTEME (comme ton user actuel)
+    if user.password:
+        try:
+            if verify_password(password, user.password):
+                return user
+        except Exception:
+            pass
+
+        # fallback si jamais c'était du plain text
+        if user.password == password:
             return user
+
+def authenticate_user(db: Session, email: str, password: str):
+    user = db.query(User).filter(User.email == email.lower().strip()).first()
+
+    if not user:
         return False
 
-    # ⚠️ Fallback legacy si ancienne donnée en clair existe encore
-    if user.password and user.password == password:
-        return user
+    if user.hashed_password:
+        try:
+            if verify_password(password, user.hashed_password):
+                return user
+        except Exception:
+            return False
+
+    if user.password:
+        try:
+            if verify_password(password, user.password):
+                return user
+        except Exception:
+            pass
+
+        if user.password == password:
+            return user
 
     return False

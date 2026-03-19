@@ -4,6 +4,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from config.settings import settings
 from database import Base, engine
@@ -48,24 +49,89 @@ from routes.email_analytics_dashboard import router as email_analytics_router
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
 
+from fastapi.responses import JSONResponse
+
+@app.middleware("http")
+async def force_cors_on_error(request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+    response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+
+    return response
+
+def normalize_origins(value):
+    if not value:
+        return []
+
+    if isinstance(value, list):
+        return [str(v).strip().rstrip("/") for v in value if str(v).strip()]
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return []
+
+        # support "a,b,c"
+        if raw.startswith("[") and raw.endswith("]"):
+            raw = raw[1:-1]
+
+        parts = [p.strip().strip('"').strip("'").rstrip("/") for p in raw.split(",")]
+        return [p for p in parts if p]
+
+    return []
+
+
 default_origins = [
+    # Local
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+
+    # Prod / custom / Vercel
+    "https://legenerateurdigital-front.vercel.app",
     "https://le-generateur-digital.vercel.app",
+    "https://legenerateurdigital.com",
+    "https://www.legenerateurdigital.com",
+
+    # URLs Vercel déjà vues
+    "https://legenerateurdigital-front-git-main-stephanes-projects-4f681f66.vercel.app",
+    "https://legenerateurdigital-front-fx7bfjv8g-stephanes-projects-4f681f66.vercel.app",
 ]
 
-settings_origins = settings.CORS_ORIGINS or []
+settings_origins = normalize_origins(getattr(settings, "CORS_ORIGINS", []))
 allow_origins = list(dict.fromkeys([*default_origins, *settings_origins]))
+
+print("\n========== CORS LGD ==========")
+print("settings.CORS_ORIGINS brut :", getattr(settings, "CORS_ORIGINS", None))
+print("settings.CORS_ORIGINS norm :", settings_origins)
+print("allow_origins effectifs    :", allow_origins)
+print("================================\n")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origins=[
+        "https://legenerateurdigital-front.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return Response(status_code=200)
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -73,6 +139,11 @@ Base.metadata.create_all(bind=engine)
 @app.get("/")
 def home():
     return {"status": "LGD Backend Running", "version": settings.APP_VERSION}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 app.include_router(auth_router)
@@ -108,13 +179,7 @@ app.include_router(systeme_webhooks_router)
 app.include_router(email_analytics_router)
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
 print("\n========== ROUTES CHARGEES ==========")
-print("CORS_ORIGINS effectifs :", allow_origins)
 for r in app.routes:
     try:
         methods = ",".join(sorted(getattr(r, "methods", []) or []))

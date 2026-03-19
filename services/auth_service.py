@@ -109,14 +109,17 @@ def authenticate_user(db: Session, email: str, password: str):
     if not user:
         return False
 
-    # ✅ Source de vérité actuelle
+    # 🔒 Cas 1 : hashed_password présent (normal)
     if user.hashed_password:
-        if verify_password(password, user.hashed_password):
-            return user
-        return False
+        try:
+            if verify_password(password, user.hashed_password):
+                return user
+        except Exception:
+            return False
 
-    # ⚠️ Fallback legacy si ancienne donnée en clair existe encore
-    if user.password and user.password == password:
-        return user
+    # ⚠️ Cas 2 : fallback legacy (mot de passe en clair)
+    if user.password:
+        if user.password == password:
+            return user
 
     return False

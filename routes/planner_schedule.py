@@ -1,23 +1,8 @@
 # C:\LGD\legenerateurdigital_backend\routes\planner_schedule.py
 """
-LGD — Planner Scheduling (STABLE)
-
-Objectifs (Phase Planner Réseaux Sociaux):
-- Exposer des endpoints stables attendus par le front:
-  - GET  /planner/posts
-  - POST /planner/schedule-post
-  - POST /planner/schedule-carrousel
-- Garder la compat avec les anciens endpoints existants:
-  - POST /planner/schedule  (alias schedule-carrousel)
-- Ne pas casser le module /social-posts déjà utilisé en fallback.
-
-IMPORTANT:
-- On utilise le modèle "SocialPost" (models.social_post_model) qui stocke:
-  - reseau (network)
-  - contenu (JSON string)
-  - date_programmee (datetime)
-  - statut (draft/scheduled/published/error)
-  - supprimer_apres (bool)
+LGD — Planner Scheduling (DB-safe)
+- Compatible with current Render DB schema for social_posts
+- Avoids ORM insert on columns that don't exist yet in production
 """
 
 from __future__ import annotations
@@ -27,19 +12,18 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import get_db
 from routes.auth import get_current_user
 
-from models.social_post_model import SocialPost
-
 router = APIRouter(prefix="/planner", tags=["Planner Scheduling"])
 
 
-# ============================================================
-# Helpers
-# ============================================================
+def _user_id(user: Any) -> int:
+    return int(user["id"]) if isinstance(user, dict) else int(user.id)
+
 
 def _safe_json_loads(value: Any) -> Any:
     if value is None:
@@ -74,88 +58,128 @@ def _extract_format(content: Any) -> Optional[str]:
     return None
 
 
-def _parse_scheduled_datetime(payload: Dict[str, Any]) -> datetime:
-    """
-    Accepts multiple formats:
-    - scheduled_at: ISO string (preferred)
-    - date + time: "YYYY-MM-DD" + "HH:MM"
-    """
-    # A) ISO (scheduled_at / scheduled_for)
-    for key in ("scheduled_at", "scheduled_for", "date_programmee"):
-        raw = payload.get(key)
-        if isinstance(raw, str) and raw.strip():
-            try:
-                # supports "2026-03-01T12:34:00" and with timezone
-                return datetime.fromisoformat(raw.replace("Z", "+00:00")).replace(tzinfo=None)
-            except Exception:
-                pass
+def _extract_media_url(content: Any) -> Optional[str]:
+    if not isinstance(content, dict):
+        return None
+    for key in ("image_url", "media_url", "imageUrl", "mediaUrl"):
+        value = content.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    slides = content.get("slides")
+    if isinstance(slides, list):
+        for slide in slides:
+            if isinstance(slide, dict):
+                for key in ("image_url", "media_url", "preview_url", "thumbnail_url"):
+                    value = slide.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+    return None
 
-    # B) date + time
+
+def _parse_scheduled_datetime(payload: Dict[str, Any]) -> datetime:
+    raw = payload.get("scheduled_at") or payload.get("scheduled_for") or payload.get("date_programmee")
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            pass
+
     date = payload.get("date")
     time = payload.get("time")
     if isinstance(date, str) and isinstance(time, str) and date.strip() and time.strip():
         try:
-            dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-            return dt
+            return datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"date/time invalide: {e}")
 
-    raise HTTPException(status_code=400, detail="scheduled_at (ISO) ou (date + time) requis")
+    raise HTTPException(status_code=400, detail="Date/heure invalide (date_programmee).")
 
 
-def _serialize_post(post: SocialPost) -> Dict[str, Any]:
-    content_obj = _safe_json_loads(getattr(post, "contenu", None))
-    title = _extract_title(content_obj)
-    fmt = _extract_format(content_obj)
-
-    reseau = getattr(post, "reseau", None)
-    date_prog = getattr(post, "date_programmee", None)
-
+def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    content_obj = _safe_json_loads(row.get("contenu"))
+    date_prog = row.get("date_programmee")
     return {
-        "id": post.id,
-        "user_id": post.user_id,
-        "reseau": reseau,
-        "network": reseau,
-        "statut": getattr(post, "statut", None),
-        "status": getattr(post, "statut", None),
-        "titre": title,
-        "title": title,
-        "format": fmt,
+        "id": row.get("id"),
+        "user_id": row.get("user_id"),
+        "reseau": row.get("reseau"),
+        "network": row.get("reseau"),
+        "statut": row.get("statut"),
+        "status": row.get("statut"),
+        "titre": _extract_title(content_obj),
+        "title": _extract_title(content_obj),
+        "format": _extract_format(content_obj),
         "contenu": content_obj,
         "date_programmee": date_prog,
         "scheduled_at": date_prog,
         "scheduled_for": date_prog,
-        "supprimer_apres": bool(getattr(post, "supprimer_apres", False)),
+        "media_url": _extract_media_url(content_obj),
+        "published_at": row.get("published_at"),
+        "publish_error": row.get("publish_error"),
+        "supprimer_apres": bool(row.get("supprimer_apres", False)),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
     }
 
 
 def _require_future(dt: datetime) -> None:
-    # use naive utcnow for consistency with existing codebase
     if dt <= datetime.utcnow():
         raise HTTPException(status_code=400, detail="La date de publication doit être dans le futur")
 
 
-# ============================================================
-# ✅ LIST POSTS (Front expects /planner/posts)
-# ============================================================
+def _insert_social_post(
+    db: Session,
+    *,
+    user_id: int,
+    reseau: str,
+    contenu_obj: Dict[str, Any],
+    date_programmee: datetime,
+    supprimer_apres: bool,
+) -> Dict[str, Any]:
+    sql = text(
+        """
+        INSERT INTO social_posts
+            (user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at)
+        VALUES
+            (:user_id, :reseau, :statut, :contenu, :date_programmee, :supprimer_apres, NOW(), NOW())
+        RETURNING id, user_id, reseau, statut, contenu, date_programmee, published_at, publish_error, supprimer_apres, created_at, updated_at
+        """
+    )
+
+    row = db.execute(
+        sql,
+        {
+            "user_id": int(user_id),
+            "reseau": str(reseau),
+            "statut": "scheduled",
+            "contenu": json.dumps(contenu_obj, ensure_ascii=False),
+            "date_programmee": date_programmee,
+            "supprimer_apres": bool(supprimer_apres),
+        },
+    ).mappings().first()
+
+    if not row:
+        raise HTTPException(status_code=500, detail="Insertion planner impossible")
+
+    db.commit()
+    return dict(row)
+
 
 @router.get("/posts", response_model=List[Dict[str, Any]])
 def list_planner_posts(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    posts = (
-        db.query(SocialPost)
-        .filter(SocialPost.user_id == user.id)
-        .order_by(SocialPost.date_programmee.desc())
-        .all()
+    sql = text(
+        """
+        SELECT id, user_id, reseau, statut, contenu, date_programmee, published_at, publish_error, supprimer_apres, created_at, updated_at
+        FROM social_posts
+        WHERE user_id = :user_id
+        ORDER BY date_programmee DESC, id DESC
+        """
     )
-    return [_serialize_post(p) for p in posts]
+    rows = db.execute(sql, {"user_id": _user_id(user)}).mappings().all()
+    return [_serialize_row(dict(r)) for r in rows]
 
-
-# ============================================================
-# ✅ SCHEDULE POST (Editor Intelligent -> Planner)
-# ============================================================
 
 @router.post("/schedule-post")
 def schedule_post(
@@ -163,14 +187,6 @@ def schedule_post(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    Payload attendu (tolérant):
-    - network: "facebook" | "instagram" | "pinterest" | ...
-    - scheduled_at (ISO) OR date + time
-    - contenu: object|string (optionnel)  -> stocké dans SocialPost.contenu
-      ou fields à plat (title/titre/text/caption/format/...)
-    - supprimer_apres: bool (optionnel)
-    """
     try:
         network = str(payload.get("network") or payload.get("reseau") or "").strip().lower()
         if not network:
@@ -179,10 +195,10 @@ def schedule_post(
         dt = _parse_scheduled_datetime(payload)
         _require_future(dt)
 
-        # Normalisation contenu
         content_obj: Any = payload.get("contenu")
         if content_obj is None:
-            content_obj = {}
+            # fallback: keep the whole payload UI content when front sends only top-level fields
+            content_obj = payload.get("content") or {}
 
         if isinstance(content_obj, str):
             content_obj = _safe_json_loads(content_obj)
@@ -192,33 +208,27 @@ def schedule_post(
         if not isinstance(content_obj, dict):
             content_obj = {"value": content_obj}
 
-        # inject fields à plat si fournis
-        for k in ("titre", "title", "text", "caption", "format"):
+        for k in ("titre", "title", "text", "caption", "format", "image_url", "media_url", "ui"):
             if payload.get(k) is not None and k not in content_obj:
                 content_obj[k] = payload.get(k)
 
-        # marqueur type
         if "type" not in content_obj:
-            content_obj["type"] = content_obj.get("kind") or "post"
+            content_obj["type"] = content_obj.get("kind") or payload.get("format") or "post"
 
-        post = SocialPost(
-            user_id=user.id,
+        row = _insert_social_post(
+            db,
+            user_id=_user_id(user),
             reseau=network,
-            statut="scheduled",
-            contenu=json.dumps(content_obj, ensure_ascii=False),
+            contenu_obj=content_obj,
             date_programmee=dt,
             supprimer_apres=bool(payload.get("supprimer_apres", False)),
         )
 
-        db.add(post)
-        db.commit()
-        db.refresh(post)
-
         return {
             "ok": True,
-            "id": post.id,
-            "statut": post.statut,
-            "date_programmee": post.date_programmee.isoformat(),
+            "id": row["id"],
+            "statut": row["statut"],
+            "date_programmee": row["date_programmee"].isoformat() if row.get("date_programmee") else None,
         }
 
     except HTTPException:
@@ -228,24 +238,12 @@ def schedule_post(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============================================================
-# ✅ SCHEDULE CARROUSEL (Editor Intelligent -> Planner)
-# ============================================================
-
 @router.post("/schedule-carrousel")
 def schedule_carrousel(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    Payload attendu (tolérant):
-    - network
-    - carrousel_id
-    - slides (array)
-    - scheduled_at (ISO) OR date + time
-    - supprimer_apres (optionnel)
-    """
     try:
         network = str(payload.get("network") or payload.get("reseau") or "").strip().lower()
         if not network:
@@ -256,46 +254,35 @@ def schedule_carrousel(
         if slides is None or (isinstance(slides, list) and len(slides) == 0):
             raise HTTPException(status_code=400, detail="slides manquant (array)")
 
-        # carrousel_id peut être null côté front (ex: carrousel non encore persisté)
-        # On l'accepte et on stocke tout dans `contenu` pour préserver la planification.
-
         dt = _parse_scheduled_datetime(payload)
         _require_future(dt)
 
-        base_contenu = payload.get("contenu")
-        if not isinstance(base_contenu, dict):
-            base_contenu = {}
-
-        # compat: titre envoyé à plat par certains fronts
-        if isinstance(payload.get("titre"), str) and payload.get("titre").strip():
-            base_contenu.setdefault("titre", payload.get("titre").strip())
-
-        contenu = {
-            **base_contenu,
+        content_obj = {
             "type": "carrousel",
+            "carrousel_id": carrousel_id,
             "slides": slides,
+            "caption": payload.get("caption") or payload.get("text") or payload.get("message") or "",
         }
-        if carrousel_id is not None:
-            contenu["carrousel_id"] = carrousel_id
 
-        post = SocialPost(
-            user_id=user.id,
+        if payload.get("image_url") and "image_url" not in content_obj:
+            content_obj["image_url"] = payload.get("image_url")
+        if payload.get("media_url") and "media_url" not in content_obj:
+            content_obj["media_url"] = payload.get("media_url")
+
+        row = _insert_social_post(
+            db,
+            user_id=_user_id(user),
             reseau=network,
-            statut="scheduled",
-            contenu=json.dumps(contenu, ensure_ascii=False),
+            contenu_obj=content_obj,
             date_programmee=dt,
             supprimer_apres=bool(payload.get("supprimer_apres", False)),
         )
 
-        db.add(post)
-        db.commit()
-        db.refresh(post)
-
         return {
             "ok": True,
-            "id": post.id,
-            "statut": post.statut,
-            "date_programmee": post.date_programmee.isoformat(),
+            "id": row["id"],
+            "statut": row["statut"],
+            "date_programmee": row["date_programmee"].isoformat() if row.get("date_programmee") else None,
         }
 
     except HTTPException:
@@ -305,17 +292,43 @@ def schedule_carrousel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============================================================
-# ♻️ Backward-compat alias
-# ============================================================
-
 @router.post("/schedule")
-def schedule_carrousel_legacy(
+def schedule_legacy_alias(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    Ancien endpoint conservé (alias de /schedule-carrousel).
-    """
     return schedule_carrousel(payload=payload, db=db, user=user)
+
+
+@router.patch("/posts/{post_id}/manual-status")
+def update_manual_post_status(
+    post_id: int,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    status = str(payload.get("status") or "").strip().lower()
+    if status not in {"published", "scheduled"}:
+        raise HTTPException(status_code=400, detail="status invalide")
+
+    published_at_value = "NOW()" if status == "published" else "NULL"
+
+    sql = text(
+        f"""
+        UPDATE social_posts
+        SET statut = :status,
+            published_at = {published_at_value},
+            updated_at = NOW(),
+            publish_error = NULL
+        WHERE id = :post_id AND user_id = :user_id
+        RETURNING id, user_id, reseau, statut, contenu, date_programmee, published_at, publish_error, supprimer_apres, created_at, updated_at
+        """
+    )
+
+    row = db.execute(sql, {"status": status, "post_id": int(post_id), "user_id": _user_id(user)}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Post introuvable")
+
+    db.commit()
+    return {"ok": True, "post": _serialize_row(dict(row))}

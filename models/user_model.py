@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Column, DateTime, Integer, String, func
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -9,31 +9,14 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-
-    # ✅ Base Render réelle : full_name existe, name n'existe pas
     full_name = Column(String(255), nullable=True)
-
-    # ✅ Auth
     hashed_password = Column(String(255), nullable=True)
-
-    # ✅ Legacy encore présent pour certains anciens comptes
-    password = Column(Text, nullable=True)
-
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, nullable=True)
 
-    plan = Column(String(50), nullable=True, default="essentiel")
-    ai_usage_limit = Column(Float, nullable=True, default=0)
-    ai_last_reset = Column(DateTime, nullable=True)
-    ai_usage_weekly = Column(Float, nullable=True, default=0)
-
-    is_active = Column(Boolean, default=True)
-    is_admin = Column(Boolean, default=False)
-
     # ============================================================
-    # RELATIONS OFFICIELLES LGD — version stable
+    # RELATIONS OFFICIELLES LGD — version safe Render
     # ============================================================
-
     carrousels = relationship("Carrousel", back_populates="user", cascade="all, delete")
     automations = relationship("Automation", back_populates="user")
     social_posts = relationship("SocialPost", back_populates="user")

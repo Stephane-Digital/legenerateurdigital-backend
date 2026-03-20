@@ -29,6 +29,10 @@ from models.social_post_model import SocialPost
 router = APIRouter(prefix="/planner", tags=["Planner Scheduling"])
 
 
+def _user_id(user: Any) -> int:
+    return int(user["id"]) if isinstance(user, dict) else int(user.id)
+
+
 def _safe_json_loads(value: Any) -> Any:
     if value is None:
         return {}
@@ -142,7 +146,7 @@ def list_planner_posts(
 ):
     posts = (
         db.query(SocialPost)
-        .filter(SocialPost.user_id == user.id)
+        .filter(SocialPost.user_id == _user_id(user))
         .order_by(SocialPost.date_programmee.desc())
         .all()
     )
@@ -183,7 +187,7 @@ def schedule_post(
             content_obj["type"] = content_obj.get("kind") or "post"
 
         post = SocialPost(
-            user_id=user.id,
+            user_id=_user_id(user),
             reseau=network,
             statut="scheduled",
             contenu=json.dumps(content_obj, ensure_ascii=False),
@@ -241,7 +245,7 @@ def schedule_carrousel(
             content_obj["media_url"] = payload.get("media_url")
 
         post = SocialPost(
-            user_id=user.id,
+            user_id=_user_id(user),
             reseau=network,
             statut="scheduled",
             contenu=json.dumps(content_obj, ensure_ascii=False),

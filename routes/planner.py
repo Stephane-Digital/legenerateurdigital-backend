@@ -30,6 +30,11 @@ def schedule_carrousel(
             raise ValueError("date ou time manquant")
 
         # =========================
+        # 👤 USER ID SAFE (dict OU ORM)
+        # =========================
+        user_id = user["id"] if isinstance(user, dict) else user.id
+
+        # =========================
         # 🕒 CONSTRUCTION DATETIME
         # =========================
         datetime_str = f"{payload['date']} {payload['time']}"
@@ -48,7 +53,7 @@ def schedule_carrousel(
         # 🧱 CRÉATION SOCIAL POST
         # =========================
         post = SocialPost(
-            user_id=user.id,
+            user_id=user_id,
             reseau=payload["network"],
             statut="scheduled",
             contenu=json.dumps(contenu),

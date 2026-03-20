@@ -2,10 +2,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -18,7 +18,6 @@ try:
 except Exception:  # pragma: no cover
     settings = None
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
 
@@ -128,13 +127,22 @@ def _build_identity_query(columns: set[str], where_clause: str) -> str:
 # ============================================================
 # PASSWORD / TOKEN HELPERS
 # ============================================================
+def _normalize_password(password: str) -> bytes:
+    if password is None:
+        password = ""
+    return str(password).encode("utf-8")[:72]
+
+
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    raw = _normalize_password(password)
+    return bcrypt.hashpw(raw, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        raw = _normalize_password(plain_password)
+        stored = str(hashed_password or "").encode("utf-8")
+        return bcrypt.checkpw(raw, stored)
     except Exception:
         return False
 

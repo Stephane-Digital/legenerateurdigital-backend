@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -159,6 +158,14 @@ def _db_delete_item(db: Session, user_id: int, item_id: int) -> Optional[Dict[st
 # Routes
 # ---------------------------------------------------------------------
 
+@router.get("")
+def list_library_root(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _db_list_items(db, current_user.id)
+
+
 @router.get("/list")
 def list_library(
     db: Session = Depends(get_db),
@@ -212,6 +219,15 @@ async def upload_file(
     return item
 
 
+@router.post("")
+async def save_draft_root(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await save_draft(payload=payload, db=db, current_user=current_user)
+
+
 @router.post("/save-draft")
 async def save_draft(
     payload: Dict[str, Any],
@@ -242,7 +258,6 @@ async def save_draft(
     file_url = f"/uploads/library/{stored_name}"
     item = _db_insert_item(db, current_user.id, title, None, file_url)
     return item
-
 
 
 @router.post("/save-carrousel")
@@ -324,6 +339,15 @@ def download_file(
     mime, _ = mimetypes.guess_type(str(abs_path))
     filename = item.get("filename") or abs_path.name
     return FileResponse(path=str(abs_path), media_type=mime or "application/octet-stream", filename=filename)
+
+
+@router.delete("/items/{item_id}")
+def delete_item_alias(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return delete_item(item_id=item_id, db=db, current_user=current_user)
 
 
 @router.delete("/{item_id}")

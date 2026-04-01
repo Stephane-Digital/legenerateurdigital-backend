@@ -46,6 +46,8 @@ from routes.systeme_sync import router as systeme_sync_router
 from routes.systeme_webhooks import router as systeme_webhooks_router
 from routes.email_analytics_dashboard import router as email_analytics_router
 from routes.lead_engine_ai import router as lead_engine_ai_router
+from routes.lead_engine_ai import router as lead_engine_ai_router
+
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
 
@@ -178,6 +180,9 @@ app.include_router(systeme_sync_router)
 app.include_router(systeme_webhooks_router)
 app.include_router(email_analytics_router)
 app.include_router(lead_engine_ai_router)
+app.include_router(lead_engine_ai_router)
+
+
 
 print("\n========== ROUTES CHARGEES ==========")
 for r in app.routes:

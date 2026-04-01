@@ -12,6 +12,7 @@ from database import Base, engine
 # ✅ IMPORTANT: import the model modules BEFORE create_all()
 from models.coach_profile_model import CoachProfile  # noqa: F401
 from models.email_campaign_model import EmailCampaign  # noqa: F401
+from models.lead_engine_memory_model import LeadEngineMemory  # noqa: F401
 
 # ROUTES
 from routes.auth import router as auth_router
@@ -45,6 +46,7 @@ from routes.email_systeme_io import router as systeme_router
 from routes.systeme_sync import router as systeme_sync_router
 from routes.systeme_webhooks import router as systeme_webhooks_router
 from routes.email_analytics_dashboard import router as email_analytics_router
+from routes.lead_engine_ai import router as lead_engine_ai_router
 
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
@@ -111,11 +113,11 @@ default_origins = [
 settings_origins = normalize_origins(getattr(settings, "CORS_ORIGINS", []))
 allow_origins = list(dict.fromkeys([*default_origins, *settings_origins]))
 
-print("\n========== CORS LGD ==========")
+print("========== CORS LGD ==========")
 print("settings.CORS_ORIGINS brut :", getattr(settings, "CORS_ORIGINS", None))
 print("settings.CORS_ORIGINS norm :", settings_origins)
 print("allow_origins effectifs    :", allow_origins)
-print("================================\n")
+print("================================")
 
 app.add_middleware(
     CORSMiddleware,
@@ -177,13 +179,14 @@ app.include_router(systeme_router)
 app.include_router(systeme_sync_router)
 app.include_router(systeme_webhooks_router)
 app.include_router(email_analytics_router)
+app.include_router(lead_engine_ai_router)
 
 
-print("\n========== ROUTES CHARGEES ==========")
+print("========== ROUTES CHARGEES ==========")
 for r in app.routes:
     try:
         methods = ",".join(sorted(getattr(r, "methods", []) or []))
         print(f"{methods:15s} {getattr(r, 'path', '')}")
     except Exception:
         pass
-print("=====================================\n")
+print("=====================================")

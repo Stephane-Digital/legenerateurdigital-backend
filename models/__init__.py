@@ -34,6 +34,7 @@ _MODEL_MODULES = [
     "ia_status",
     "statut_ia_model",
     "coach_profile_model",
+    "lead_engine_memory_model",
 ]
 
 
@@ -74,10 +75,16 @@ try:
 except Exception:
     EmailCampaign = None  # type: ignore
 
+try:
+    from .lead_engine_memory_model import LeadEngineMemory  # noqa: F401
+except Exception:
+    LeadEngineMemory = None  # type: ignore
+
 __all__ = [
     "User",
     "SalesPage",
     "IAQuota",
     "CoachProfile",
     "EmailCampaign",
+    "LeadEngineMemory",
 ]

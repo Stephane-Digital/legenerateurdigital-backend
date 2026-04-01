@@ -87,7 +87,7 @@ def _memory_block(memories: Iterable[dict]) -> str:
     if not lines:
         return "Aucune mémoire exploitable pour le moment."
 
-    return ".join(lines)"
+    return "\n".join(lines)
 
 
 def build_lead_prompt(*, goal: str, brief: str, emotional_style: Optional[str], business_context: Optional[str], memories: Iterable[dict]) -> str:
@@ -133,7 +133,6 @@ def generate_lead_content(*, goal: str, brief: str, emotional_style: Optional[st
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.9,
     )
 
     content = response.choices[0].message.content if response.choices else ""

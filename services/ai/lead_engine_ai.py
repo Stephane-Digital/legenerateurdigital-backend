@@ -154,3 +154,4 @@ def generate_lead_content(
     if not content:
         raise RuntimeError("Réponse OpenAI vide pour Lead Engine.")
     return content
+

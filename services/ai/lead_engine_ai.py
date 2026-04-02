@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -15,7 +14,7 @@ except Exception:  # pragma: no cover
     OpenAI = None  # type: ignore
 
 
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = '''
 Tu es LEAD ENGINE, l'IA premium de LGD.
 
 Ta mission : créer des briefs, hooks, CTA, bénéfices, variantes A/B et landings
@@ -32,7 +31,7 @@ Tu n'écris jamais des banalités.
 Tu ne produis jamais de réponses plates.
 Tu privilégies le concret, le ressenti, l'intention, la promesse, la psychologie
 et l'accompagnement stratégique.
-""".strip()
+'''.strip()
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -99,7 +98,7 @@ def build_lead_prompt(
     business_context: Optional[str],
     memories: Iterable[dict],
 ) -> str:
-    return f"""
+    return f'''
 OBJECTIF DEMANDÉ
 {goal}
 
@@ -122,7 +121,7 @@ INSTRUCTIONS DE SORTIE
 - Donne une réponse directement exploitable dans Lead Engine.
 - Si l'objectif est une landing, structure clairement hero, promesse, bénéfices, CTA, objections, FAQ si utile.
 - Si l'objectif est des hooks, CTA ou variantes, fournis plusieurs propositions fortes et différenciées.
-""".strip()
+'''.strip()
 
 
 def generate_lead_content(

@@ -117,3 +117,4 @@ def generate(
         "content": content,
         "memory_items_used": len(serialized_memories),
     }
+

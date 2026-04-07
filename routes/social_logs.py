@@ -14,15 +14,21 @@ router = APIRouter(prefix="/social-logs", tags=["Social Logs"])
 def _normalize_network(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
+
     v = str(value).strip().lower()
+
     if not v:
         return None
+
     if v in {"fb", "facebook"}:
         return "facebook"
+
     if v in {"ig", "instagram"}:
         return "instagram"
+
     if v in {"li", "linkedin", "linked_in"}:
         return "linkedin"
+
     return v
 
 
@@ -33,10 +39,20 @@ def list_social_logs(
     user=Depends(get_current_user),
 ):
     user_id = user["id"] if isinstance(user, dict) else user.id
-    query = db.query(SocialPostLog).filter(SocialPostLog.user_id == user_id)
+
+    query = db.query(SocialPostLog).filter(
+        SocialPostLog.user_id == user_id
+    )
 
     normalized_network = _normalize_network(network)
-    if normalized_network:
-        query = query.filter(SocialPostLog.network == normalized_network)
 
-    return query.order_by(SocialPostLog.created_at.desc()).all()
+    if normalized_network:
+        query = query.filter(
+            SocialPostLog.network == normalized_network
+        )
+
+    return (
+        query.order_by(
+            SocialPostLog.created_at.desc().nullslast()
+        ).all()
+    )

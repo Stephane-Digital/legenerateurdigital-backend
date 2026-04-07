@@ -1,7 +1,6 @@
-# C:\LGD\legenerateurdigital_backend\routes\planner_schedule.py
 """
 LGD — Planner Scheduling (DB-safe)
-- Compatible with current Render DB schema for social_posts
+- Compatible with current Render / local DB schema for social_posts
 - Avoids ORM insert on columns that don't exist yet in production
 """
 
@@ -21,7 +20,14 @@ from routes.auth import get_current_user
 router = APIRouter(prefix="/planner", tags=["Planner Scheduling"])
 
 ALLOWED_NETWORKS = {"instagram", "facebook", "linkedin"}
-ALLOWED_STATUSES = {"draft", "scheduled", "queued", "sent_to_make", "published", "failed"}
+ALLOWED_STATUSES = {
+    "draft",
+    "scheduled",
+    "queued",
+    "sent_to_make",
+    "published",
+    "failed",
+}
 
 
 def _user_id(user: Any) -> int:
@@ -68,50 +74,126 @@ def _extract_title(content: Any) -> Optional[str]:
 
 def _extract_format(content: Any) -> Optional[str]:
     if isinstance(content, dict):
-        return content.get("format") or content.get("post_format") or content.get("kind")
+        return (
+            content.get("format")
+            or content.get("post_format")
+            or content.get("kind")
+            or content.get("type")
+        )
     return None
 
 
 def _extract_media_url(content: Any) -> Optional[str]:
     if not isinstance(content, dict):
         return None
-    for key in ("image_url", "media_url", "imageUrl", "mediaUrl"):
+
+    for key in (
+        "image_url",
+        "media_url",
+        "imageUrl",
+        "mediaUrl",
+        "preview_url",
+        "thumbnail_url",
+    ):
         value = content.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+
     slides = content.get("slides")
     if isinstance(slides, list):
         for slide in slides:
             if isinstance(slide, dict):
-                for key in ("image_url", "media_url", "preview_url", "thumbnail_url"):
+                for key in (
+                    "image_url",
+                    "media_url",
+                    "preview_url",
+                    "thumbnail_url",
+                    "imageUrl",
+                    "mediaUrl",
+                ):
                     value = slide.get(key)
                     if isinstance(value, str) and value.strip():
                         return value.strip()
+
+    return None
+
+
+def _parse_iso_datetime(raw: str) -> Optional[datetime]:
+    if not isinstance(raw, str):
+        return None
+
+    s = raw.strip()
+    if not s:
+        return None
+
+    candidates = [
+        s,
+        s.replace("Z", "+00:00"),
+    ]
+
+    for candidate in candidates:
+        try:
+            dt = datetime.fromisoformat(candidate)
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            return dt
+        except Exception:
+            continue
+
+    # fallback format "YYYY-MM-DD HH:MM[:SS]"
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            continue
+
     return None
 
 
 def _parse_scheduled_datetime(payload: Dict[str, Any]) -> datetime:
-    raw = payload.get("scheduled_at") or payload.get("scheduled_for") or payload.get("date_programmee")
-    if isinstance(raw, str) and raw.strip():
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00")).replace(tzinfo=None)
-        except Exception:
-            pass
+    raw_candidates = [
+        payload.get("scheduled_at"),
+        payload.get("scheduled_for"),
+        payload.get("date_programmee"),
+        payload.get("iso"),
+        payload.get("iso_sent"),
+        payload.get("scheduledAt"),
+        payload.get("scheduledFor"),
+        payload.get("dateProgrammee"),
+    ]
+
+    for raw in raw_candidates:
+        dt = _parse_iso_datetime(raw)
+        if dt is not None:
+            return dt
 
     date = payload.get("date")
     time = payload.get("time")
+
     if isinstance(date, str) and isinstance(time, str) and date.strip() and time.strip():
-        try:
-            return datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"date/time invalide: {e}")
+        raw = f"{date.strip()} {time.strip()}"
+        dt = _parse_iso_datetime(raw)
+        if dt is not None:
+            return dt
 
     raise HTTPException(status_code=400, detail="Date/heure invalide (date_programmee).")
+
+
+def _serialize_datetime(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    try:
+        return str(value)
+    except Exception:
+        return None
 
 
 def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
     content_obj = _safe_json_loads(row.get("contenu"))
     date_prog = row.get("date_programmee")
+
     return {
         "id": row.get("id"),
         "user_id": row.get("user_id"),
@@ -123,21 +205,69 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "title": _extract_title(content_obj),
         "format": _extract_format(content_obj),
         "contenu": content_obj,
-        "date_programmee": date_prog,
-        "scheduled_at": date_prog,
-        "scheduled_for": date_prog,
+        "date_programmee": _serialize_datetime(date_prog),
+        "scheduled_at": _serialize_datetime(date_prog),
+        "scheduled_for": _serialize_datetime(date_prog),
         "media_url": _extract_media_url(content_obj),
-        "published_at": row.get("published_at"),
+        "published_at": _serialize_datetime(row.get("published_at")),
         "publish_error": row.get("publish_error"),
         "supprimer_apres": bool(row.get("supprimer_apres", False)),
-        "created_at": row.get("created_at"),
-        "updated_at": row.get("updated_at"),
+        "created_at": _serialize_datetime(row.get("created_at")),
+        "updated_at": _serialize_datetime(row.get("updated_at")),
     }
 
 
 def _require_future(dt: datetime) -> None:
     if dt <= datetime.utcnow():
         raise HTTPException(status_code=400, detail="La date de publication doit être dans le futur")
+
+
+def _build_post_content(payload: Dict[str, Any]) -> Dict[str, Any]:
+    content_obj: Any = payload.get("contenu")
+
+    if content_obj is None:
+        content_obj = payload.get("content")
+
+    if content_obj is None:
+        content_obj = {}
+
+    if isinstance(content_obj, str):
+        content_obj = _safe_json_loads(content_obj)
+        if isinstance(content_obj, str):
+            content_obj = {"text": content_obj}
+
+    if not isinstance(content_obj, dict):
+        content_obj = {"value": content_obj}
+
+    for key in (
+        "titre",
+        "title",
+        "text",
+        "caption",
+        "format",
+        "kind",
+        "type",
+        "image_url",
+        "media_url",
+        "imageUrl",
+        "mediaUrl",
+        "ui",
+        "slides",
+        "preview_url",
+        "thumbnail_url",
+    ):
+        if payload.get(key) is not None and key not in content_obj:
+            content_obj[key] = payload.get(key)
+
+    if "type" not in content_obj:
+        content_obj["type"] = (
+            content_obj.get("kind")
+            or payload.get("format")
+            or payload.get("kind")
+            or "post"
+        )
+
+    return content_obj
 
 
 def _insert_social_post(
@@ -211,25 +341,7 @@ def schedule_post(
         dt = _parse_scheduled_datetime(payload)
         _require_future(dt)
 
-        content_obj: Any = payload.get("contenu")
-        if content_obj is None:
-            # fallback: keep the whole payload UI content when front sends only top-level fields
-            content_obj = payload.get("content") or {}
-
-        if isinstance(content_obj, str):
-            content_obj = _safe_json_loads(content_obj)
-            if isinstance(content_obj, str):
-                content_obj = {"text": content_obj}
-
-        if not isinstance(content_obj, dict):
-            content_obj = {"value": content_obj}
-
-        for k in ("titre", "title", "text", "caption", "format", "image_url", "media_url", "ui"):
-            if payload.get(k) is not None and k not in content_obj:
-                content_obj[k] = payload.get(k)
-
-        if "type" not in content_obj:
-            content_obj["type"] = content_obj.get("kind") or payload.get("format") or "post"
+        content_obj = _build_post_content(payload)
 
         row = _insert_social_post(
             db,
@@ -286,6 +398,10 @@ def schedule_carrousel(
             content_obj["image_url"] = payload.get("image_url")
         if payload.get("media_url") and "media_url" not in content_obj:
             content_obj["media_url"] = payload.get("media_url")
+        if payload.get("titre") and "titre" not in content_obj:
+            content_obj["titre"] = payload.get("titre")
+        if payload.get("title") and "title" not in content_obj:
+            content_obj["title"] = payload.get("title")
 
         row = _insert_social_post(
             db,
@@ -344,7 +460,15 @@ def update_manual_post_status(
         """
     )
 
-    row = db.execute(sql, {"status": status, "post_id": int(post_id), "user_id": _user_id(user)}).mappings().first()
+    row = db.execute(
+        sql,
+        {
+            "status": status,
+            "post_id": int(post_id),
+            "user_id": _user_id(user),
+        },
+    ).mappings().first()
+
     if not row:
         raise HTTPException(status_code=404, detail="Post introuvable")
 
@@ -365,9 +489,16 @@ def delete_planner_post(
         RETURNING id
         """
     )
-    row = db.execute(sql, {"post_id": int(post_id), "user_id": _user_id(user)}).mappings().first()
+    row = db.execute(
+        sql,
+        {
+            "post_id": int(post_id),
+            "user_id": _user_id(user),
+        },
+    ).mappings().first()
+
     if not row:
         raise HTTPException(status_code=404, detail="Post introuvable")
+
     db.commit()
     return {"ok": True, "deleted_id": int(row["id"])}
-

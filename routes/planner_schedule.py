@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
@@ -19,6 +19,27 @@ from database import get_db
 from routes.auth import get_current_user
 
 router = APIRouter(prefix="/planner", tags=["Planner Scheduling"])
+
+SUPPORTED_NETWORKS: Set[str] = {"instagram", "facebook", "linkedin"}
+
+
+def _normalize_network(value: Any) -> str:
+    v = str(value or "").strip().lower()
+    if v in {"fb", "facebook"}:
+        return "facebook"
+    if v in {"ig", "instagram"}:
+        return "instagram"
+    if v in {"li", "linkedin", "linked_in"}:
+        return "linkedin"
+    return v
+
+
+def _validate_supported_network(value: Any) -> str:
+    network = _normalize_network(value)
+    if network not in SUPPORTED_NETWORKS:
+        allowed = ", ".join(sorted(SUPPORTED_NETWORKS))
+        raise HTTPException(status_code=400, detail=f"network invalide. Réseaux supportés: {allowed}")
+    return network
 
 
 def _user_id(user: Any) -> int:
@@ -113,6 +134,8 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "scheduled_at": date_prog,
         "scheduled_for": date_prog,
         "media_url": _extract_media_url(content_obj),
+        "published_at": row.get("published_at"),
+        "publish_error": row.get("publish_error"),
         "supprimer_apres": bool(row.get("supprimer_apres", False)),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
@@ -139,7 +162,7 @@ def _insert_social_post(
             (user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at)
         VALUES
             (:user_id, :reseau, :statut, :contenu, :date_programmee, :supprimer_apres, NOW(), NOW())
-        RETURNING id, user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at
+        RETURNING id, user_id, reseau, statut, contenu, date_programmee, published_at, publish_error, supprimer_apres, created_at, updated_at
         """
     )
 
@@ -169,7 +192,7 @@ def list_planner_posts(
 ):
     sql = text(
         """
-        SELECT id, user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at
+        SELECT id, user_id, reseau, statut, contenu, date_programmee, published_at, publish_error, supprimer_apres, created_at, updated_at
         FROM social_posts
         WHERE user_id = :user_id
         ORDER BY date_programmee DESC, id DESC
@@ -186,9 +209,7 @@ def schedule_post(
     user=Depends(get_current_user),
 ):
     try:
-        network = str(payload.get("network") or payload.get("reseau") or "").strip().lower()
-        if not network:
-            raise HTTPException(status_code=400, detail="network manquant")
+        network = _validate_supported_network(payload.get("network") or payload.get("reseau"))
 
         dt = _parse_scheduled_datetime(payload)
         _require_future(dt)
@@ -243,9 +264,7 @@ def schedule_carrousel(
     user=Depends(get_current_user),
 ):
     try:
-        network = str(payload.get("network") or payload.get("reseau") or "").strip().lower()
-        if not network:
-            raise HTTPException(status_code=400, detail="network manquant")
+        network = _validate_supported_network(payload.get("network") or payload.get("reseau"))
 
         carrousel_id = payload.get("carrousel_id") or payload.get("carousel_id")
         slides = payload.get("slides")
@@ -297,3 +316,62 @@ def schedule_legacy_alias(
     user=Depends(get_current_user),
 ):
     return schedule_carrousel(payload=payload, db=db, user=user)
+
+
+@router.patch("/posts/{post_id}/manual-status")
+def update_manual_post_status(
+    post_id: int,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    status = str(payload.get("status") or "").strip().lower()
+    allowed_statuses = {"draft", "scheduled", "queued", "sent_to_make", "published", "failed"}
+    if status not in allowed_statuses:
+        allowed = ", ".join(sorted(allowed_statuses))
+        raise HTTPException(status_code=400, detail=f"status invalide. Valeurs autorisées: {allowed}")
+
+    published_at_value = "NOW()" if status == "published" else "NULL"
+
+    sql = text(
+        f"""
+        UPDATE social_posts
+        SET statut = :status,
+            published_at = {published_at_value},
+            updated_at = NOW(),
+            publish_error = NULL
+        WHERE id = :post_id AND user_id = :user_id
+        RETURNING id, user_id, reseau, statut, contenu, date_programmee, published_at, publish_error, supprimer_apres, created_at, updated_at
+        """
+    )
+
+    row = db.execute(sql, {"status": status, "post_id": int(post_id), "user_id": _user_id(user)}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Post introuvable")
+
+    db.commit()
+    return {"ok": True, "post": _serialize_row(dict(row))}
+
+
+@router.delete("/posts/{post_id}")
+def delete_planner_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    row = db.execute(
+        text(
+            """
+            DELETE FROM social_posts
+            WHERE id = :post_id AND user_id = :user_id
+            RETURNING id
+            """
+        ),
+        {"post_id": int(post_id), "user_id": _user_id(user)},
+    ).mappings().first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Post introuvable")
+
+    db.commit()
+    return {"ok": True, "deleted_id": row["id"]}

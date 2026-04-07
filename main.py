@@ -28,7 +28,6 @@ from routes.campaigns import router as campaigns_router
 from routes.email_campaigns import router as email_campaigns_router
 from routes.content_history import router as content_history_router
 from routes.statut_ia import router as ia_status_router
-from routes import planner
 from routes.carrousel_slides import router as carrousel_slides_router
 from routes import library as library_routes
 from routes.planner_schedule import router as planner_schedule_router
@@ -161,7 +160,6 @@ app.include_router(campaigns_router)
 app.include_router(email_campaigns_router)
 app.include_router(content_history_router)
 app.include_router(ia_status_router)
-app.include_router(planner.router)
 app.include_router(carrousel_slides_router)
 app.include_router(library_routes.router)
 app.include_router(planner_schedule_router)

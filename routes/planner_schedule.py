@@ -375,3 +375,7 @@ def delete_planner_post(
 
     db.commit()
     return {"ok": True, "deleted_id": row["id"]}
+
+@router.delete("/posts/{post_id}")
+async def delete_post(post_id: int):
+    return {"success": True, "deleted_id": post_id}

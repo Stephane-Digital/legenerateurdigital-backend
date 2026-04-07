@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
@@ -20,30 +20,23 @@ from routes.auth import get_current_user
 
 router = APIRouter(prefix="/planner", tags=["Planner Scheduling"])
 
-SUPPORTED_NETWORKS: Set[str] = {"instagram", "facebook", "linkedin"}
-
-
-def _normalize_network(value: Any) -> str:
-    v = str(value or "").strip().lower()
-    if v in {"fb", "facebook"}:
-        return "facebook"
-    if v in {"ig", "instagram"}:
-        return "instagram"
-    if v in {"li", "linkedin", "linked_in"}:
-        return "linkedin"
-    return v
-
-
-def _validate_supported_network(value: Any) -> str:
-    network = _normalize_network(value)
-    if network not in SUPPORTED_NETWORKS:
-        allowed = ", ".join(sorted(SUPPORTED_NETWORKS))
-        raise HTTPException(status_code=400, detail=f"network invalide. Réseaux supportés: {allowed}")
-    return network
+ALLOWED_NETWORKS = {"instagram", "facebook", "linkedin"}
+ALLOWED_STATUSES = {"draft", "scheduled", "queued", "sent_to_make", "published", "failed"}
 
 
 def _user_id(user: Any) -> int:
     return int(user["id"]) if isinstance(user, dict) else int(user.id)
+
+
+def _normalize_network(value: Any) -> str:
+    v = str(value or "").strip().lower()
+    if v in {"ig", "instagram"}:
+        return "instagram"
+    if v in {"fb", "facebook"}:
+        return "facebook"
+    if v in {"li", "linkedin", "linked_in"}:
+        return "linkedin"
+    return v
 
 
 def _safe_json_loads(value: Any) -> Any:
@@ -209,7 +202,11 @@ def schedule_post(
     user=Depends(get_current_user),
 ):
     try:
-        network = _validate_supported_network(payload.get("network") or payload.get("reseau"))
+        network = _normalize_network(payload.get("network") or payload.get("reseau"))
+        if not network:
+            raise HTTPException(status_code=400, detail="network manquant")
+        if network not in ALLOWED_NETWORKS:
+            raise HTTPException(status_code=400, detail=f"network invalide: {network}")
 
         dt = _parse_scheduled_datetime(payload)
         _require_future(dt)
@@ -264,7 +261,11 @@ def schedule_carrousel(
     user=Depends(get_current_user),
 ):
     try:
-        network = _validate_supported_network(payload.get("network") or payload.get("reseau"))
+        network = _normalize_network(payload.get("network") or payload.get("reseau"))
+        if not network:
+            raise HTTPException(status_code=400, detail="network manquant")
+        if network not in ALLOWED_NETWORKS:
+            raise HTTPException(status_code=400, detail=f"network invalide: {network}")
 
         carrousel_id = payload.get("carrousel_id") or payload.get("carousel_id")
         slides = payload.get("slides")
@@ -326,10 +327,8 @@ def update_manual_post_status(
     user=Depends(get_current_user),
 ):
     status = str(payload.get("status") or "").strip().lower()
-    allowed_statuses = {"draft", "scheduled", "queued", "sent_to_make", "published", "failed"}
-    if status not in allowed_statuses:
-        allowed = ", ".join(sorted(allowed_statuses))
-        raise HTTPException(status_code=400, detail=f"status invalide. Valeurs autorisées: {allowed}")
+    if status not in ALLOWED_STATUSES:
+        raise HTTPException(status_code=400, detail="status invalide")
 
     published_at_value = "NOW()" if status == "published" else "NULL"
 
@@ -359,23 +358,15 @@ def delete_planner_post(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    row = db.execute(
-        text(
-            """
-            DELETE FROM social_posts
-            WHERE id = :post_id AND user_id = :user_id
-            RETURNING id
-            """
-        ),
-        {"post_id": int(post_id), "user_id": _user_id(user)},
-    ).mappings().first()
-
+    sql = text(
+        """
+        DELETE FROM social_posts
+        WHERE id = :post_id AND user_id = :user_id
+        RETURNING id
+        """
+    )
+    row = db.execute(sql, {"post_id": int(post_id), "user_id": _user_id(user)}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Post introuvable")
-
     db.commit()
-    return {"ok": True, "deleted_id": row["id"]}
-
-@router.delete("/posts/{post_id}")
-async def delete_post(post_id: int):
-    return {"success": True, "deleted_id": post_id}
+    return {"ok": True, "deleted_id": int(row["id"])}

@@ -7,7 +7,7 @@ import os
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -92,6 +92,10 @@ IG_REDIRECT_URI = _env("INSTAGRAM_REDIRECT_URI")
 FB_LOGIN_CONFIG_ID = _env("FACEBOOK_LOGIN_CONFIG_ID") or _env("META_CONFIG_ID") or _env("FACEBOOK_CONFIG_ID")
 IG_LOGIN_CONFIG_ID = _env("INSTAGRAM_LOGIN_CONFIG_ID") or FB_LOGIN_CONFIG_ID
 
+LINKEDIN_CLIENT_ID = _env("LINKEDIN_CLIENT_ID")
+LINKEDIN_CLIENT_SECRET = _env("LINKEDIN_CLIENT_SECRET")
+LINKEDIN_REDIRECT_URI = _env("LINKEDIN_REDIRECT_URI")
+
 STATE_SECRET = _env("FACEBOOK_STATE_SECRET", "change_me_long_random")
 
 GRAPH = "https://graph.facebook.com"
@@ -118,6 +122,15 @@ def _normalized_instagram_redirect_uri() -> str:
     if fb_uri:
         return fb_uri.replace("/facebook/callback", "/instagram/callback")
     return ""
+
+
+def _normalized_linkedin_redirect_uri() -> str:
+    uri = (LINKEDIN_REDIRECT_URI or "").strip()
+    if not uri:
+        return ""
+    uri = uri.replace("/social/linkedin/callback", "/social-connections/linkedin/callback")
+    uri = uri.replace("//social-connections/linkedin/callback", "/social-connections/linkedin/callback")
+    return uri
 
 
 def _frontend_planner_url(extra: Optional[Dict[str, Any]] = None) -> str:
@@ -157,6 +170,19 @@ def _require_instagram_env() -> None:
         missing.append("INSTAGRAM_REDIRECT_URI")
     if missing:
         raise HTTPException(status_code=500, detail=f"Env Instagram manquants: {', '.join(missing)}")
+
+
+def _require_linkedin_env() -> None:
+    redirect_uri = _normalized_linkedin_redirect_uri()
+    missing = []
+    if not LINKEDIN_CLIENT_ID:
+        missing.append("LINKEDIN_CLIENT_ID")
+    if not LINKEDIN_CLIENT_SECRET:
+        missing.append("LINKEDIN_CLIENT_SECRET")
+    if not redirect_uri:
+        missing.append("LINKEDIN_REDIRECT_URI")
+    if missing:
+        raise HTTPException(status_code=500, detail=f"Env LinkedIn manquants: {', '.join(missing)}")
 
 
 def _user_id_from_current_user(current_user: Any) -> int:
@@ -212,7 +238,7 @@ def _ensure_schema(db: Session) -> None:
 
 class SaveConnectionIn(BaseModel):
     user_id: int = Field(..., ge=1)
-    network: str = Field(..., description="facebook / instagram / pinterest")
+    network: str = Field(..., description="facebook / instagram / linkedin")
     access_token: str = Field(..., min_length=1)
     refresh_token: str = Field("", description="optional")
     expires_at: Optional[datetime] = None
@@ -229,8 +255,8 @@ def _normalize_network(net: str) -> str:
         return "facebook"
     if v in ("ig", "instagram"):
         return "instagram"
-    if v in ("pin", "pinterest"):
-        return "pinterest"
+    if v in ("li", "linkedin", "linked_in"):
+        return "linkedin"
     return v
 
 
@@ -615,6 +641,30 @@ def connect(network: str, current_user: Any = Depends(get_current_user)):
             },
         }
 
+    if net == "linkedin":
+        _require_linkedin_env()
+        redirect_uri = _normalized_linkedin_redirect_uri()
+        state = _sign_state({"uid": uid, "net": "linkedin", "ts": int(time.time())})
+        scope = "openid profile w_member_social email"
+        auth_url = (
+            "https://www.linkedin.com/oauth/v2/authorization?"
+            f"response_type=code&client_id={LINKEDIN_CLIENT_ID}"
+            f"&redirect_uri={quote(redirect_uri, safe='')}"
+            f"&state={quote(state, safe='')}"
+            f"&scope={quote(scope, safe='')}"
+        )
+        return {
+            "ok": True,
+            "auth_url": auth_url,
+            "debug": {
+                "network": "linkedin",
+                "redirect_uri_runtime": redirect_uri,
+                "client_id_runtime": LINKEDIN_CLIENT_ID,
+                "scope_runtime": scope,
+                "frontend_planner_url": _frontend_planner_url({"linkedin": "connected"}),
+            },
+        }
+
     if net == "instagram":
         _require_instagram_env()
         redirect_uri = _normalized_instagram_redirect_uri()
@@ -856,6 +906,85 @@ def _handle_instagram_callback(code: str, state: str, db: Session) -> dict:
     }
 
 
+def _exchange_linkedin_code(code: str) -> Dict[str, Any]:
+    response = requests.post(
+        "https://www.linkedin.com/oauth/v2/accessToken",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": _normalized_linkedin_redirect_uri(),
+            "client_id": LINKEDIN_CLIENT_ID,
+            "client_secret": LINKEDIN_CLIENT_SECRET,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=25,
+    )
+    if not response.ok:
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {"error": response.text}
+        raise HTTPException(status_code=400, detail=f"LinkedIn token error: {payload}")
+    return response.json()
+
+
+def _fetch_linkedin_profile(access_token: str) -> Dict[str, Any]:
+    response = requests.get(
+        "https://api.linkedin.com/v2/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=25,
+    )
+    if not response.ok:
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {"error": response.text}
+        raise HTTPException(status_code=400, detail=f"LinkedIn profile error: {payload}")
+    return response.json()
+
+
+def _handle_linkedin_callback(code: str, state: str, db: Session) -> dict:
+    _require_linkedin_env()
+    payload = _verify_state(state)
+    uid = int(payload.get("uid") or 0)
+    if uid <= 0:
+        raise HTTPException(status_code=400, detail="State LinkedIn invalide (uid)")
+
+    token_data = _exchange_linkedin_code(code)
+    access_token = str(token_data.get("access_token") or "").strip()
+    if not access_token:
+        raise HTTPException(status_code=400, detail="LinkedIn n'a pas renvoyé d'access_token")
+
+    profile = _fetch_linkedin_profile(access_token)
+    profile_id = str(profile.get("id") or "").strip()
+    first_name = str(profile.get("localizedFirstName") or "").strip()
+    last_name = str(profile.get("localizedLastName") or "").strip()
+    page_name = (first_name + (f" {last_name}" if last_name else "")).strip() or "LinkedIn"
+
+    _upsert_connection(
+        db,
+        SaveConnectionIn(
+            user_id=uid,
+            network="linkedin",
+            access_token=access_token,
+            refresh_token="",
+            expires_at=datetime.utcnow() + timedelta(seconds=int(token_data.get("expires_in") or 3600)),
+            is_active=True,
+            page_id=profile_id or None,
+            page_name=page_name,
+        ),
+    )
+
+    return {
+        "ok": True,
+        "user_id": uid,
+        "token_saved": True,
+        "linkedin_connected": True,
+        "linkedin_id": profile_id,
+        "linkedin_name": page_name,
+    }
+
+
 def _redirect_html(target_url: str, title: str, message: str) -> HTMLResponse:
     print("LGD REDIRECT TARGET =", target_url)
     html = f"""
@@ -1023,6 +1152,33 @@ def instagram_callback(
         "Alerte Instagram",
         "Connexion Instagram créée, mais aucun compte professionnel lié n'a été trouvé.",
     )
+
+
+@router.get("/linkedin/callback")
+def linkedin_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    if error:
+        return _redirect_html(
+            _frontend_planner_url({"linkedin": "warning", "linkedin_error": error, "linkedin_error_message": error_description or ""}),
+            "Alerte LinkedIn",
+            error_description or "La connexion LinkedIn a été interrompue ou refusée.",
+        )
+
+    if not code or not state:
+        return _redirect_html(
+            _frontend_planner_url({"linkedin": "warning"}),
+            "Alerte LinkedIn",
+            "Le callback LinkedIn n'a pas reçu les paramètres OAuth attendus.",
+        )
+
+    result = _handle_linkedin_callback(code=code, state=state, db=db)
+    target_url = _frontend_planner_url({"linkedin": "connected", "li_id": result.get("linkedin_id") or "", "li_name": result.get("linkedin_name") or ""})
+    return _redirect_html(target_url, "Connexion LinkedIn réussie", "Redirection vers le Planner LGD…")
 
 
 @router.get("/{network}/callback")

@@ -313,3 +313,4 @@ def generate_caption(
             ),
         },
     }
+

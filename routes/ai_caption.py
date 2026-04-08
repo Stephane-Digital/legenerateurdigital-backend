@@ -53,7 +53,7 @@ def _infer_keywords(prompt: str) -> list[str]:
         "est", "pas", "plus", "vous", "nous", "leur", "leurs", "votre",
         "notre", "cette", "cet", "cela", "comme", "mais", "par", "sans",
         "tout", "tous", "toute", "toutes", "elle", "elles", "il", "ils",
-        "the", "and", "your", "this", "that", "from", "into", "avec", "au",
+        "the", "and", "your", "this", "that", "from", "into", "au",
         "aux", "de", "du", "la", "le", "un", "en", "ou", "et", "à", "d",
     }
 
@@ -130,7 +130,7 @@ def build_cta(data: CaptionRequest) -> str:
         return "👉 Passe à l’action maintenant et transforme cette idée en résultat concret."
     if objective == "engagement":
         return (
-            "👉 Dis-moi en commentaire ce que tu en penses"
+            "👉 Dis-moi en commentaire ce que tu en penses."
             if network != "linkedin"
             else "👉 Donne-moi ton avis en commentaire : je veux connaître ton retour."
         )
@@ -146,17 +146,11 @@ def build_intro(data: CaptionRequest) -> str:
     network = data.network.lower().strip()
 
     if tone == "expert":
-        return (
-            "Voici un angle plus structuré pour transformer cette idée en message clair et crédible."
-        )
+        return "Voici un angle plus structuré pour transformer cette idée en message clair et crédible."
     if tone == "inspirant":
-        return (
-            "Chaque contenu peut devenir un vrai levier de croissance quand le message touche juste."
-        )
+        return "Chaque contenu peut devenir un vrai levier de croissance quand le message touche juste."
     if tone == "direct":
-        return (
-            "Allons droit au but : ton message doit être simple, net et impactant."
-        )
+        return "Allons droit au but : ton message doit être simple, net et impactant."
 
     if network == "linkedin":
         return "🚀 Renforce ton positionnement avec une prise de parole claire, utile et premium."
@@ -173,24 +167,14 @@ def build_body(data: CaptionRequest) -> str:
     network = data.network.lower().strip()
 
     if network == "linkedin":
-        return (
-            "Sur LinkedIn, la différence se fait sur la clarté, l’angle stratégique et la valeur perçue."
-        )
+        return "Sur LinkedIn, la différence se fait sur la clarté, l’angle stratégique et la valeur perçue."
     if network == "facebook":
-        return (
-            "Sur Facebook, il faut créer une proximité immédiate, donner envie de lire jusqu’au bout et déclencher l’interaction."
-        )
+        return "Sur Facebook, il faut créer une proximité immédiate, donner envie de lire jusqu’au bout et déclencher l’interaction."
     if network == "pinterest":
-        return (
-            "Sur Pinterest, une bonne description doit être claire, inspirante et orientée vers une recherche concrète."
-        )
+        return "Sur Pinterest, une bonne description doit être claire, inspirante et orientée vers une recherche concrète."
     if network == "snapchat":
-        return (
-            "Sur Snapchat, le message doit aller vite, frapper juste et rester naturel."
-        )
-    return (
-        "Sur Instagram, l’impact visuel doit être soutenu par une légende claire, engageante et bien structurée."
-    )
+        return "Sur Snapchat, le message doit aller vite, frapper juste et rester naturel."
+    return "Sur Instagram, l’impact visuel doit être soutenu par une légende claire, engageante et bien structurée."
 
 
 def build_objective_line(data: CaptionRequest) -> str:
@@ -212,9 +196,7 @@ def build_variation_line(data: CaptionRequest) -> str:
     existing = _clean_text(data.existing_caption)
 
     if existing and existing != prompt:
-        return (
-            "J’ai généré une nouvelle variation pour éviter la répétition et donner un angle plus frais à ta publication."
-        )
+        return "J’ai généré une nouvelle variation pour éviter la répétition et donner un angle plus frais à ta publication."
 
     if data.post_type.lower().strip() == "carrousel":
         return "Le format carrousel mérite une accroche forte et une lecture fluide d’une slide à l’autre."
@@ -225,7 +207,7 @@ def build_variation_line(data: CaptionRequest) -> str:
     return "Le texte a été pensé pour rester lisible, premium et immédiatement exploitable."
 
 
-def generate_caption_text(data: CaptionRequest):
+def generate_caption_text(data: CaptionRequest, cta_text: str = "", hashtags_text: str = ""):
     prompt = _clean_text(data.prompt)
     intro = build_intro(data)
     body = build_body(data)
@@ -242,11 +224,11 @@ def generate_caption_text(data: CaptionRequest):
         variation_line,
     ]
 
-    if data.include_cta:
-        sections.append(build_cta(data))
+    if cta_text:
+        sections.append(cta_text)
 
-    if data.include_hashtags:
-        sections.append(build_dynamic_hashtags(data))
+    if hashtags_text:
+        sections.append(hashtags_text)
 
     return "\n\n".join(section for section in sections if section.strip())
 
@@ -262,8 +244,7 @@ def generate_caption(
     quota = get_or_create_quota(db, user_id, feature="coach")
 
     remaining = max(
-        int(getattr(quota, "credits", 0))
-        - int(getattr(quota, "tokens_used", 0)),
+        int(getattr(quota, "credits", 0)) - int(getattr(quota, "tokens_used", 0)),
         0,
     )
 
@@ -272,9 +253,7 @@ def generate_caption(
             status_code=403,
             detail={
                 "code": "QUOTA_REACHED",
-                "upsell": {
-                    "message": "Quota IA épuisé. Passe au plan supérieur."
-                },
+                "upsell": {"message": "Quota IA épuisé. Passe au plan supérieur."},
             },
         )
 
@@ -285,32 +264,26 @@ def generate_caption(
             status_code=403,
             detail={
                 "code": "QUOTA_REACHED",
-                "upsell": {
-                    "message": "Quota IA épuisé. Passe au plan supérieur."
-                },
+                "upsell": {"message": "Quota IA épuisé. Passe au plan supérieur."},
             },
         )
 
     new_remaining = max(
-        int(getattr(updated, "credits", 0))
-        - int(getattr(updated, "tokens_used", 0)),
+        int(getattr(updated, "credits", 0)) - int(getattr(updated, "tokens_used", 0)),
         0,
     )
 
-    caption = generate_caption_text(payload)
+    cta_text = build_cta(payload) if payload.include_cta else ""
+    hashtags_text = build_dynamic_hashtags(payload) if payload.include_hashtags else ""
+    caption = generate_caption_text(payload, cta_text=cta_text, hashtags_text=hashtags_text)
 
     return {
         "caption": caption,
-        "quota": {
-            "remaining": new_remaining
-        },
+        "cta": cta_text,
+        "hashtags": hashtags_text,
+        "quota": {"remaining": new_remaining},
         "upsell": {
             "show": new_remaining <= 5,
-            "message": (
-                "⚡ Plus que quelques crédits IA disponibles."
-                if new_remaining <= 5
-                else ""
-            ),
+            "message": "⚡ Plus que quelques crédits IA disponibles." if new_remaining <= 5 else "",
         },
     }
-

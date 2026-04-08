@@ -124,6 +124,7 @@ def _estimate_tokens(*parts: Any) -> int:
 def _upsell_payload(plan: str, remaining: int) -> dict:
     norm = str(plan or "essentiel").lower()
     next_plan = "pro" if norm == "essentiel" else "ultime"
+
     return {
         "show": remaining <= 0,
         "current_plan": norm,
@@ -184,7 +185,8 @@ def ai_generate_caption(
     user_id = _user_id(user)
     effective_plan = _effective_plan(db, user)
 
-    quota = get_or_create_quota(db, user_id, feature="coach")
+    # ✅ Quota global centralisé LGD
+    quota = get_or_create_quota(db, user_id, feature="global")
     snap_before = _quota_snapshot(quota, plan_override=effective_plan)
 
     if _to_int(snap_before.get("remaining"), 0) <= 0:
@@ -219,7 +221,10 @@ def ai_generate_caption(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"AI_CAPTION_GENERATION_ERROR: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI_CAPTION_GENERATION_ERROR: {exc}",
+        ) from exc
 
     tokens_consumed = _estimate_tokens(
         payload.prompt,
@@ -231,20 +236,28 @@ def ai_generate_caption(
         payload.brand_name,
         payload.offer_name,
         payload.network,
+        payload.tone,
+        payload.media_type,
+        payload.post_type,
         caption,
     )
 
-    updated_quota = update_quota(db, user_id, tokens_consumed, feature="coach")
+    updated_quota = update_quota(db, user_id, tokens_consumed, feature="global")
+
     if updated_quota is None:
-        latest_quota = get_or_create_quota(db, user_id, feature="coach")
+        latest_quota = get_or_create_quota(db, user_id, feature="global")
         latest_snap = _quota_snapshot(latest_quota, plan_override=effective_plan)
+
         raise HTTPException(
             status_code=402,
             detail={
                 "code": "QUOTA_REACHED",
                 "message": "Le quota IA restant est insuffisant pour cette génération.",
                 "quota": latest_snap,
-                "upsell": _upsell_payload(effective_plan, _to_int(latest_snap.get("remaining"), 0)),
+                "upsell": _upsell_payload(
+                    effective_plan,
+                    _to_int(latest_snap.get("remaining"), 0),
+                ),
             },
         )
 
@@ -255,6 +268,9 @@ def ai_generate_caption(
         "caption": caption,
         "tokens_consumed": tokens_consumed,
         "quota": snap_after,
-        "upsell": _upsell_payload(effective_plan, _to_int(snap_after.get("remaining"), 0)),
+        "upsell": _upsell_payload(
+            effective_plan,
+            _to_int(snap_after.get("remaining"), 0),
+        ),
         "message": "Caption générée avec succès.",
     }

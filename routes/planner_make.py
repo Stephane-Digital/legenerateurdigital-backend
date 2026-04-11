@@ -78,43 +78,127 @@ def _first_non_empty_str(*values: Any) -> str:
     return ""
 
 
-def _extract_content_parts(content: Any) -> Dict[str, Any]:
-    payload = _safe_json_loads(content)
-    if not isinstance(payload, dict):
-        text_value = str(payload or "").strip()
-        return {
-            "raw": payload,
-            "caption": text_value,
-            "base_caption": text_value,
-            "cta": "",
-            "hashtags": "",
-            "media_url": "",
-            "slides": [],
-        }
-
-    raw_caption = _first_non_empty_str(
-        payload.get("caption"),
-        payload.get("text"),
-        payload.get("message"),
-        payload.get("description"),
-        payload.get("generated_caption"),
-        payload.get("generated_text"),
+def _looks_like_media(value: str) -> bool:
+    v = str(value or "").strip().lower()
+    return (
+        v.startswith("http://")
+        or v.startswith("https://")
+        or v.startswith("blob:")
+        or v.startswith("data:image/")
+        or v.startswith("data:video/")
     )
 
-    lines = [
-        line.strip()
-        for line in str(raw_caption or "").replace("\r", "").split("\n")
-        if line.strip()
-    ]
+
+def _extract_layer_texts(layers: Any) -> List[str]:
+    texts: List[str] = []
+    if not isinstance(layers, list):
+        return texts
+
+    for layer in layers:
+        if not isinstance(layer, dict):
+            continue
+
+        layer_type = str(layer.get("type") or "").strip().lower()
+        candidate = _first_non_empty_str(
+            layer.get("text"),
+            layer.get("html"),
+            layer.get("content"),
+            layer.get("value"),
+            layer.get("label"),
+            layer.get("title"),
+            layer.get("name"),
+        )
+
+        if layer_type in {"text", "title", "heading", "paragraph"} and candidate:
+            texts.append(candidate)
+            continue
+
+        if not layer_type and candidate:
+            texts.append(candidate)
+
+    return texts
+
+
+def _extract_layer_media(layers: Any) -> str:
+    if not isinstance(layers, list):
+        return ""
+
+    for layer in layers:
+        if not isinstance(layer, dict):
+            continue
+
+        candidate = _first_non_empty_str(
+            layer.get("src"),
+            layer.get("url"),
+            layer.get("image"),
+            layer.get("imageUrl"),
+            layer.get("image_url"),
+            layer.get("media_url"),
+            layer.get("mediaUrl"),
+            layer.get("preview_url"),
+            layer.get("previewUrl"),
+            layer.get("thumbnail_url"),
+            layer.get("thumbnailUrl"),
+            layer.get("background"),
+            layer.get("backgroundUrl"),
+            layer.get("background_url"),
+        )
+        if candidate and _looks_like_media(candidate):
+            return candidate
+
+    return ""
+
+
+def _extract_slides_media(slides: Any) -> str:
+    if not isinstance(slides, list):
+        return ""
+
+    for slide in slides:
+        if not isinstance(slide, dict):
+            continue
+
+        direct = _first_non_empty_str(
+            slide.get("image_url"),
+            slide.get("media_url"),
+            slide.get("imageUrl"),
+            slide.get("mediaUrl"),
+            slide.get("preview_url"),
+            slide.get("previewUrl"),
+            slide.get("thumbnail_url"),
+            slide.get("thumbnailUrl"),
+            slide.get("src"),
+            slide.get("url"),
+        )
+        if direct and _looks_like_media(direct):
+            return direct
+
+        nested = _extract_layer_media(slide.get("layers"))
+        if nested:
+            return nested
+
+        nested = _extract_layer_media(slide.get("elements"))
+        if nested:
+            return nested
+
+        nested = _extract_layer_media(slide.get("objects"))
+        if nested:
+            return nested
+
+    return ""
+
+
+def _normalize_caption_from_lines(lines: List[str]) -> Dict[str, str]:
     base_lines: List[str] = []
     hashtag_lines: List[str] = []
     cta_line = ""
 
     for line in lines:
         lower = line.lower()
+
         if line.startswith("#"):
             hashtag_lines.append(line)
             continue
+
         if (
             line.startswith("👉")
             or line.startswith("➡️")
@@ -136,7 +220,81 @@ def _extract_content_parts(content: Any) -> Dict[str, Any]:
         ):
             cta_line = line
             continue
+
         base_lines.append(line)
+
+    hashtags = " ".join(dict.fromkeys(" ".join(hashtag_lines).split())).strip()
+    base_caption = "\n\n".join([line for line in base_lines if line]).strip()
+    final_caption = "\n\n".join(
+        [part for part in [base_caption, cta_line.strip(), hashtags] if part]
+    ).strip()
+
+    return {
+        "caption": final_caption,
+        "base_caption": base_caption,
+        "cta": cta_line.strip(),
+        "hashtags": hashtags,
+    }
+
+
+def _extract_content_parts(content: Any) -> Dict[str, Any]:
+    payload = _safe_json_loads(content)
+
+    if not isinstance(payload, dict):
+        text_value = str(payload or "").strip()
+        return {
+            "raw": payload,
+            "caption": text_value,
+            "base_caption": text_value,
+            "cta": "",
+            "hashtags": "",
+            "media_url": "",
+            "slides": [],
+        }
+
+    slides = payload.get("slides") if isinstance(payload.get("slides"), list) else []
+
+    raw_caption = _first_non_empty_str(
+        payload.get("caption"),
+        payload.get("text"),
+        payload.get("message"),
+        payload.get("description"),
+        payload.get("generated_caption"),
+        payload.get("generated_text"),
+        payload.get("title"),
+        payload.get("titre"),
+        payload.get("headline"),
+        payload.get("name"),
+    )
+
+    if not raw_caption:
+        layer_texts = _extract_layer_texts(payload.get("layers"))
+        if not layer_texts:
+            layer_texts = _extract_layer_texts(payload.get("elements"))
+        if not layer_texts:
+            layer_texts = _extract_layer_texts(payload.get("objects"))
+
+        if not layer_texts and slides:
+            for slide in slides:
+                if not isinstance(slide, dict):
+                    continue
+                layer_texts = _extract_layer_texts(slide.get("layers"))
+                if not layer_texts:
+                    layer_texts = _extract_layer_texts(slide.get("elements"))
+                if not layer_texts:
+                    layer_texts = _extract_layer_texts(slide.get("objects"))
+                if layer_texts:
+                    break
+
+        if layer_texts:
+            raw_caption = "\n\n".join([t for t in layer_texts if t.strip()])
+
+    lines = [
+        line.strip()
+        for line in str(raw_caption or "").replace("\r", "").split("\n")
+        if line.strip()
+    ]
+    caption_parts = _normalize_caption_from_lines(lines)
 
     media_url = _first_non_empty_str(
         payload.get("media_url"),
@@ -151,36 +309,24 @@ def _extract_content_parts(content: Any) -> Dict[str, Any]:
         payload.get("coverUrl"),
     )
 
-    slides = payload.get("slides") if isinstance(payload.get("slides"), list) else []
-    if not media_url and slides:
-        for slide in slides:
-            if not isinstance(slide, dict):
-                continue
-            media_url = _first_non_empty_str(
-                slide.get("image_url"),
-                slide.get("media_url"),
-                slide.get("imageUrl"),
-                slide.get("mediaUrl"),
-                slide.get("preview_url"),
-                slide.get("previewUrl"),
-                slide.get("thumbnail_url"),
-                slide.get("thumbnailUrl"),
-                slide.get("src"),
-                slide.get("url"),
-            )
-            if media_url:
-                break
+    if media_url and not _looks_like_media(media_url):
+        media_url = ""
 
-    hashtags = " ".join(dict.fromkeys(" ".join(hashtag_lines).split())).strip()
-    base_caption = "\n\n".join(base_lines).strip()
-    final_caption = "\n\n".join([part for part in [base_caption, cta_line.strip(), hashtags] if part]).strip()
+    if not media_url:
+        media_url = _extract_layer_media(payload.get("layers"))
+    if not media_url:
+        media_url = _extract_layer_media(payload.get("elements"))
+    if not media_url:
+        media_url = _extract_layer_media(payload.get("objects"))
+    if not media_url and slides:
+        media_url = _extract_slides_media(slides)
 
     return {
         "raw": payload,
-        "caption": final_caption,
-        "base_caption": base_caption,
-        "cta": cta_line.strip(),
-        "hashtags": hashtags,
+        "caption": caption_parts["caption"],
+        "base_caption": caption_parts["base_caption"],
+        "cta": caption_parts["cta"],
+        "hashtags": caption_parts["hashtags"],
         "media_url": media_url,
         "slides": slides,
     }
@@ -391,7 +537,7 @@ def claim_due_posts_for_make(
         )
         db.commit()
 
-      return {
+    return {
         "ok": True,
         "count": len(posts),
         "claimed_ids": claimed_ids,

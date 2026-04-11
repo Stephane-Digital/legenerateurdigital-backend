@@ -502,3 +502,10 @@ def make_callback(
     db.commit()
 
     return {"ok": True, "post_id": int(post_id), "status": status}
+
+return {
+    "ok": True,
+    "count": len(posts),
+    "claimed_ids": claimed_ids,
+    "posts": posts,
+}

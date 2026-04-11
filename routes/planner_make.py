@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import text
@@ -37,6 +37,48 @@ def _safe_json_loads(value: Any) -> Any:
         except Exception:
             return value
     return value
+
+
+def _table_columns(db: Session, table_name: str) -> Set[str]:
+    rows = db.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = :table_name
+            ORDER BY ordinal_position
+            """
+        ),
+        {"table_name": table_name},
+    ).all()
+    return {str(r[0]) for r in rows}
+
+
+def _social_posts_update_parts(db: Session, *, include_platform_post_id: bool) -> Dict[str, Any]:
+    cols = _table_columns(db, "social_posts")
+
+    set_parts = []
+    if "statut" in cols:
+        set_parts.append("statut = :status")
+    elif "status" in cols:
+        set_parts.append("status = :status")
+    else:
+        raise HTTPException(status_code=500, detail="Colonne statut/status introuvable sur social_posts")
+
+    if "published_at" in cols:
+        set_parts.append("published_at = NOW()")
+    if "publish_error" in cols:
+        set_parts.append("publish_error = NULL")
+    if "publish_result_raw" in cols:
+        set_parts.append("publish_result_raw = :raw")
+    if "last_publish_attempt_at" in cols:
+        set_parts.append("last_publish_attempt_at = NOW()")
+    if "updated_at" in cols:
+        set_parts.append("updated_at = NOW()")
+    if include_platform_post_id and "platform_post_id" in cols:
+        set_parts.append("platform_post_id = COALESCE(:external_id, platform_post_id)")
+
+    return {"cols": cols, "set_parts": set_parts}
 
 
 def _require_make_secret(
@@ -393,18 +435,14 @@ def _apply_dispatch_result(db: Session, *, post_id: int, user_id: int, result: D
     external_id = result.get("external_id")
     payload = result.get("payload")
 
+    update_info = _social_posts_update_parts(db, include_platform_post_id=True)
+
     if status == "published":
         db.execute(
             text(
-                """
+                f"""
                 UPDATE social_posts
-                SET statut = :status,
-                    published_at = NOW(),
-                    publish_error = NULL,
-                    publish_result_raw = :raw,
-                    platform_post_id = COALESCE(:external_id, platform_post_id),
-                    last_publish_attempt_at = NOW(),
-                    updated_at = NOW()
+                SET {", ".join(update_info["set_parts"])}
                 WHERE id = :post_id AND user_id = :user_id
                 """
             ),
@@ -417,15 +455,27 @@ def _apply_dispatch_result(db: Session, *, post_id: int, user_id: int, result: D
             },
         )
     else:
+        set_parts = []
+        cols = update_info["cols"]
+
+        if "statut" in cols:
+            set_parts.append("statut = :status")
+        elif "status" in cols:
+            set_parts.append("status = :status")
+        if "publish_error" in cols:
+            set_parts.append("publish_error = :message")
+        if "publish_result_raw" in cols:
+            set_parts.append("publish_result_raw = :raw")
+        if "last_publish_attempt_at" in cols:
+            set_parts.append("last_publish_attempt_at = NOW()")
+        if "updated_at" in cols:
+            set_parts.append("updated_at = NOW()")
+
         db.execute(
             text(
-                """
+                f"""
                 UPDATE social_posts
-                SET statut = :status,
-                    publish_error = :message,
-                    publish_result_raw = :raw,
-                    last_publish_attempt_at = NOW(),
-                    updated_at = NOW()
+                SET {", ".join(set_parts)}
                 WHERE id = :post_id AND user_id = :user_id
                 """
             ),
@@ -577,18 +627,14 @@ def make_callback(
 
     user_id = int(row["user_id"])
     content = _safe_json_loads(row.get("contenu"))
+    update_info = _social_posts_update_parts(db, include_platform_post_id=(status == "published"))
 
     if status == "published":
         db.execute(
             text(
-                """
+                f"""
                 UPDATE social_posts
-                SET statut = :status,
-                    published_at = NOW(),
-                    publish_error = NULL,
-                    publish_result_raw = :raw,
-                    platform_post_id = COALESCE(:external_id, platform_post_id),
-                    updated_at = NOW()
+                SET {", ".join(update_info["set_parts"])}
                 WHERE id = :post_id
                 """
             ),
@@ -600,14 +646,25 @@ def make_callback(
             },
         )
     elif status in {"queued", "sent_to_make", "publishing"}:
+        set_parts = []
+        cols = update_info["cols"]
+
+        if "statut" in cols:
+            set_parts.append("statut = :status")
+        elif "status" in cols:
+            set_parts.append("status = :status")
+        if "publish_result_raw" in cols:
+            set_parts.append("publish_result_raw = :raw")
+        if "last_publish_attempt_at" in cols:
+            set_parts.append("last_publish_attempt_at = NOW()")
+        if "updated_at" in cols:
+            set_parts.append("updated_at = NOW()")
+
         db.execute(
             text(
-                """
+                f"""
                 UPDATE social_posts
-                SET statut = :status,
-                    publish_result_raw = :raw,
-                    last_publish_attempt_at = NOW(),
-                    updated_at = NOW()
+                SET {", ".join(set_parts)}
                 WHERE id = :post_id
                 """
             ),
@@ -618,14 +675,25 @@ def make_callback(
             },
         )
     else:
+        set_parts = []
+        cols = update_info["cols"]
+
+        if "statut" in cols:
+            set_parts.append("statut = :status")
+        elif "status" in cols:
+            set_parts.append("status = :status")
+        if "publish_error" in cols:
+            set_parts.append("publish_error = :message")
+        if "publish_result_raw" in cols:
+            set_parts.append("publish_result_raw = :raw")
+        if "updated_at" in cols:
+            set_parts.append("updated_at = NOW()")
+
         db.execute(
             text(
-                """
+                f"""
                 UPDATE social_posts
-                SET statut = :status,
-                    publish_error = :message,
-                    publish_result_raw = :raw,
-                    updated_at = NOW()
+                SET {", ".join(set_parts)}
                 WHERE id = :post_id
                 """
             ),

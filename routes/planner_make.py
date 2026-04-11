@@ -391,9 +391,10 @@ def claim_due_posts_for_make(
         )
         db.commit()
 
-    return {
+      return {
         "ok": True,
         "count": len(posts),
+        "claimed_ids": claimed_ids,
         "posts": posts,
     }
 
@@ -502,7 +503,3 @@ def make_callback(
     db.commit()
 
     return {"ok": True, "post_id": int(post_id), "status": status}
-return {"ok": True,
-    "count": len(posts),
-    "claimed_ids": claimed_ids,
-    "posts": posts,}

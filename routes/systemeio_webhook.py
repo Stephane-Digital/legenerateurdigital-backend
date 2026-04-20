@@ -1,67 +1,117 @@
-from fastapi import APIRouter, Request, Depends, HTTPException
+import json
+import hmac
+import hashlib
+from typing import Optional, Set
+
+from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from database import get_db
+from config.settings import settings
 from services.ai_quota_service import get_or_create_quota
+
 
 router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 
-PLAN_MAP = {
-    "ESSENTIEL": "essentiel",
-    "PRO": "pro",
-    "ULTIME": "ultime",
-}
+# ======================================================
+# 🔐 SIGNATURE
+# ======================================================
+def _compute_signature(secret: str, raw_body: bytes) -> str:
+    return hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
 
 
+# ======================================================
+# 🧠 PLAN MAPPING (via ENV)
+# ======================================================
+def _ids_from_settings(name: str) -> Set[int]:
+    raw = getattr(settings, name, "") or ""
+    raw = str(raw).strip()
+    if not raw:
+        return set()
+
+    out: Set[int] = set()
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        try:
+            out.add(int(p))
+        except Exception:
+            pass
+    return out
+
+
+def _resolve_plan(priceplan_id: Optional[int]) -> Optional[str]:
+    if priceplan_id is None:
+        return None
+
+    if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_ULTIME_IDS"):
+        return "ultime"
+
+    if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_PRO_IDS"):
+        return "pro"
+
+    if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_ESSENTIEL_IDS"):
+        return "essentiel"
+
+    return None
+
+
+# ======================================================
+# 🎯 LIMITES TOKENS
+# ======================================================
 def _limit_for_plan(plan: str) -> int:
-    p = (plan or "").lower()
-    if "ult" in p:
+    if plan == "ultime":
         return 2_500_000
-    if "pro" in p:
+    if plan == "pro":
         return 1_000_000
     return 400_000
 
 
-def get_user_by_email(db: Session, email: str):
-    query = text("SELECT id FROM users WHERE email = :email LIMIT 1")
-    result = db.execute(query, {"email": email}).fetchone()
+# ======================================================
+# 👤 USER
+# ======================================================
+def _get_user_by_email(db: Session, email: str):
+    from sqlalchemy import text
+
+    result = db.execute(
+        text("SELECT id FROM users WHERE email = :email LIMIT 1"),
+        {"email": email},
+    ).fetchone()
+
     return result[0] if result else None
 
 
-def _users_has_column(db: Session, column_name: str) -> bool:
-    query = text(
-        """
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'users'
-          AND column_name = :column_name
-        LIMIT 1
-        """
-    )
-    result = db.execute(query, {"column_name": column_name}).fetchone()
-    return bool(result)
+# ======================================================
+# 🔁 UPDATE PLAN + QUOTA
+# ======================================================
+def _apply_plan(db: Session, user_id: int, plan: str):
+    from sqlalchemy import text
 
+    # 👉 update users.plan si colonne existe
+    try:
+        db.execute(
+            text("UPDATE users SET plan = :plan WHERE id = :uid"),
+            {"plan": plan, "uid": user_id},
+        )
+    except Exception:
+        print("⚠️ users.plan absent, skip")
 
-def update_user_plan_if_possible(db: Session, user_id: int, plan: str):
-    if not _users_has_column(db, "plan"):
-        print("WEBHOOK SIO: users.plan absent → skip update users.plan")
-        return
-
-    query = text("UPDATE users SET plan = :plan WHERE id = :uid")
-    db.execute(query, {"plan": plan, "uid": user_id})
-
-
-def reset_user_quota(db: Session, user_id: int, plan: str):
+    # 👉 update quota
     quota = get_or_create_quota(db, user_id, feature="coach")
-    new_limit = _limit_for_plan(plan)
+
+    limit_tokens = _limit_for_plan(plan)
 
     if hasattr(quota, "tokens_used"):
         quota.tokens_used = 0
 
     if hasattr(quota, "credits"):
-        quota.credits = new_limit
+        quota.credits = limit_tokens
 
     if hasattr(quota, "plan"):
         quota.plan = plan
@@ -69,39 +119,96 @@ def reset_user_quota(db: Session, user_id: int, plan: str):
     db.add(quota)
 
 
+# ======================================================
+# 🚀 WEBHOOK
+# ======================================================
 @router.post("/")
 async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
     try:
-        data = await request.json()
-        print("WEBHOOK SIO DATA:", data)
+        secret = (settings.SYSTEMEIO_WEBHOOK_SECRET or "").strip()
 
-        email = str(data.get("email") or "").strip().lower()
-        offer = str(data.get("offer_name") or data.get("offer") or "").strip()
+        if not secret:
+            raise HTTPException(status_code=500, detail="Webhook secret missing")
 
-        if not email or not offer:
-            raise HTTPException(status_code=400, detail="Payload invalide")
+        raw = await request.body()
 
-        plan = PLAN_MAP.get(offer.upper())
-        if not plan:
-            raise HTTPException(status_code=400, detail="Offre inconnue")
+        signature = request.headers.get("X-Webhook-Signature", "")
+        event = (request.headers.get("X-Webhook-Event", "") or "").upper()
 
-        user_id = get_user_by_email(db, email)
+        expected = _compute_signature(secret, raw)
+
+        if not signature or not hmac.compare_digest(signature, expected):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        payload = json.loads(raw.decode("utf-8"))
+
+        print("🔥 WEBHOOK SIO PAYLOAD:", payload)
+        print("🔥 EVENT:", event)
+
+        # ==================================================
+        # 📧 EMAIL
+        # ==================================================
+        customer = payload.get("customer") or {}
+        email = (customer.get("email") or "").strip().lower()
+
+        if not email:
+            raise HTTPException(status_code=400, detail="Missing email")
+
+        # ==================================================
+        # 💳 PLAN
+        # ==================================================
+        priceplan = payload.get("pricePlan") or {}
+        priceplan_id = priceplan.get("id")
+
+        try:
+            priceplan_id = int(priceplan_id)
+        except Exception:
+            priceplan_id = None
+
+        plan = _resolve_plan(priceplan_id)
+
+        # ==================================================
+        # 👤 USER
+        # ==================================================
+        user_id = _get_user_by_email(db, email)
+
         if not user_id:
-            print("WEBHOOK SIO: USER NOT FOUND:", email)
+            print("❌ USER NOT FOUND:", email)
             return {"status": "ignored", "reason": "user_not_found"}
 
-        update_user_plan_if_possible(db, user_id, plan)
-        reset_user_quota(db, user_id, plan)
+        # ==================================================
+        # 🟢 NEW SALE
+        # ==================================================
+        if event == "NEW_SALE":
+            if not plan:
+                print("❌ PLAN NOT FOUND:", priceplan_id)
+                return {"status": "ignored", "reason": "unknown_plan"}
 
-        db.commit()
+            _apply_plan(db, user_id, plan)
 
-        print(f"WEBHOOK SIO: USER {user_id} → PLAN {plan} ACTIVATED")
-        return {"status": "success", "user_id": user_id, "plan": plan}
+            db.commit()
+
+            print(f"✅ USER {user_id} → PLAN {plan}")
+
+            return {"status": "success", "plan": plan}
+
+        # ==================================================
+        # 🔴 CANCEL
+        # ==================================================
+        if event == "SALE_CANCELED":
+            _apply_plan(db, user_id, "none")
+            db.commit()
+
+            print(f"🔴 USER {user_id} → PLAN NONE")
+
+            return {"status": "canceled"}
+
+        return {"status": "ignored", "event": event}
 
     except HTTPException:
         raise
+
     except Exception as e:
         db.rollback()
-        print("WEBHOOK ERROR:", repr(e))
+        print("❌ WEBHOOK ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))
-

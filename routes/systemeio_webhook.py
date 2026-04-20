@@ -104,3 +104,4 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
         db.rollback()
         print("WEBHOOK ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))
+

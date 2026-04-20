@@ -1,170 +1,107 @@
-import json
-import hmac
-import hashlib
-from typing import Optional, Set
-
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from database import get_db
-from config.settings import settings
+
+from services.ai_quota_service import get_or_create_quota
+
+router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 
-router = APIRouter(prefix="/billing/webhook", tags=["billing"])
+# ======================================================
+# 🔐 CONFIG
+# ======================================================
+PLAN_MAP = {
+    "ESSENTIEL": "essentiel",
+    "PRO": "pro",
+    "ULTIME": "ultime",
+}
 
 
-def _ids_from_settings(name: str) -> Set[int]:
-    raw = getattr(settings, name, "") or ""
-    raw = str(raw).strip()
-    if not raw:
-        return set()
-
-    out: Set[int] = set()
-    for part in raw.split(","):
-        p = part.strip()
-        if not p:
-            continue
-        try:
-            out.add(int(p))
-        except Exception:
-            pass
-    return out
+def _limit_for_plan(plan: str) -> int:
+    p = (plan or "").lower()
+    if "ult" in p:
+        return 2_500_000
+    if "pro" in p:
+        return 1_000_000
+    return 400_000
 
 
-def _compute_signature(secret: str, raw_body: bytes) -> str:
-    return hmac.new(
-        secret.encode("utf-8"),
-        raw_body,
-        hashlib.sha256,
-    ).hexdigest()
+# ======================================================
+# 🧠 USER LOOKUP
+# ======================================================
+def get_user_by_email(db: Session, email: str):
+    query = text("SELECT id FROM users WHERE email = :email LIMIT 1")
+    result = db.execute(query, {"email": email}).fetchone()
+    return result[0] if result else None
 
 
-def _get_models():
+def update_user_plan(db: Session, user_id: int, plan: str):
+    query = text("UPDATE users SET plan = :plan WHERE id = :uid")
+    db.execute(query, {"plan": plan, "uid": user_id})
+
+
+# ======================================================
+# 🔁 QUOTA RESET
+# ======================================================
+def reset_user_quota(db: Session, user_id: int, plan: str):
+    quota = get_or_create_quota(db, user_id, feature="coach")
+
+    new_limit = _limit_for_plan(plan)
+
+    # reset usage
+    if hasattr(quota, "tokens_used"):
+        quota.tokens_used = 0
+
+    # update credits (monthly limit)
+    if hasattr(quota, "credits"):
+        quota.credits = new_limit
+
+    if hasattr(quota, "plan"):
+        quota.plan = plan
+
+    db.add(quota)
+
+
+# ======================================================
+# 🚀 WEBHOOK ENTRYPOINT
+# ======================================================
+@router.post("/")
+async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
     try:
-        from models import User  # type: ignore
-    except Exception:
-        from models.user_model import User  # type: ignore
+        data = await request.json()
 
-    try:
-        from models import IAQuota  # type: ignore
-    except Exception:
-        try:
-            from models.ia_quota_model import IAQuota  # type: ignore
-        except Exception:
-            IAQuota = None  # type: ignore
+        print("WEBHOOK SIO DATA:", data)
 
-    return User, IAQuota
+        email = data.get("email")
+        offer = data.get("offer_name") or data.get("offer")
 
+        if not email or not offer:
+            raise HTTPException(status_code=400, detail="Payload invalide")
 
-def _upsert_plan_on_ia_quota(db: Session, user_id: int, plan: str, active: bool):
-    _, IAQuota = _get_models()
-    if IAQuota is None:
-        raise HTTPException(status_code=500, detail="IAQuota model not found (check models exports).")
+        plan = PLAN_MAP.get(str(offer).upper())
+        if not plan:
+            raise HTTPException(status_code=400, detail="Offre inconnue")
 
-    row = db.query(IAQuota).filter(IAQuota.user_id == user_id).first()
-    if not row:
-        row = IAQuota(user_id=user_id)  # type: ignore
-        db.add(row)
+        user_id = get_user_by_email(db, email)
 
-    if hasattr(row, "plan"):
-        setattr(row, "plan", plan)
-    if hasattr(row, "is_active"):
-        setattr(row, "is_active", active)
-    if hasattr(row, "status"):
-        setattr(row, "status", "active" if active else "inactive")
+        if not user_id:
+            print("USER NOT FOUND:", email)
+            return {"status": "ignored"}
 
-    db.commit()
+        # 1️⃣ update plan
+        update_user_plan(db, user_id, plan)
 
+        # 2️⃣ reset quota
+        reset_user_quota(db, user_id, plan)
 
-def _resolve_plan_from_priceplan(priceplan_id: Optional[int]) -> Optional[str]:
-    if priceplan_id is None:
-        return None
+        db.commit()
 
-    essentiel_ids = _ids_from_settings("SYSTEMEIO_PRICEPLAN_ESSENTIEL_IDS")
-    pro_ids = _ids_from_settings("SYSTEMEIO_PRICEPLAN_PRO_IDS")
-    ultime_ids = _ids_from_settings("SYSTEMEIO_PRICEPLAN_ULTIME_IDS")
+        print(f"USER {user_id} → PLAN {plan} ACTIVATED")
 
-    if priceplan_id in ultime_ids:
-        return "ultime"
-    if priceplan_id in pro_ids:
-        return "pro"
-    if priceplan_id in essentiel_ids:
-        return "essentiel"
-    return None
+        return {"status": "success"}
 
-
-@router.post("/systemeio")
-async def systemeio_webhook(request: Request):
-    """
-    Systeme.io webhook:
-      - Signature: HMAC SHA256 over RAW request body bytes
-      - Headers: X-Webhook-Event, X-Webhook-Signature
-    """
-    db_gen = get_db()
-    db: Session = next(db_gen)
-
-    try:
-        secret = (settings.SYSTEMEIO_WEBHOOK_SECRET or "").strip()
-        if not secret:
-            raise HTTPException(status_code=500, detail="SYSTEMEIO_WEBHOOK_SECRET is not set")
-
-        signature = request.headers.get("X-Webhook-Signature", "") or ""
-        event = (request.headers.get("X-Webhook-Event", "") or "").upper()
-
-        raw = await request.body()
-        expected = _compute_signature(secret, raw)
-
-        if not signature or not hmac.compare_digest(signature, expected):
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-        customer = payload.get("customer") or {}
-        email = (customer.get("email") or "").strip().lower()
-        if not email:
-            raise HTTPException(status_code=400, detail="Missing customer.email")
-
-        priceplan = payload.get("pricePlan") or {}
-        priceplan_id = priceplan.get("id")
-        try:
-            priceplan_id_int = int(priceplan_id) if priceplan_id is not None else None
-        except Exception:
-            priceplan_id_int = None
-
-        User, _ = _get_models()
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            return {"ok": True, "ignored": True, "reason": "user_not_found", "email": email}
-
-        if event == "NEW_SALE":
-            plan = _resolve_plan_from_priceplan(priceplan_id_int)
-            if not plan:
-                return {
-                    "ok": True,
-                    "ignored": True,
-                    "reason": "unknown_priceplan_id",
-                    "email": email,
-                    "priceplan_id": priceplan_id_int,
-                }
-
-            _upsert_plan_on_ia_quota(db, user.id, plan=plan, active=True)
-            return {"ok": True, "event": event, "email": email, "plan": plan}
-
-        if event == "SALE_CANCELED":
-            _upsert_plan_on_ia_quota(db, user.id, plan="none", active=False)
-            return {"ok": True, "event": event, "email": email, "plan": "none"}
-
-        return {"ok": True, "ignored": True, "reason": "unsupported_event", "event": event}
-
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
-        try:
-            next(db_gen)
-        except Exception:
-            pass
+    except Exception as e:
+        print("WEBHOOK ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))

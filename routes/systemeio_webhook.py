@@ -70,7 +70,9 @@ def _limit_for_plan(plan: str) -> int:
         return 2_500_000
     if plan == "pro":
         return 1_000_000
-    return 400_000
+    if plan == "essentiel":
+        return 400_000
+    return 0
 
 
 # ======================================================
@@ -102,21 +104,22 @@ def _apply_plan(db: Session, user_id: int, plan: str):
     except Exception:
         print("⚠️ users.plan absent, skip")
 
-    # 👉 update quota
-    quota = get_or_create_quota(db, user_id, feature="coach")
-
     limit_tokens = _limit_for_plan(plan)
 
-    if hasattr(quota, "tokens_used"):
-        quota.tokens_used = 0
+    # ✅ IMPORTANT : on synchronise les 2 buckets utilisés par LGD
+    for feature_name in ("coach", "global"):
+        quota = get_or_create_quota(db, user_id, feature=feature_name)
 
-    if hasattr(quota, "credits"):
-        quota.credits = limit_tokens
+        if hasattr(quota, "tokens_used"):
+            quota.tokens_used = 0
 
-    if hasattr(quota, "plan"):
-        quota.plan = plan
+        if hasattr(quota, "credits"):
+            quota.credits = limit_tokens
 
-    db.add(quota)
+        if hasattr(quota, "plan"):
+            quota.plan = plan
+
+        db.add(quota)
 
 
 # ======================================================
@@ -185,7 +188,6 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
                 return {"status": "ignored", "reason": "unknown_plan"}
 
             _apply_plan(db, user_id, plan)
-
             db.commit()
 
             print(f"✅ USER {user_id} → PLAN {plan}")
@@ -196,12 +198,12 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
         # 🔴 CANCEL
         # ==================================================
         if event == "SALE_CANCELED":
-            _apply_plan(db, user_id, "none")
+            _apply_plan(db, user_id, "essentiel")
             db.commit()
 
-            print(f"🔴 USER {user_id} → PLAN NONE")
+            print(f"🔴 USER {user_id} → PLAN essentiel")
 
-            return {"status": "canceled"}
+            return {"status": "canceled", "plan": "essentiel"}
 
         return {"status": "ignored", "event": event}
 

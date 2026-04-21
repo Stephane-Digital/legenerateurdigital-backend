@@ -3,16 +3,31 @@ import hmac
 import hashlib
 from typing import Optional, Set
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
 from config.settings import settings
+from services.ai_quota_service import get_or_create_quota
 
 
-router = APIRouter(prefix="/billing/webhook", tags=["billing"])
+router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 
+# ======================================================
+# 🔐 SIGNATURE
+# ======================================================
+def _compute_signature(secret: str, raw_body: bytes) -> str:
+    return hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+
+
+# ======================================================
+# 🧠 PLAN MAPPING (via ENV)
+# ======================================================
 def _ids_from_settings(name: str) -> Set[int]:
     raw = getattr(settings, name, "") or ""
     raw = str(raw).strip()
@@ -31,140 +46,171 @@ def _ids_from_settings(name: str) -> Set[int]:
     return out
 
 
-def _compute_signature(secret: str, raw_body: bytes) -> str:
-    return hmac.new(
-        secret.encode("utf-8"),
-        raw_body,
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def _get_models():
-    try:
-        from models import User  # type: ignore
-    except Exception:
-        from models.user_model import User  # type: ignore
-
-    try:
-        from models import IAQuota  # type: ignore
-    except Exception:
-        try:
-            from models.ia_quota_model import IAQuota  # type: ignore
-        except Exception:
-            IAQuota = None  # type: ignore
-
-    return User, IAQuota
-
-
-def _upsert_plan_on_ia_quota(db: Session, user_id: int, plan: str, active: bool):
-    _, IAQuota = _get_models()
-    if IAQuota is None:
-        raise HTTPException(status_code=500, detail="IAQuota model not found (check models exports).")
-
-    row = db.query(IAQuota).filter(IAQuota.user_id == user_id).first()
-    if not row:
-        row = IAQuota(user_id=user_id)  # type: ignore
-        db.add(row)
-
-    if hasattr(row, "plan"):
-        setattr(row, "plan", plan)
-    if hasattr(row, "is_active"):
-        setattr(row, "is_active", active)
-    if hasattr(row, "status"):
-        setattr(row, "status", "active" if active else "inactive")
-
-    db.commit()
-
-
-def _resolve_plan_from_priceplan(priceplan_id: Optional[int]) -> Optional[str]:
+def _resolve_plan(priceplan_id: Optional[int]) -> Optional[str]:
     if priceplan_id is None:
         return None
 
-    essentiel_ids = _ids_from_settings("SYSTEMEIO_PRICEPLAN_ESSENTIEL_IDS")
-    pro_ids = _ids_from_settings("SYSTEMEIO_PRICEPLAN_PRO_IDS")
-    ultime_ids = _ids_from_settings("SYSTEMEIO_PRICEPLAN_ULTIME_IDS")
-
-    if priceplan_id in ultime_ids:
+    if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_ULTIME_IDS"):
         return "ultime"
-    if priceplan_id in pro_ids:
+
+    if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_PRO_IDS"):
         return "pro"
-    if priceplan_id in essentiel_ids:
+
+    if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_ESSENTIEL_IDS"):
         return "essentiel"
+
     return None
 
 
-@router.post("/systemeio")
-async def systemeio_webhook(request: Request):
-    """
-    Systeme.io webhook:
-      - Signature: HMAC SHA256 over RAW request body bytes
-      - Headers: X-Webhook-Event, X-Webhook-Signature
-    """
-    db_gen = get_db()
-    db: Session = next(db_gen)
+# ======================================================
+# 🎯 LIMITES TOKENS
+# ======================================================
+def _limit_for_plan(plan: str) -> int:
+    if plan == "ultime":
+        return 2_500_000
+    if plan == "pro":
+        return 1_000_000
+    if plan == "essentiel":
+        return 400_000
+    return 0
 
+
+# ======================================================
+# 👤 USER
+# ======================================================
+def _get_user_by_email(db: Session, email: str):
+    from sqlalchemy import text
+
+    result = db.execute(
+        text("SELECT id FROM users WHERE email = :email LIMIT 1"),
+        {"email": email},
+    ).fetchone()
+
+    return result[0] if result else None
+
+
+# ======================================================
+# 🔁 UPDATE PLAN + QUOTA
+# ======================================================
+def _apply_plan(db: Session, user_id: int, plan: str):
+    from sqlalchemy import text
+
+    # 👉 update users.plan si colonne existe
+    try:
+        db.execute(
+            text("UPDATE users SET plan = :plan WHERE id = :uid"),
+            {"plan": plan, "uid": user_id},
+        )
+    except Exception:
+        print("⚠️ users.plan absent, skip")
+
+    limit_tokens = _limit_for_plan(plan)
+
+    # ✅ IMPORTANT : on synchronise les 2 buckets utilisés par LGD
+    for feature_name in ("coach", "global"):
+        quota = get_or_create_quota(db, user_id, feature=feature_name)
+
+        if hasattr(quota, "tokens_used"):
+            quota.tokens_used = 0
+
+        if hasattr(quota, "credits"):
+            quota.credits = limit_tokens
+
+        if hasattr(quota, "plan"):
+            quota.plan = plan
+
+        db.add(quota)
+
+
+# ======================================================
+# 🚀 WEBHOOK
+# ======================================================
+@router.post("/")
+async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
     try:
         secret = (settings.SYSTEMEIO_WEBHOOK_SECRET or "").strip()
-        if not secret:
-            raise HTTPException(status_code=500, detail="SYSTEMEIO_WEBHOOK_SECRET is not set")
 
-        signature = request.headers.get("X-Webhook-Signature", "") or ""
-        event = (request.headers.get("X-Webhook-Event", "") or "").upper()
+        if not secret:
+            raise HTTPException(status_code=500, detail="Webhook secret missing")
 
         raw = await request.body()
+
+        signature = request.headers.get("X-Webhook-Signature", "")
+        event = (request.headers.get("X-Webhook-Event", "") or "").upper()
+
         expected = _compute_signature(secret, raw)
 
         if not signature or not hmac.compare_digest(signature, expected):
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
 
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        payload = json.loads(raw.decode("utf-8"))
 
+        print("🔥 WEBHOOK SIO PAYLOAD:", payload)
+        print("🔥 EVENT:", event)
+
+        # ==================================================
+        # 📧 EMAIL
+        # ==================================================
         customer = payload.get("customer") or {}
         email = (customer.get("email") or "").strip().lower()
-        if not email:
-            raise HTTPException(status_code=400, detail="Missing customer.email")
 
+        if not email:
+            raise HTTPException(status_code=400, detail="Missing email")
+
+        # ==================================================
+        # 💳 PLAN
+        # ==================================================
         priceplan = payload.get("pricePlan") or {}
         priceplan_id = priceplan.get("id")
+
         try:
-            priceplan_id_int = int(priceplan_id) if priceplan_id is not None else None
+            priceplan_id = int(priceplan_id)
         except Exception:
-            priceplan_id_int = None
+            priceplan_id = None
 
-        User, _ = _get_models()
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            return {"ok": True, "ignored": True, "reason": "user_not_found", "email": email}
+        plan = _resolve_plan(priceplan_id)
 
+        # ==================================================
+        # 👤 USER
+        # ==================================================
+        user_id = _get_user_by_email(db, email)
+
+        if not user_id:
+            print("❌ USER NOT FOUND:", email)
+            return {"status": "ignored", "reason": "user_not_found"}
+
+        # ==================================================
+        # 🟢 NEW SALE
+        # ==================================================
         if event == "NEW_SALE":
-            plan = _resolve_plan_from_priceplan(priceplan_id_int)
             if not plan:
-                return {
-                    "ok": True,
-                    "ignored": True,
-                    "reason": "unknown_priceplan_id",
-                    "email": email,
-                    "priceplan_id": priceplan_id_int,
-                }
+                print("❌ PLAN NOT FOUND:", priceplan_id)
+                return {"status": "ignored", "reason": "unknown_plan"}
 
-            _upsert_plan_on_ia_quota(db, user.id, plan=plan, active=True)
-            return {"ok": True, "event": event, "email": email, "plan": plan}
+            _apply_plan(db, user_id, plan)
+            db.commit()
 
+            print(f"✅ USER {user_id} → PLAN {plan}")
+
+            return {"status": "success", "plan": plan}
+
+        # ==================================================
+        # 🔴 CANCEL
+        # ==================================================
         if event == "SALE_CANCELED":
-            _upsert_plan_on_ia_quota(db, user.id, plan="none", active=False)
-            return {"ok": True, "event": event, "email": email, "plan": "none"}
+            _apply_plan(db, user_id, "essentiel")
+            db.commit()
 
-        return {"ok": True, "ignored": True, "reason": "unsupported_event", "event": event}
+            print(f"🔴 USER {user_id} → PLAN essentiel")
 
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
-        try:
-            next(db_gen)
-        except Exception:
-            pass
+            return {"status": "canceled", "plan": "essentiel"}
+
+        return {"status": "ignored", "event": event}
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        db.rollback()
+        print("❌ WEBHOOK ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))

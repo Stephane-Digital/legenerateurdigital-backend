@@ -60,7 +60,7 @@ def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
         try:
             result = resend.Emails.send(
                 {
-                    "from": "LGD <onboarding@resend.dev>",
+                    "from": "LGD <contact@legenerateurdigital.com>",
                     "to": [user.email],
                     "subject": "Réinitialisation de votre mot de passe LGD",
                     "html": f"""

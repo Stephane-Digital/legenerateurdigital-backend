@@ -39,8 +39,8 @@ def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
 
     # sécurité : on ne révèle jamais si l'email existe ou non
     if not user:
-      print("⚠️ USER NOT FOUND FOR RESET")
-      return {"ok": True}
+        print("⚠️ USER NOT FOUND FOR RESET")
+        return {"ok": True}
 
     print("✅ USER FOUND:", user.email)
 
@@ -55,7 +55,6 @@ def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
 
     print(f"🔗 RESET LINK: {reset_link}")
 
-    # Envoi réel de l'email si la clé est présente
     if resend.api_key:
         try:
             result = resend.Emails.send(
@@ -120,4 +119,7 @@ def reset_password(payload: ResetConfirm, db: Session = Depends(get_db)):
 
     db.commit()
 
-    return {"ok": True}
+    return {
+        "ok": True,
+        "email": user.email,
+    }

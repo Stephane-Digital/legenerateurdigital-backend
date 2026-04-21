@@ -30,11 +30,19 @@ class ResetRequest(BaseModel):
 
 @router.post("/forgot-password")
 def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
+    print("🔥 FORGOT PASSWORD TRIGGERED")
+    print("📧 EMAIL DEMANDE:", payload.email)
+    print("🌐 FRONT_URL:", FRONT_URL)
+    print("🔑 RESEND KEY PRESENT:", bool(resend.api_key))
+
     user = db.query(User).filter(User.email == payload.email).first()
 
     # sécurité : on ne révèle jamais si l'email existe ou non
     if not user:
-        return {"ok": True}
+      print("⚠️ USER NOT FOUND FOR RESET")
+      return {"ok": True}
+
+    print("✅ USER FOUND:", user.email)
 
     token = str(uuid.uuid4())
 
@@ -45,13 +53,12 @@ def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
 
     reset_link = f"{FRONT_URL}/auth/reset-password?token={token}"
 
-    # Fallback logs utile si jamais Resend n'est pas encore configuré
     print(f"🔗 RESET LINK: {reset_link}")
 
     # Envoi réel de l'email si la clé est présente
     if resend.api_key:
         try:
-            resend.Emails.send(
+            result = resend.Emails.send(
                 {
                     "from": "LGD <onboarding@resend.dev>",
                     "to": [user.email],
@@ -78,8 +85,11 @@ def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
                     """,
                 }
             )
+            print("✅ RESEND SENT:", result)
         except Exception as e:
             print("❌ RESEND ERROR:", repr(e))
+    else:
+        print("❌ RESEND SKIPPED: RESEND_API_KEY manquante ou vide")
 
     return {"ok": True}
 

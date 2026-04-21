@@ -32,7 +32,9 @@ def forgot_password(payload: ResetRequest, db: Session = Depends(get_db)):
 
     db.commit()
 
-    print(f"🔗 RESET LINK: http://localhost:3000/reset-password?token={token}")
+FRONT_URL = "https://legenerateurdigital-front.vercel.app"
+
+print(f"🔗 RESET LINK: {FRONT_URL}/auth/reset-password?token={token}")
 
     return {"ok": True}
 

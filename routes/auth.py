@@ -17,6 +17,8 @@ from services.auth_service import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+from services.integrations.systeme_subscription_service import cancel_subscription_for_user
+
 # ============================================================
 # 🧪 REGISTER
 # ============================================================
@@ -177,3 +179,36 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
 
     return current_user
+
+
+# ============================================================
+# 💳 SUBSCRIPTION
+# ============================================================
+@router.get("/subscription")
+def subscription_status(current_user=Depends(get_current_user)):
+    return {
+        "id": current_user["id"],
+        "email": current_user["email"],
+        "plan": current_user["plan"],
+        "is_active": current_user["is_active"],
+        "is_admin": current_user["is_admin"],
+    }
+
+
+@router.post("/subscription/cancel")
+def cancel_subscription(
+    payload: dict | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    body = payload or {}
+    cancel_mode = body.get("cancel_mode") or "end_of_period"
+    reason = body.get("reason") or None
+    return cancel_subscription_for_user(
+        db,
+        user=current_user,
+        cancel_mode=cancel_mode,
+        reason=reason,
+    )
+
+

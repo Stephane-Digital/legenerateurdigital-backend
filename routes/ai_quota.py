@@ -42,6 +42,8 @@ def _user_base_plan(user) -> str:
 
 def _limit_for_plan(plan: str) -> int:
     p = str(plan or "essentiel").lower()
+    if "trial" in p:
+        return 70_000
     if "ult" in p:
         return 2_500_000
     if "pro" in p:
@@ -49,7 +51,27 @@ def _limit_for_plan(plan: str) -> int:
     return 400_000
 
 
+def _quota_plan(quota) -> str | None:
+    try:
+        return (
+            getattr(quota, "plan", None)
+            or getattr(quota, "plan_name", None)
+            or getattr(quota, "subscription_plan", None)
+        )
+    except Exception:
+        return None
+
+
 def _effective_plan(db: Session, user) -> str:
+    # priorité à ia_quota (= source de vérité)
+    try:
+        quota = get_or_create_quota(db, _user_id(user), feature="coach")
+        qp = _quota_plan(quota)
+        if qp:
+            return str(qp)
+    except Exception as e:
+        print("AI_QUOTA_QUOTA_PLAN_ERROR:", repr(e))
+
     try:
         plan, _ov = get_effective_plan(
             db,

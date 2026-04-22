@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
@@ -14,23 +13,12 @@ from services.auth_service import (
     create_user_account,
     get_current_user as service_get_current_user,
 )
-from services.ai_quota_service import get_or_create_quota
+from services.ai_quota_service import sync_plan_quotas
 from services.pending_access_service import consume_pending_access, has_pending_access
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 from services.integrations.systeme_subscription_service import cancel_subscription_for_user
-
-
-def _limit_for_plan(plan: str) -> int:
-    p = str(plan or "").lower()
-    if p == "trial":
-        return 10_000
-    if p == "ultime":
-        return 2_500_000
-    if p == "pro":
-        return 1_000_000
-    return 400_000
 
 
 @router.post("/register")
@@ -45,45 +33,35 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
             detail="Accès non activé. Passe d'abord par l’offre d’essai ou d’achat LGD."
         )
 
-    created = create_user_account(
-        db=db,
-        email=email,
-        password=payload.password,
-        full_name=full_name or pending.get("full_name"),
-    )
-
-    user_id = int(created["id"])
-    plan = str(pending.get("plan") or "trial").lower()
-
     try:
-        from sqlalchemy import text
-        db.execute(
-            text("UPDATE users SET plan = :plan WHERE id = :uid"),
-            {"uid": user_id, "plan": plan},
+        created = create_user_account(
+            db=db,
+            email=email,
+            password=payload.password,
+            full_name=full_name or pending.get("full_name"),
         )
-    except Exception:
-        print("⚠️ users.plan absent, skip set")
 
-    limit_tokens = _limit_for_plan(plan)
+        user_id = int(created["id"])
+        plan = str(pending.get("plan") or "trial").lower()
 
-    for feature_name in ("coach", "global"):
-        quota = get_or_create_quota(db, user_id, feature=feature_name)
-        if hasattr(quota, "tokens_used"):
-            quota.tokens_used = 0
-        if hasattr(quota, "credits"):
-            quota.credits = limit_tokens
-        if hasattr(quota, "plan"):
-            quota.plan = plan
-        db.add(quota)
+        # ✅ SOURCE DE VÉRITÉ = ia_quota
+        sync_plan_quotas(db=db, user_id=user_id, plan=plan)
 
-    db.commit()
+        db.commit()
 
-    return {
-        "message": "Compte activé",
-        "user_id": user_id,
-        "plan": plan,
-        "access_type": pending.get("access_type"),
-    }
+        return {
+            "message": "Compte activé",
+            "user_id": user_id,
+            "plan": plan,
+            "access_type": pending.get("access_type"),
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print("REGISTER ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/login")
@@ -122,7 +100,13 @@ async def login(request: Request, db: Session = Depends(get_db)):
         if not user:
             raise HTTPException(status_code=401, detail="Identifiants invalides")
 
-        token = create_access_token({"sub": str(user["id"]), "email": user["email"], "user_id": user["id"]})
+        token = create_access_token(
+            {
+                "sub": str(user["id"]),
+                "email": user["email"],
+                "user_id": user["id"],
+            }
+        )
 
         response = JSONResponse(
             {
@@ -134,7 +118,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
                     "id": user["id"],
                     "email": user["email"],
                     "full_name": user["full_name"],
-                    "plan": user["plan"],
+                    "plan": user.get("plan"),
                     "is_active": user["is_active"],
                     "is_admin": user["is_admin"],
                 },
@@ -156,7 +140,10 @@ async def login(request: Request, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         print("LOGIN ERROR:", repr(e))
-        return JSONResponse(status_code=500, content={"detail": f"LOGIN_ERROR: {repr(e)}"})
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"LOGIN_ERROR: {repr(e)}"},
+        )
 
 
 @router.post("/logout")
@@ -172,7 +159,7 @@ def me(current_user=Depends(service_get_current_user)):
         "id": current_user["id"],
         "email": current_user["email"],
         "full_name": current_user["full_name"],
-        "plan": current_user["plan"],
+        "plan": current_user.get("plan"),
         "is_active": current_user["is_active"],
         "is_admin": current_user["is_admin"],
     }
@@ -180,6 +167,7 @@ def me(current_user=Depends(service_get_current_user)):
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("lgd_token")
+
     if not token:
         auth = request.headers.get("authorization") or request.headers.get("Authorization")
         if auth and auth.lower().startswith("bearer "):
@@ -197,7 +185,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
 
-    current_user = service_get_current_user.__wrapped__(
+    current_user = service_get_current_user.__wrapped__(  # type: ignore[attr-defined]
         credentials=type("Creds", (), {"credentials": token})(),
         db=db,
     ) if hasattr(service_get_current_user, "__wrapped__") else None
@@ -225,7 +213,7 @@ def subscription_status(current_user=Depends(get_current_user)):
     return {
         "id": current_user["id"],
         "email": current_user["email"],
-        "plan": current_user["plan"],
+        "plan": current_user.get("plan"),
         "is_active": current_user["is_active"],
         "is_admin": current_user["is_admin"],
     }

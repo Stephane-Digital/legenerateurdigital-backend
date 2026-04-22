@@ -13,6 +13,8 @@ from services.auth_service import (
     create_user_account,
     get_current_user as service_get_current_user,
 )
+from services.ai_quota_service import get_or_create_quota
+from services.trial_access_service import consume_trial_pending, has_trial_access
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -24,13 +26,52 @@ from services.integrations.systeme_subscription_service import cancel_subscripti
 # ============================================================
 @router.post("/register")
 def register_user(payload: UserCreate, db: Session = Depends(get_db)):
+    email = (payload.email or "").strip().lower()
+    full_name = getattr(payload, "full_name", None)
+
+    trial_access = consume_trial_pending(db, email=email)
+
+    if not trial_access:
+        raise HTTPException(
+            status_code=403,
+            detail="Essai non activé. Passe d'abord par l’offre d’essai LGD."
+        )
+
     created = create_user_account(
         db=db,
-        email=payload.email,
+        email=email,
         password=payload.password,
-        full_name=getattr(payload, "full_name", None),
+        full_name=full_name,
     )
-    return {"message": "Compte créé", "user_id": created["id"]}
+
+    user_id = int(created["id"])
+
+    try:
+        from sqlalchemy import text
+        db.execute(
+            text("UPDATE users SET plan = 'trial' WHERE id = :uid"),
+            {"uid": user_id},
+        )
+    except Exception:
+        print("⚠️ users.plan absent, skip trial set")
+
+    for feature_name in ("coach", "global"):
+        quota = get_or_create_quota(db, user_id, feature=feature_name)
+
+        if hasattr(quota, "tokens_used"):
+            quota.tokens_used = 0
+
+        if hasattr(quota, "credits"):
+            quota.credits = 10_000
+
+        if hasattr(quota, "plan"):
+            quota.plan = "trial"
+
+        db.add(quota)
+
+    db.commit()
+
+    return {"message": "Compte trial activé", "user_id": user_id, "plan": "trial"}
 
 
 # ============================================================
@@ -182,6 +223,17 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
 
 
 # ============================================================
+# 🧪 TRIAL ACCESS
+# ============================================================
+@router.get("/trial-access")
+def trial_access_status(email: str, db: Session = Depends(get_db)):
+    clean_email = (email or "").strip().lower()
+    if not clean_email:
+        raise HTTPException(status_code=400, detail="Email manquant")
+    return has_trial_access(db, clean_email)
+
+
+# ============================================================
 # 💳 SUBSCRIPTION
 # ============================================================
 @router.get("/subscription")
@@ -210,5 +262,3 @@ def cancel_subscription(
         cancel_mode=cancel_mode,
         reason=reason,
     )
-
-

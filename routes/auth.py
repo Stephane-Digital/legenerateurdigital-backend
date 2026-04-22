@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 
 from database import get_db
 from schemas.user_schema import UserCreate
@@ -14,6 +13,7 @@ from services.auth_service import (
     create_user_account,
     get_current_user as service_get_current_user,
     _fetch_user_by_identity,
+    hash_password,
 )
 from services.ai_quota_service import sync_plan_quotas
 from services.pending_access_service import (
@@ -25,8 +25,6 @@ from services.pending_access_service import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 from services.integrations.systeme_subscription_service import cancel_subscription_for_user
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _find_existing_user_by_email(db: Session, email: str):
@@ -55,11 +53,16 @@ def _users_columns(db: Session) -> set[str]:
     return {str(r[0]).lower() for r in rows}
 
 
-def _update_existing_user_password(db: Session, user_id: int, raw_password: str, full_name: str | None = None) -> None:
+def _update_existing_user_password(
+    db: Session,
+    user_id: int,
+    raw_password: str,
+    full_name: str | None = None,
+) -> None:
     from sqlalchemy import text
 
     columns = _users_columns(db)
-    hashed = pwd_context.hash(raw_password)
+    hashed = hash_password(raw_password)
 
     password_column = None
     for candidate in ("hashed_password", "password_hash", "password"):
@@ -113,7 +116,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
         if existing_user:
             user_id = int(existing_user["id"])
 
-            # ✅ USER EXISTE DÉJÀ → on met à jour le mot de passe puis on resynchronise
+            # USER EXISTE DÉJÀ → mise à jour mot de passe + resynchronisation
             _update_existing_user_password(
                 db=db,
                 user_id=user_id,
@@ -141,10 +144,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
 
         user_id = int(created["id"])
 
-        # ✅ SOURCE DE VÉRITÉ = ia_quota
         sync_plan_quotas(db=db, user_id=user_id, plan=plan)
-
-        # ✅ on marque l'accès actif uniquement APRÈS création + quotas OK
         mark_pending_access_active(db=db, email=email)
 
         db.commit()

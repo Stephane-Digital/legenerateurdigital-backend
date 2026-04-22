@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
@@ -14,69 +15,77 @@ from services.auth_service import (
     get_current_user as service_get_current_user,
 )
 from services.ai_quota_service import get_or_create_quota
-from services.trial_access_service import consume_trial_pending, has_trial_access
+from services.pending_access_service import consume_pending_access, has_pending_access
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-
 from services.integrations.systeme_subscription_service import cancel_subscription_for_user
 
-# ============================================================
-# 🧪 REGISTER
-# ============================================================
+
+def _limit_for_plan(plan: str) -> int:
+    p = str(plan or "").lower()
+    if p == "trial":
+        return 10_000
+    if p == "ultime":
+        return 2_500_000
+    if p == "pro":
+        return 1_000_000
+    return 400_000
+
+
 @router.post("/register")
 def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     email = (payload.email or "").strip().lower()
     full_name = getattr(payload, "full_name", None)
 
-    trial_access = consume_trial_pending(db, email=email)
-
-    if not trial_access:
+    pending = consume_pending_access(db, email=email)
+    if not pending:
         raise HTTPException(
             status_code=403,
-            detail="Essai non activé. Passe d'abord par l’offre d’essai LGD."
+            detail="Accès non activé. Passe d'abord par l’offre d’essai ou d’achat LGD."
         )
 
     created = create_user_account(
         db=db,
         email=email,
         password=payload.password,
-        full_name=full_name,
+        full_name=full_name or pending.get("full_name"),
     )
 
     user_id = int(created["id"])
+    plan = str(pending.get("plan") or "trial").lower()
 
     try:
         from sqlalchemy import text
         db.execute(
-            text("UPDATE users SET plan = 'trial' WHERE id = :uid"),
-            {"uid": user_id},
+            text("UPDATE users SET plan = :plan WHERE id = :uid"),
+            {"uid": user_id, "plan": plan},
         )
     except Exception:
-        print("⚠️ users.plan absent, skip trial set")
+        print("⚠️ users.plan absent, skip set")
+
+    limit_tokens = _limit_for_plan(plan)
 
     for feature_name in ("coach", "global"):
         quota = get_or_create_quota(db, user_id, feature=feature_name)
-
         if hasattr(quota, "tokens_used"):
             quota.tokens_used = 0
-
         if hasattr(quota, "credits"):
-            quota.credits = 10_000
-
+            quota.credits = limit_tokens
         if hasattr(quota, "plan"):
-            quota.plan = "trial"
-
+            quota.plan = plan
         db.add(quota)
 
     db.commit()
 
-    return {"message": "Compte trial activé", "user_id": user_id, "plan": "trial"}
+    return {
+        "message": "Compte activé",
+        "user_id": user_id,
+        "plan": plan,
+        "access_type": pending.get("access_type"),
+    }
 
 
-# ============================================================
-# 🔐 LOGIN
-# ============================================================
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db)):
     try:
@@ -113,13 +122,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
         if not user:
             raise HTTPException(status_code=401, detail="Identifiants invalides")
 
-        token = create_access_token(
-            {
-                "sub": str(user["id"]),
-                "email": user["email"],
-                "user_id": user["id"],
-            }
-        )
+        token = create_access_token({"sub": str(user["id"]), "email": user["email"], "user_id": user["id"]})
 
         response = JSONResponse(
             {
@@ -153,15 +156,9 @@ async def login(request: Request, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         print("LOGIN ERROR:", repr(e))
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"LOGIN_ERROR: {repr(e)}"},
-        )
+        return JSONResponse(status_code=500, content={"detail": f"LOGIN_ERROR: {repr(e)}"})
 
 
-# ============================================================
-# 🚪 LOGOUT
-# ============================================================
 @router.post("/logout")
 def logout():
     response = JSONResponse({"message": "Déconnexion réussie"})
@@ -169,9 +166,6 @@ def logout():
     return response
 
 
-# ============================================================
-# 👤 ME
-# ============================================================
 @router.get("/me")
 def me(current_user=Depends(service_get_current_user)):
     return {
@@ -184,12 +178,8 @@ def me(current_user=Depends(service_get_current_user)):
     }
 
 
-# ============================================================
-# ⭐ get_current_user — Cookie FIRST, Header Bearer fallback
-# ============================================================
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("lgd_token")
-
     if not token:
         auth = request.headers.get("authorization") or request.headers.get("Authorization")
         if auth and auth.lower().startswith("bearer "):
@@ -207,7 +197,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
 
-    current_user = service_get_current_user.__wrapped__(  # type: ignore[attr-defined]
+    current_user = service_get_current_user.__wrapped__(
         credentials=type("Creds", (), {"credentials": token})(),
         db=db,
     ) if hasattr(service_get_current_user, "__wrapped__") else None
@@ -222,20 +212,14 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     return current_user
 
 
-# ============================================================
-# 🧪 TRIAL ACCESS
-# ============================================================
-@router.get("/trial-access")
-def trial_access_status(email: str, db: Session = Depends(get_db)):
+@router.get("/pending-access")
+def pending_access_status(email: str, db: Session = Depends(get_db)):
     clean_email = (email or "").strip().lower()
     if not clean_email:
         raise HTTPException(status_code=400, detail="Email manquant")
-    return has_trial_access(db, clean_email)
+    return has_pending_access(db, clean_email)
 
 
-# ============================================================
-# 💳 SUBSCRIPTION
-# ============================================================
 @router.get("/subscription")
 def subscription_status(current_user=Depends(get_current_user)):
     return {

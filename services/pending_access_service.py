@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -164,7 +163,7 @@ def has_pending_access(db: Session, email: str) -> dict[str, Any]:
     }
 
 
-def consume_pending_access(db: Session, email: str) -> dict[str, Any] | None:
+def get_pending_access(db: Session, email: str) -> dict[str, Any] | None:
     ensure_pending_access_table(db)
 
     clean_email = (email or "").strip().lower()
@@ -206,7 +205,24 @@ def consume_pending_access(db: Session, email: str) -> dict[str, Any] | None:
     if status not in {"trial_pending", "trial_active", "paid_pending", "paid_active"}:
         return None
 
-    next_status = "trial_active" if access_type == "trial" else "paid_active"
+    return {
+        "email": clean_email,
+        "full_name": row.get("full_name"),
+        "status": status,
+        "access_type": access_type,
+        "plan": plan,
+        "starts_at": row.get("starts_at").isoformat() if row.get("starts_at") else None,
+        "ends_at": ends_at.isoformat() if ends_at else None,
+    }
+
+
+def mark_pending_access_active(db: Session, email: str) -> dict[str, Any] | None:
+    current = get_pending_access(db, email)
+    if not current:
+        return None
+
+    clean_email = (email or "").strip().lower()
+    next_status = "trial_active" if current.get("access_type") == "trial" else "paid_active"
 
     db.execute(
         text(
@@ -218,14 +234,15 @@ def consume_pending_access(db: Session, email: str) -> dict[str, Any] | None:
         ),
         {"email": clean_email, "status": next_status},
     )
-    db.commit()
+    db.flush()
 
-    return {
-        "email": clean_email,
-        "full_name": row.get("full_name"),
-        "status": next_status,
-        "access_type": access_type,
-        "plan": plan,
-        "starts_at": row.get("starts_at").isoformat() if row.get("starts_at") else None,
-        "ends_at": ends_at.isoformat() if ends_at else None,
-    }
+    current["status"] = next_status
+    return current
+
+
+# backward compatibility
+def consume_pending_access(db: Session, email: str) -> dict[str, Any] | None:
+    current = get_pending_access(db, email)
+    if not current:
+        return None
+    return mark_pending_access_active(db, email)

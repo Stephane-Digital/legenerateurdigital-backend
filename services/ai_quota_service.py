@@ -44,6 +44,8 @@ def _to_int(v: Any, default: int = 0) -> int:
 def _default_limit_for_plan(plan: str) -> int:
     # ✅ LGD plan limits (MONTHLY caps)
     p = (plan or "").lower()
+    if "trial" in p:
+        return 10_000
     if "ult" in p:
         return 2_500_000
     if "pro" in p:

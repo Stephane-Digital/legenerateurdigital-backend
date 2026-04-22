@@ -1,7 +1,7 @@
 import json
 import hmac
 import hashlib
-from typing import Optional, Set
+from typing import Any, Optional, Set
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from config.settings import settings
 from services.ai_quota_service import get_or_create_quota
+from services.trial_access_service import upsert_trial_pending
 
 
 router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
@@ -72,6 +73,8 @@ def _limit_for_plan(plan: str) -> int:
         return 1_000_000
     if plan == "essentiel":
         return 400_000
+    if plan == "trial":
+        return 10_000
     return 0
 
 
@@ -123,6 +126,39 @@ def _apply_plan(db: Session, user_id: int, plan: str):
 
 
 # ======================================================
+# 🧪 TRIAL DETECTION
+# ======================================================
+def _payload_text(payload: Any) -> str:
+    try:
+        return json.dumps(payload, ensure_ascii=False).lower()
+    except Exception:
+        return str(payload).lower()
+
+
+def _is_trial_event(event: str, payload: dict) -> bool:
+    event_value = str(event or "").strip().lower()
+    raw = _payload_text(payload)
+
+    trial_keywords = (
+        "trial",
+        "essai",
+        "7 jours",
+        "7j",
+        "gratuit",
+        "free trial",
+        "essai gratuit",
+    )
+
+    if any(keyword in event_value for keyword in trial_keywords):
+        return True
+
+    if any(keyword in raw for keyword in trial_keywords):
+        return True
+
+    return False
+
+
+# ======================================================
 # 🚀 WEBHOOK
 # ======================================================
 @router.post("/")
@@ -152,10 +188,52 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
         # 📧 EMAIL
         # ==================================================
         customer = payload.get("customer") or {}
-        email = (customer.get("email") or "").strip().lower()
+        email = (customer.get("email") or payload.get("email") or "").strip().lower()
 
         if not email:
             raise HTTPException(status_code=400, detail="Missing email")
+
+        # ==================================================
+        # 🧪 TRIAL PENDING / ACTIVE
+        # ==================================================
+        if _is_trial_event(event, payload):
+            trial_meta = upsert_trial_pending(
+                db=db,
+                email=email,
+                full_name=(
+                    customer.get("name")
+                    or payload.get("name")
+                    or payload.get("full_name")
+                    or payload.get("fullName")
+                    or None
+                ),
+                source_event=event,
+                payload=payload,
+            )
+
+            user_id = _get_user_by_email(db, email)
+
+            if user_id:
+                _apply_plan(db, user_id, "trial")
+                db.commit()
+
+                print(f"🧪 TRIAL ACTIVE EXISTING USER: {email}")
+
+                return {
+                    "status": "trial_active_existing_user",
+                    "plan": "trial",
+                    "email": email,
+                }
+
+            db.commit()
+
+            print(f"🧪 TRIAL PENDING CREATED: {email}")
+
+            return {
+                "status": "trial_pending",
+                "email": email,
+                "trial_ends_at": trial_meta.get("trial_ends_at"),
+            }
 
         # ==================================================
         # 💳 PLAN

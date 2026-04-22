@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime
@@ -13,6 +12,20 @@ except Exception:
         from models.ia_quota_model import IaQuota as QuotaModel  # type: ignore
     except Exception:
         QuotaModel = None  # type: ignore
+
+
+# ======================================================
+# LGD — SOURCE DE VÉRITÉ QUOTAS = ia_quota
+#
+# Trial = 70 000 total (10 000 / jour sur 7 jours)
+# Essentiel = 400 000
+# Pro = 1 000 000
+# Ultime = 2 500 000
+#
+# Buckets synchronisés :
+# - coach
+# - global
+# ======================================================
 
 
 def _to_int(v: Any, default: int = 0) -> int:
@@ -30,7 +43,7 @@ def _to_int(v: Any, default: int = 0) -> int:
 def _default_limit_for_plan(plan: str) -> int:
     p = (plan or "").lower()
     if "trial" in p:
-        return 10_000
+        return 70_000
     if "ult" in p:
         return 2_500_000
     if "pro" in p:
@@ -150,7 +163,7 @@ def get_or_create_quota(db: Session, user_id: int, feature: str = "coach"):
             _set_limit(q, _default_limit_for_plan(plan))
             _set_remaining(q, max(_get_limit(q) - _get_used(q), 0))
             db.add(q)
-            db.commit()
+            db.flush()
             db.refresh(q)
         return q
 
@@ -178,9 +191,34 @@ def get_or_create_quota(db: Session, user_id: int, feature: str = "coach"):
     _set_daily_used(q, 0)
 
     db.add(q)
-    db.commit()
+    db.flush()
     db.refresh(q)
     return q
+
+
+def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
+    clean_plan = str(plan or "essentiel").lower()
+    limit_tokens = _default_limit_for_plan(clean_plan)
+
+    for feature_name in ("coach", "global"):
+        quota = get_or_create_quota(db, int(user_id), feature=feature_name)
+
+        if hasattr(quota, "plan"):
+            quota.plan = clean_plan
+
+        if hasattr(quota, "tokens_used"):
+            quota.tokens_used = 0
+
+        _set_limit(quota, limit_tokens)
+        _set_remaining(quota, max(limit_tokens - _get_used(quota), 0))
+
+        today = _today_key()
+        _set_daily_date(quota, today)
+        _set_daily_used(quota, 0)
+
+        db.add(quota)
+
+    db.flush()
 
 
 def update_quota(db: Session, user_id: int, amount: int, feature: str = "coach"):
@@ -193,10 +231,15 @@ def update_quota(db: Session, user_id: int, amount: int, feature: str = "coach")
     limit = _get_limit(q)
     used = _get_used(q)
 
+    current_plan = str(getattr(q, "plan", "")).lower()
     daily_supported = any(hasattr(q, k) for k in _DAILY_USED_FIELDS) or any(
         hasattr(q, k) for k in _DAILY_DATE_FIELDS
     )
-    daily_limit = max(1, int(limit // 30)) if limit > 0 else 0
+
+    if "trial" in current_plan:
+        daily_limit = 10_000
+    else:
+        daily_limit = max(1, int(limit // 30)) if limit > 0 else 0
 
     if daily_supported and daily_limit > 0:
         today = _today_key()

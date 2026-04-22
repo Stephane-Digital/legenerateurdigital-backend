@@ -1,4 +1,3 @@
-
 import json
 import hmac
 import hashlib
@@ -9,14 +8,18 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from config.settings import settings
-from services.ai_quota_service import get_or_create_quota
+from services.ai_quota_service import sync_plan_quotas
 from services.pending_access_service import upsert_pending_access
 
 router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 
 def _compute_signature(secret: str, raw_body: bytes) -> str:
-    return hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _ids_from_settings(name: str) -> Set[int]:
@@ -24,6 +27,7 @@ def _ids_from_settings(name: str) -> Set[int]:
     raw = str(raw).strip()
     if not raw:
         return set()
+
     out: Set[int] = set()
     for part in raw.split(","):
         p = part.strip()
@@ -39,57 +43,26 @@ def _ids_from_settings(name: str) -> Set[int]:
 def _resolve_plan(priceplan_id: Optional[int]) -> Optional[str]:
     if priceplan_id is None:
         return None
+
     if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_ULTIME_IDS"):
         return "ultime"
     if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_PRO_IDS"):
         return "pro"
     if priceplan_id in _ids_from_settings("SYSTEMEIO_PRICEPLAN_ESSENTIEL_IDS"):
         return "essentiel"
+
     return None
-
-
-def _limit_for_plan(plan: str) -> int:
-    p = str(plan or "").lower()
-    if p == "trial":
-        return 10_000
-    if p == "ultime":
-        return 2_500_000
-    if p == "pro":
-        return 1_000_000
-    if p == "essentiel":
-        return 400_000
-    return 0
 
 
 def _get_user_by_email(db: Session, email: str):
     from sqlalchemy import text
+
     result = db.execute(
         text("SELECT id FROM users WHERE LOWER(email) = LOWER(:email) LIMIT 1"),
         {"email": email},
     ).fetchone()
+
     return result[0] if result else None
-
-
-def _apply_plan(db: Session, user_id: int, plan: str):
-    from sqlalchemy import text
-    try:
-        db.execute(
-            text("UPDATE users SET plan = :plan WHERE id = :uid"),
-            {"plan": plan, "uid": user_id},
-        )
-    except Exception:
-        print("⚠️ users.plan absent, skip")
-
-    limit_tokens = _limit_for_plan(plan)
-    for feature_name in ("coach", "global"):
-        quota = get_or_create_quota(db, user_id, feature=feature_name)
-        if hasattr(quota, "tokens_used"):
-            quota.tokens_used = 0
-        if hasattr(quota, "credits"):
-            quota.credits = limit_tokens
-        if hasattr(quota, "plan"):
-            quota.plan = plan
-        db.add(quota)
 
 
 def _payload_text(payload: Any) -> str:
@@ -102,13 +75,23 @@ def _payload_text(payload: Any) -> str:
 def _is_trial_event(event: str, payload: dict) -> bool:
     event_value = str(event or "").strip().lower()
     raw = _payload_text(payload)
+
     trial_keywords = (
-        "trial", "essai", "7 jours", "7j", "gratuit", "free trial", "essai gratuit"
+        "trial",
+        "essai",
+        "7 jours",
+        "7j",
+        "gratuit",
+        "free trial",
+        "essai gratuit",
     )
+
     if any(keyword in event_value for keyword in trial_keywords):
         return True
+
     if any(keyword in raw for keyword in trial_keywords):
         return True
+
     return False
 
 
@@ -122,8 +105,8 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
         raw = await request.body()
         signature = request.headers.get("X-Webhook-Signature", "")
         event = (request.headers.get("X-Webhook-Event", "") or "").upper()
-        expected = _compute_signature(secret, raw)
 
+        expected = _compute_signature(secret, raw)
         if not signature or not hmac.compare_digest(signature, expected):
             raise HTTPException(status_code=401, detail="Invalid signature")
 
@@ -164,9 +147,13 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
 
             user_id = _get_user_by_email(db, email)
             if user_id:
-                _apply_plan(db, user_id, "trial")
+                sync_plan_quotas(db=db, user_id=int(user_id), plan="trial")
                 db.commit()
-                return {"status": "trial_active_existing_user", "plan": "trial", "email": email}
+                return {
+                    "status": "trial_active_existing_user",
+                    "plan": "trial",
+                    "email": email,
+                }
 
             db.commit()
             return {
@@ -177,13 +164,13 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
 
         priceplan = payload.get("pricePlan") or {}
         priceplan_id = priceplan.get("id")
+
         try:
             priceplan_id = int(priceplan_id)
         except Exception:
             priceplan_id = None
 
         plan = _resolve_plan(priceplan_id)
-
         user_id = _get_user_by_email(db, email)
 
         if event == "NEW_SALE":
@@ -191,7 +178,7 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
                 return {"status": "ignored", "reason": "unknown_plan"}
 
             if user_id:
-                _apply_plan(db, user_id, plan)
+                sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
                 db.commit()
                 return {"status": "success", "plan": plan}
 
@@ -206,6 +193,7 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
                 duration_days=None,
             )
             db.commit()
+
             return {
                 "status": "paid_pending",
                 "email": email,
@@ -216,7 +204,8 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
         if event == "SALE_CANCELED":
             if not user_id:
                 return {"status": "ignored", "reason": "user_not_found"}
-            _apply_plan(db, user_id, "essentiel")
+
+            sync_plan_quotas(db=db, user_id=int(user_id), plan="essentiel")
             db.commit()
             return {"status": "canceled", "plan": "essentiel"}
 

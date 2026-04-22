@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
 from database import get_db
 from schemas.user_schema import UserCreate
@@ -25,6 +26,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 from services.integrations.systeme_subscription_service import cancel_subscription_for_user
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def _find_existing_user_by_email(db: Session, email: str):
     clean_email = (email or "").strip().lower()
@@ -35,6 +38,59 @@ def _find_existing_user_by_email(db: Session, email: str):
     except Exception as e:
         print("AUTH_FIND_EXISTING_USER_ERROR:", repr(e))
         return None
+
+
+def _users_columns(db: Session) -> set[str]:
+    from sqlalchemy import text
+
+    rows = db.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'users'
+            """
+        )
+    ).fetchall()
+    return {str(r[0]).lower() for r in rows}
+
+
+def _update_existing_user_password(db: Session, user_id: int, raw_password: str, full_name: str | None = None) -> None:
+    from sqlalchemy import text
+
+    columns = _users_columns(db)
+    hashed = pwd_context.hash(raw_password)
+
+    password_column = None
+    for candidate in ("hashed_password", "password_hash", "password"):
+        if candidate in columns:
+            password_column = candidate
+            break
+
+    if not password_column:
+        raise HTTPException(
+            status_code=500,
+            detail="Aucune colonne mot de passe compatible trouvée dans users."
+        )
+
+    params = {"uid": int(user_id), "password_value": hashed}
+    updates = [f"{password_column} = :password_value"]
+
+    if full_name:
+        full_name_clean = full_name.strip()
+        if full_name_clean:
+            if "full_name" in columns:
+                updates.append("full_name = :full_name")
+                params["full_name"] = full_name_clean
+            elif "name" in columns:
+                updates.append("name = :full_name")
+                params["full_name"] = full_name_clean
+
+    db.execute(
+        text(f"UPDATE users SET {', '.join(updates)} WHERE id = :uid"),
+        params,
+    )
+    db.flush()
 
 
 @router.post("/register")
@@ -57,7 +113,13 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
         if existing_user:
             user_id = int(existing_user["id"])
 
-            # ✅ USER EXISTE DÉJÀ → on ne recrée pas, on resynchronise
+            # ✅ USER EXISTE DÉJÀ → on met à jour le mot de passe puis on resynchronise
+            _update_existing_user_password(
+                db=db,
+                user_id=user_id,
+                raw_password=payload.password,
+                full_name=full_name or pending.get("full_name"),
+            )
             sync_plan_quotas(db=db, user_id=user_id, plan=plan)
             mark_pending_access_active(db=db, email=email)
             db.commit()

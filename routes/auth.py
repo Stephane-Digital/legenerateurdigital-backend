@@ -12,6 +12,7 @@ from services.auth_service import (
     create_access_token,
     create_user_account,
     get_current_user as service_get_current_user,
+    _fetch_user_by_identity,
 )
 from services.ai_quota_service import sync_plan_quotas
 from services.pending_access_service import (
@@ -23,6 +24,17 @@ from services.pending_access_service import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 from services.integrations.systeme_subscription_service import cancel_subscription_for_user
+
+
+def _find_existing_user_by_email(db: Session, email: str):
+    clean_email = (email or "").strip().lower()
+    if not clean_email:
+        return None
+    try:
+        return _fetch_user_by_identity(db, user_id=None, email=clean_email)
+    except Exception as e:
+        print("AUTH_FIND_EXISTING_USER_ERROR:", repr(e))
+        return None
 
 
 @router.post("/register")
@@ -37,7 +49,27 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
             detail="Accès non activé. Passe d'abord par l’offre d’essai ou d’achat LGD."
         )
 
+    plan = str(pending.get("plan") or "trial").lower()
+
     try:
+        existing_user = _find_existing_user_by_email(db, email=email)
+
+        if existing_user:
+            user_id = int(existing_user["id"])
+
+            # ✅ USER EXISTE DÉJÀ → on ne recrée pas, on resynchronise
+            sync_plan_quotas(db=db, user_id=user_id, plan=plan)
+            mark_pending_access_active(db=db, email=email)
+            db.commit()
+
+            return {
+                "message": "Compte existant resynchronisé",
+                "user_id": user_id,
+                "plan": plan,
+                "access_type": pending.get("access_type"),
+                "existing_user": True,
+            }
+
         created = create_user_account(
             db=db,
             email=email,
@@ -46,7 +78,6 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
         )
 
         user_id = int(created["id"])
-        plan = str(pending.get("plan") or "trial").lower()
 
         # ✅ SOURCE DE VÉRITÉ = ia_quota
         sync_plan_quotas(db=db, user_id=user_id, plan=plan)
@@ -61,6 +92,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
             "user_id": user_id,
             "plan": plan,
             "access_type": pending.get("access_type"),
+            "existing_user": False,
         }
     except HTTPException:
         db.rollback()
@@ -68,8 +100,6 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         print("REGISTER ERROR:", repr(e))
-        if "already used" in str(e).lower() or "déjà utilisé" in str(e).lower():
-            raise HTTPException(status_code=400, detail="Cet email est déjà utilisé.")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -200,7 +230,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     ) if hasattr(service_get_current_user, "__wrapped__") else None
 
     if current_user is None:
-        from services.auth_service import _fetch_user_by_identity
         current_user = _fetch_user_by_identity(db, user_id=user_id, email=email)
 
     if not current_user:

@@ -14,7 +14,11 @@ from services.auth_service import (
     get_current_user as service_get_current_user,
 )
 from services.ai_quota_service import sync_plan_quotas
-from services.pending_access_service import consume_pending_access, has_pending_access
+from services.pending_access_service import (
+    get_pending_access,
+    has_pending_access,
+    mark_pending_access_active,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -26,7 +30,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     email = (payload.email or "").strip().lower()
     full_name = getattr(payload, "full_name", None)
 
-    pending = consume_pending_access(db, email=email)
+    pending = get_pending_access(db, email=email)
     if not pending:
         raise HTTPException(
             status_code=403,
@@ -47,6 +51,9 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
         # ✅ SOURCE DE VÉRITÉ = ia_quota
         sync_plan_quotas(db=db, user_id=user_id, plan=plan)
 
+        # ✅ on marque l'accès actif uniquement APRÈS création + quotas OK
+        mark_pending_access_active(db=db, email=email)
+
         db.commit()
 
         return {
@@ -61,6 +68,8 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         print("REGISTER ERROR:", repr(e))
+        if "already used" in str(e).lower() or "déjà utilisé" in str(e).lower():
+            raise HTTPException(status_code=400, detail="Cet email est déjà utilisé.")
         raise HTTPException(status_code=500, detail=str(e))
 
 

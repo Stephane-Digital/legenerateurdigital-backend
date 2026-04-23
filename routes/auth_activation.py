@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from services.token_service import (
+    build_activation_link,
     get_valid_activation_token,
     mark_activation_token_used,
 )
@@ -32,6 +33,7 @@ def activate_token(token: str, db: Session = Depends(get_db)):
         "plan": record.plan,
         "expires_at": record.expires_at.isoformat() if record.expires_at else None,
         "used": bool(record.used),
+        "activation_url": build_activation_link(record.token),
     }
 
 
@@ -51,4 +53,9 @@ def consume_token(payload: ConsumeTokenPayload, db: Session = Depends(get_db)):
             detail="Impossible de consommer le token.",
         )
 
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "email": used.email,
+        "access_type": used.access_type,
+        "plan": used.plan,
+    }

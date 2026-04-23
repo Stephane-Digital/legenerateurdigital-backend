@@ -10,45 +10,40 @@ from models.ia_quota_model import IAQuota
 from models.user_model import User
 
 
-# ---------------------------------------------------------------------
-# Defaults (LGD)
-# ---------------------------------------------------------------------
-
-# Valeurs par défaut (tokens) selon plan + feature.
-_DEFAULT_LIMITS: Dict[str, Dict[str, int]] = {
-    "essentiel": {
-        "coach": 15000,
-        "editor": 15000,
-        "carrousel": 15000,
-        "email": 15000,
-        "sales_pages": 15000,
-    },
-    "pro": {
-        "coach": 60000,
-        "editor": 60000,
-        "carrousel": 60000,
-        "email": 60000,
-        "sales_pages": 60000,
-    },
-    "ultime": {
-        "coach": 150000,
-        "editor": 150000,
-        "carrousel": 150000,
-        "email": 150000,
-        "sales_pages": 150000,
-    },
-}
-
-
-def _norm_plan(plan: Optional[str]) -> str:
+def _limit_from_plan(plan: Optional[str]) -> int:
     p = (plan or "essentiel").strip().lower()
-    if p in ("essential", "essentielle", "essentiel", "basic", "base"):
+    if p in ("azur", "trial", "starter", "decouverte", "découverte"):
+        return 70000
+    if p in ("pro", "professional"):
+        return 1_000_000
+    if p in ("ultime", "ultimate", "premium"):
+        return 2_500_000
+    return 400_000
+
+
+def _display_plan_from_limit(limit_tokens: int, raw_plan: Optional[str] = None) -> str:
+    n = int(limit_tokens or 0)
+    if n == 70000:
+        return "azur"
+    if n == 1_000_000:
+        return "pro"
+    if n == 2_500_000:
+        return "ultime"
+    if n == 400_000:
         return "essentiel"
+
+    p = (raw_plan or "").strip().lower()
+    if p in ("azur", "trial", "starter", "decouverte", "découverte"):
+        return "azur"
     if p in ("pro", "professional"):
         return "pro"
     if p in ("ultime", "ultimate", "premium"):
         return "ultime"
     return "essentiel"
+
+
+def _norm_plan(plan: Optional[str]) -> str:
+    return _display_plan_from_limit(_limit_from_plan(plan), plan)
 
 
 def _norm_feature(feature: Optional[str]) -> str:
@@ -67,9 +62,7 @@ def _norm_feature(feature: Optional[str]) -> str:
 
 
 def plan_default_limit(plan: str, feature: str) -> int:
-    p = _norm_plan(plan)
-    f = _norm_feature(feature)
-    return int(_DEFAULT_LIMITS.get(p, {}).get(f, 15000))
+    return int(_limit_from_plan(plan))
 
 
 def _utcnow() -> datetime:
@@ -82,52 +75,28 @@ def _get_user_plan(user: User) -> str:
 
 
 def _quota_limit_get(quota: IAQuota, plan: str, feature: str) -> int:
-    """LGD compat: depending on DB schema, the limit is stored in:
-    - ia_quota.limit_tokens (newer) OR
-    - ia_quota.credits (historical LGD choice)
-    """
-    # Newer schema
     if hasattr(quota, "limit_tokens"):
         v = getattr(quota, "limit_tokens", None)
         if v is not None and int(v) > 0:
             return int(v)
-
-    # Historical schema
     if hasattr(quota, "credits"):
         v = getattr(quota, "credits", None)
         if v is not None and int(v) > 0:
             return int(v)
-
-    # fallback default by plan
     return int(plan_default_limit(plan, feature))
 
 
 def _quota_limit_set(quota: IAQuota, limit_tokens: int) -> None:
-    """Write limit into the right column for the current DB schema."""
     if hasattr(quota, "limit_tokens"):
         setattr(quota, "limit_tokens", int(limit_tokens))
         return
-    # Historical schema uses credits as limit
     if hasattr(quota, "credits"):
         setattr(quota, "credits", int(limit_tokens))
         return
-    # If neither exists, we can't persist limit
     raise AttributeError("DB schema missing limit column (limit_tokens/credits)")
 
 
 def _get_or_create_quota(db: Session, user_id: int, feature: str, plan: str) -> IAQuota:
-    """Fetch or create the quota row.
-
-    ✅ CRITICAL FIX:
-    Previously this function *forced* quota.plan to equal user.plan on every read.
-    That is exactly why your admin 'Pro/Ultime' appeared, then reverted to 'essentiel' on refresh.
-    We must NEVER overwrite an existing quota.plan during reads.
-
-    We only set plan at creation time. After that:
-      - admin overrides may set quota.plan
-      - coach reads must reflect quota.plan
-      - user.plan may stay 'essentiel' without destroying overrides
-    """
     feature = _norm_feature(feature)
     plan = _norm_plan(plan)
 
@@ -138,6 +107,16 @@ def _get_or_create_quota(db: Session, user_id: int, feature: str, plan: str) -> 
         .first()
     )
     if quota:
+        current_limit = _quota_limit_get(quota, plan, feature)
+        effective_plan = _display_plan_from_limit(current_limit, getattr(quota, "plan", None) or plan)
+        try:
+            quota.plan = effective_plan
+        except Exception:
+            pass
+        if hasattr(quota, "updated_at"):
+            quota.updated_at = _utcnow()
+        db.commit()
+        db.refresh(quota)
         return quota
 
     quota = IAQuota(
@@ -149,7 +128,6 @@ def _get_or_create_quota(db: Session, user_id: int, feature: str, plan: str) -> 
         reset_at=None,
     )
 
-    # Initialize the limit in the appropriate column if possible
     try:
         _quota_limit_set(quota, plan_default_limit(plan, feature))
     except Exception:
@@ -167,11 +145,6 @@ def _get_or_create_quota(db: Session, user_id: int, feature: str, plan: str) -> 
 
 
 def _fetch_quota_row(db: Session, user_id: int, feature: str = "coach") -> Optional[Dict[str, Any]]:
-    """Preferred reader for (user_id, feature).
-
-    IMPORTANT: if duplicates exist, we always read the latest row (id DESC)
-    to avoid desync between admin and coach.
-    """
     try:
         feat = _norm_feature(feature)
         quota = (
@@ -183,14 +156,14 @@ def _fetch_quota_row(db: Session, user_id: int, feature: str = "coach") -> Optio
         if not quota:
             return None
 
-        plan = getattr(quota, "plan", None) or "essentiel"
         used = int(getattr(quota, "tokens_used", 0) or 0)
-        limit_tokens = _quota_limit_get(quota, plan=_norm_plan(plan), feature=feat)
+        limit_tokens = _quota_limit_get(quota, plan=_norm_plan(getattr(quota, "plan", None)), feature=feat)
+        effective_plan = _display_plan_from_limit(limit_tokens, getattr(quota, "plan", None))
 
         return {
             "user_id": int(user_id),
             "feature": feat,
-            "plan": _norm_plan(plan),
+            "plan": effective_plan,
             "tokens_used": used,
             "limit_tokens": int(limit_tokens),
         }
@@ -206,12 +179,6 @@ def list_quotas(
     page: int = 1,
     page_size: int = 10,
 ) -> Dict[str, Any]:
-    """Admin table rows.
-
-    ✅ CRITICAL FIX:
-    The plan shown must come from the quota row (quota.plan), not be re-forced from user.plan.
-    Otherwise refresh will always revert to user.plan ('essentiel').
-    """
     feature = _norm_feature(feature) if feature else None
     plan = _norm_plan(plan) if plan else None
 
@@ -242,16 +209,13 @@ def list_quotas(
 
         for f in features:
             quota = _get_or_create_quota(db, u.id, f, u_plan)
-
-            # ✅ Effective plan: quota.plan if present, else fallback to user.plan
-            effective_plan = _norm_plan(getattr(quota, "plan", None) or u_plan)
+            limit_tokens_val = _quota_limit_get(quota, plan=getattr(quota, "plan", None) or u_plan, feature=f)
+            effective_plan = _display_plan_from_limit(limit_tokens_val, getattr(quota, "plan", None) or u_plan)
 
             if plan and effective_plan != plan:
                 continue
 
-            limit_tokens_val = _quota_limit_get(quota, plan=effective_plan, feature=f)
             used = int(getattr(quota, "tokens_used", 0) or 0)
-
             row = {
                 "user_id": u.id,
                 "email": getattr(u, "email", None),
@@ -278,7 +242,6 @@ def set_quota_limit(db: Session, user_id: int, limit_tokens: int, feature: str =
     if not user:
         return {"ok": False, "error": "USER_NOT_FOUND"}
 
-    # Create row if missing, but DO NOT overwrite plan on reads
     u_plan = _get_user_plan(user)
     quota = _get_or_create_quota(db, int(user_id), feature, u_plan)
 
@@ -289,16 +252,20 @@ def set_quota_limit(db: Session, user_id: int, limit_tokens: int, feature: str =
     except Exception as e:
         return {"ok": False, "error": f"SET_LIMIT_FAILED: {e}"}
 
+    effective_plan = _display_plan_from_limit(int(limit_tokens), getattr(quota, "plan", None) or u_plan)
+    try:
+        quota.plan = effective_plan
+    except Exception:
+        pass
+
     if hasattr(quota, "updated_at"):
         quota.updated_at = _utcnow()
     db.commit()
     db.refresh(quota)
 
-    # Use effective plan from quota (if admin set it), else user.plan
-    effective_plan = _norm_plan(getattr(quota, "plan", None) or u_plan)
     limit_val = _quota_limit_get(quota, plan=effective_plan, feature=feature)
 
-    return {"ok": True, "user_id": int(user_id), "feature": feature, "limit_tokens": int(limit_val)}
+    return {"ok": True, "user_id": int(user_id), "feature": feature, "limit_tokens": int(limit_val), "plan": effective_plan}
 
 
 def reset_quota(db: Session, user_id: int, feature: str = "coach") -> Dict[str, Any]:
@@ -312,6 +279,13 @@ def reset_quota(db: Session, user_id: int, feature: str = "coach") -> Dict[str, 
     quota = _get_or_create_quota(db, int(user_id), feature, u_plan)
 
     quota.tokens_used = 0
+    current_limit = _quota_limit_get(quota, plan=getattr(quota, "plan", None) or u_plan, feature=feature)
+    effective_plan = _display_plan_from_limit(current_limit, getattr(quota, "plan", None) or u_plan)
+    try:
+        quota.plan = effective_plan
+    except Exception:
+        pass
+
     if hasattr(quota, "reset_at"):
         quota.reset_at = _utcnow()
     if hasattr(quota, "updated_at"):
@@ -319,13 +293,13 @@ def reset_quota(db: Session, user_id: int, feature: str = "coach") -> Dict[str, 
     db.commit()
     db.refresh(quota)
 
-    effective_plan = _norm_plan(getattr(quota, "plan", None) or u_plan)
     limit_val = _quota_limit_get(quota, plan=effective_plan, feature=feature)
 
     return {
         "ok": True,
         "user_id": int(user_id),
         "feature": feature,
+        "plan": effective_plan,
         "tokens_used": int(getattr(quota, "tokens_used", 0) or 0),
         "limit_tokens": int(limit_val),
     }

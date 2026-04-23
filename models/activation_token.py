@@ -19,3 +19,4 @@ class ActivationToken(Base):
     used = Column(Boolean, default=False, nullable=False)
     used_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+

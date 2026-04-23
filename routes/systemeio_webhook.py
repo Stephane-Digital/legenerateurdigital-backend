@@ -1,10 +1,13 @@
 import json
 import hmac
 import hashlib
+import secrets
+from datetime import datetime, timedelta
 from typing import Any, Optional, Set
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -14,9 +17,11 @@ from services.pending_access_service import (
     mark_pending_access_active,
     upsert_pending_access,
 )
-from services.token_service import create_activation_package
 
 router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
+
+DEFAULT_FRONT_URL = "https://legenerateurdigital-front.vercel.app"
+DEFAULT_TOKEN_HOURS = 24
 
 
 class SystemeioTestPayload(BaseModel):
@@ -65,8 +70,6 @@ def _resolve_plan(priceplan_id: Optional[int]) -> Optional[str]:
 
 
 def _get_user_by_email(db: Session, email: str):
-    from sqlalchemy import text
-
     result = db.execute(
         text("SELECT id FROM users WHERE LOWER(email) = LOWER(:email) LIMIT 1"),
         {"email": email},
@@ -105,26 +108,144 @@ def _is_trial_event(event: str, payload: dict) -> bool:
     return False
 
 
-def _build_token_bundle(
+def _frontend_base_url() -> str:
+    candidates = [
+        getattr(settings, "LGD_FRONT_URL", None),
+        getattr(settings, "FRONTEND_URL", None),
+    ]
+    for value in candidates:
+        url = str(value or "").strip()
+        if url:
+            return url.rstrip("/")
+    return DEFAULT_FRONT_URL
+
+
+def _token_expiration(hours: int) -> datetime:
+    return datetime.utcnow() + timedelta(hours=hours)
+
+
+def _ensure_activation_tokens_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS activation_tokens (
+                id SERIAL PRIMARY KEY,
+                email TEXT NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                access_type TEXT NULL,
+                plan TEXT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                used BOOLEAN NOT NULL DEFAULT FALSE,
+                used_at TIMESTAMP NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_activation_tokens_email
+            ON activation_tokens (email)
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_activation_tokens_token
+            ON activation_tokens (token)
+            """
+        )
+    )
+    # Harmonise la prod si la table existe déjà sans défaut sur created_at
+    db.execute(
+        text(
+            """
+            ALTER TABLE activation_tokens
+            ALTER COLUMN created_at SET DEFAULT NOW()
+            """
+        )
+    )
+    db.flush()
+
+
+def _create_activation_package(
     db: Session,
     *,
     email: str,
     access_type: str,
     plan: str,
-    expires_in_hours: int = 24,
+    expires_in_hours: int,
 ) -> dict:
-    token_data = create_activation_package(
-        db=db,
-        email=email,
-        access_type=access_type,
-        plan=plan,
-        expires_in_hours=expires_in_hours,
-        invalidate_old_tokens=True,
+    clean_email = str(email or "").strip().lower()
+    clean_access_type = str(access_type or "").strip().lower()
+    clean_plan = str(plan or "").strip().lower()
+
+    if not clean_email:
+        raise HTTPException(status_code=400, detail="Missing email")
+
+    _ensure_activation_tokens_table(db)
+
+    db.execute(
+        text(
+            """
+            UPDATE activation_tokens
+            SET used = TRUE,
+                used_at = NOW()
+            WHERE LOWER(email) = LOWER(:email)
+              AND COALESCE(access_type, '') = COALESCE(:access_type, '')
+              AND used = FALSE
+            """
+        ),
+        {
+            "email": clean_email,
+            "access_type": clean_access_type,
+        },
     )
+
+    token_value = secrets.token_urlsafe(32)
+    expires_at = _token_expiration(expires_in_hours)
+
+    row = db.execute(
+        text(
+            """
+            INSERT INTO activation_tokens (
+                email,
+                token,
+                access_type,
+                plan,
+                expires_at,
+                used,
+                created_at
+            )
+            VALUES (
+                :email,
+                :token,
+                :access_type,
+                :plan,
+                :expires_at,
+                FALSE,
+                NOW()
+            )
+            RETURNING token, expires_at, created_at
+            """
+        ),
+        {
+            "email": clean_email,
+            "token": token_value,
+            "access_type": clean_access_type,
+            "plan": clean_plan,
+            "expires_at": expires_at,
+        },
+    ).mappings().first()
+
+    activation_url = f"{_frontend_base_url()}/auth/activate?token={row['token']}"
+
     return {
-        "activation_token": token_data["token"],
-        "activation_url": token_data["activation_url"],
-        "token_expires_at": token_data["expires_at"],
+        "activation_token": row["token"],
+        "activation_url": activation_url,
+        "token_expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
     }
 
 
@@ -165,7 +286,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             duration_days=7,
         )
 
-        token_bundle = _build_token_bundle(
+        token_bundle = _create_activation_package(
             db=db,
             email=email,
             access_type="trial",
@@ -221,7 +342,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             duration_days=None,
         )
 
-        token_bundle = _build_token_bundle(
+        token_bundle = _create_activation_package(
             db=db,
             email=email,
             access_type="paid",

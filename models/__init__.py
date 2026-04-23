@@ -17,6 +17,7 @@ from importlib import import_module
 from typing import Any, Optional
 
 _MODEL_MODULES = [
+    "activation_token",
     "user_model",
     "sales_page_model",
     "ia_quota_model",
@@ -51,6 +52,11 @@ for _m in _MODEL_MODULES:
     _safe_import(_m)
 
 try:
+    from .activation_token import ActivationToken  # noqa: F401
+except Exception:
+    ActivationToken = None  # type: ignore
+
+try:
     from .user_model import User  # noqa: F401
 except Exception:
     User = None  # type: ignore
@@ -81,6 +87,7 @@ except Exception:
     LeadEngineMemory = None  # type: ignore
 
 __all__ = [
+    "ActivationToken",
     "User",
     "SalesPage",
     "IAQuota",

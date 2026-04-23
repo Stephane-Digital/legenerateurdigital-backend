@@ -10,12 +10,14 @@ from config.settings import settings
 from database import Base, engine
 
 # ✅ IMPORTANT: import the model modules BEFORE create_all()
+from models.activation_token import ActivationToken  # noqa: F401
 from models.coach_profile_model import CoachProfile  # noqa: F401
 from models.email_campaign_model import EmailCampaign  # noqa: F401
 from models.lead_engine_memory_model import LeadEngineMemory  # noqa: F401
 
 # ROUTES
 from routes.auth import router as auth_router
+from routes.auth_activation import router as auth_activation_router
 from routes.automations import router as automations_router
 from routes.carrousel import router as carrousel_router
 from routes.ai_text_routes import router as ai_text_router
@@ -28,6 +30,7 @@ from routes.campaigns import router as campaigns_router
 from routes.email_campaigns import router as email_campaigns_router
 from routes.content_history import router as content_history_router
 from routes.statut_ia import router as ia_status_router
+from routes import planner
 from routes.carrousel_slides import router as carrousel_slides_router
 from routes import library as library_routes
 from routes.planner_schedule import router as planner_schedule_router
@@ -49,6 +52,7 @@ from routes.lead_engine_ai import router as lead_engine_ai_router
 from routes import planner_make
 from routes.ai_caption import router as ai_caption_router
 from routes.password_reset import router as password_reset_router
+
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
 
@@ -150,6 +154,7 @@ def health():
 
 
 app.include_router(auth_router)
+app.include_router(auth_activation_router)
 app.include_router(automations_router)
 app.include_router(carrousel_router)
 app.include_router(ai_text_router)
@@ -162,6 +167,7 @@ app.include_router(campaigns_router)
 app.include_router(email_campaigns_router)
 app.include_router(content_history_router)
 app.include_router(ia_status_router)
+app.include_router(planner.router)
 app.include_router(carrousel_slides_router)
 app.include_router(library_routes.router)
 app.include_router(planner_schedule_router)

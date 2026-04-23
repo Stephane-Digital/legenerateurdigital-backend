@@ -38,7 +38,7 @@ def _user_base_plan(user) -> str:
 
 def _limit_for_plan(plan: str) -> int:
     p = str(plan or "essentiel").lower()
-    if "trial" in p or "starter" in p or "decouverte" in p or "découverte" in p:
+    if "trial" in p or "starter" in p or "azur" in p or "découverte" in p:
         return 70_000
     if "ult" in p:
         return 2_500_000
@@ -49,7 +49,7 @@ def _limit_for_plan(plan: str) -> int:
 
 def _normalize_quota_plan_name(raw_plan: str | None, limit_value: int = 0) -> str:
     v = str(raw_plan or "").strip().lower()
-    if v in {"trial", "starter", "decouverte", "découverte"}:
+    if v in {"trial", "starter", "azur", "découverte"}:
         return "trial"
     if v == "ultime":
         return "ultime"
@@ -117,7 +117,7 @@ def _fallback_quota(user, plan: str | None = None):
     return {
         "feature": "global",
         "plan": effective_plan,
-        "display_plan": "decouverte" if effective_plan == "trial" else effective_plan,
+        "display_plan": "azur" if effective_plan == "trial" else effective_plan,
         "tokens_used": 0,
         "tokens_limit": tokens_limit,
         "remaining": tokens_limit,
@@ -133,7 +133,7 @@ def serialize_quota(quota, *, plan_override: str | None = None, feature_override
         return {
             "feature": feature_override or "global",
             "plan": effective_plan,
-            "display_plan": "decouverte" if effective_plan == "trial" else effective_plan,
+            "display_plan": "azur" if effective_plan == "trial" else effective_plan,
             "tokens_used": 0,
             "tokens_limit": tokens_limit,
             "remaining": tokens_limit,
@@ -180,7 +180,7 @@ def serialize_quota(quota, *, plan_override: str | None = None, feature_override
     return {
         "feature": feature,
         "plan": plan,
-        "display_plan": "decouverte" if plan == "trial" else plan,
+        "display_plan": "azur" if plan == "trial" else plan,
         "tokens_used": used,
         "tokens_limit": limit,
         "remaining": remaining,
@@ -203,7 +203,7 @@ def _get_display_quota(db: Session, user):
 
         if data["tokens_limit"] == 70_000:
             data["plan"] = "trial"
-            data["display_plan"] = "decouverte"
+            data["display_plan"] = "azur"
 
         return data
     except Exception as e:

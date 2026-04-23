@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 from database import get_db
 from config.settings import settings
 from services.ai_quota_service import sync_plan_quotas
-from services.pending_access_service import upsert_pending_access
+from services.pending_access_service import (
+    mark_pending_access_active,
+    upsert_pending_access,
+)
+from services.token_service import create_activation_package
 
 router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
@@ -95,6 +99,29 @@ def _is_trial_event(event: str, payload: dict) -> bool:
     return False
 
 
+def _build_token_bundle(
+    db: Session,
+    *,
+    email: str,
+    access_type: str,
+    plan: str,
+    expires_in_hours: int = 24,
+) -> dict:
+    token_data = create_activation_package(
+        db=db,
+        email=email,
+        access_type=access_type,
+        plan=plan,
+        expires_in_hours=expires_in_hours,
+        invalidate_old_tokens=True,
+    )
+    return {
+        "activation_token": token_data["token"],
+        "activation_url": token_data["activation_url"],
+        "token_expires_at": token_data["expires_at"],
+    }
+
+
 @router.post("/")
 async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
     try:
@@ -145,14 +172,25 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
                 duration_days=7,
             )
 
+            token_bundle = _build_token_bundle(
+                db=db,
+                email=email,
+                access_type="trial",
+                plan="trial",
+                expires_in_hours=24,
+            )
+
             user_id = _get_user_by_email(db, email)
             if user_id:
                 sync_plan_quotas(db=db, user_id=int(user_id), plan="trial")
+                mark_pending_access_active(db=db, email=email)
                 db.commit()
                 return {
                     "status": "trial_active_existing_user",
                     "plan": "trial",
                     "email": email,
+                    "pending": pending,
+                    **token_bundle,
                 }
 
             db.commit()
@@ -160,6 +198,8 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
                 "status": "trial_pending",
                 "email": email,
                 "trial_ends_at": pending.get("ends_at"),
+                "pending": pending,
+                **token_bundle,
             }
 
         priceplan = payload.get("pricePlan") or {}
@@ -177,11 +217,6 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
             if not plan:
                 return {"status": "ignored", "reason": "unknown_plan"}
 
-            if user_id:
-                sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
-                db.commit()
-                return {"status": "success", "plan": plan}
-
             pending = upsert_pending_access(
                 db=db,
                 email=email,
@@ -192,13 +227,34 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
                 payload=payload,
                 duration_days=None,
             )
-            db.commit()
 
+            token_bundle = _build_token_bundle(
+                db=db,
+                email=email,
+                access_type="paid",
+                plan=plan,
+                expires_in_hours=48,
+            )
+
+            if user_id:
+                sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
+                mark_pending_access_active(db=db, email=email)
+                db.commit()
+                return {
+                    "status": "success_existing_user",
+                    "email": email,
+                    "plan": plan,
+                    "pending": pending,
+                    **token_bundle,
+                }
+
+            db.commit()
             return {
                 "status": "paid_pending",
                 "email": email,
                 "plan": plan,
                 "pending": pending,
+                **token_bundle,
             }
 
         if event == "SALE_CANCELED":

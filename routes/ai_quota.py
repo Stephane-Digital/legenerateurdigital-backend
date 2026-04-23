@@ -38,7 +38,7 @@ def _user_base_plan(user) -> str:
 
 def _limit_for_plan(plan: str) -> int:
     p = str(plan or "essentiel").lower()
-    if "trial" in p or "starter" in p or "azur" in p or "découverte" in p:
+    if p in {"trial", "starter", "azur"}:
         return 70_000
     if "ult" in p:
         return 2_500_000
@@ -47,9 +47,9 @@ def _limit_for_plan(plan: str) -> int:
     return 400_000
 
 
-def _normalize_quota_plan_name(raw_plan: str | None, limit_value: int = 0) -> str:
+def _normalize_plan_key(raw_plan: str | None, limit_value: int = 0) -> str:
     v = str(raw_plan or "").strip().lower()
-    if v in {"trial", "starter", "azur", "découverte"}:
+    if v in {"trial", "starter", "azur", "decouverte", "découverte"}:
         return "trial"
     if v == "ultime":
         return "ultime"
@@ -71,7 +71,13 @@ def _normalize_quota_plan_name(raw_plan: str | None, limit_value: int = 0) -> st
     return "essentiel"
 
 
-def _quota_plan(quota) -> str | None:
+def _display_plan_from_key(plan_key: str) -> str:
+    if plan_key == "trial":
+        return "azur"
+    return plan_key
+
+
+def _quota_plan_key(quota) -> str | None:
     try:
         raw = (
             getattr(quota, "plan", None)
@@ -84,15 +90,15 @@ def _quota_plan(quota) -> str | None:
             or getattr(quota, "credits", None)
             or 0
         )
-        return _normalize_quota_plan_name(raw, _to_int(limit_raw, 0))
+        return _normalize_plan_key(raw, _to_int(limit_raw, 0))
     except Exception:
         return None
 
 
-def _effective_plan(db: Session, user) -> str:
+def _effective_plan_key(db: Session, user) -> str:
     try:
         quota = get_or_create_quota(db, _user_id(user), feature="coach")
-        qp = _quota_plan(quota)
+        qp = _quota_plan_key(quota)
         if qp:
             return str(qp)
     except Exception as e:
@@ -104,39 +110,48 @@ def _effective_plan(db: Session, user) -> str:
             user_id=_user_id(user),
             base_plan=_user_base_plan(user),
         )
-        return _normalize_quota_plan_name(str(plan or _user_base_plan(user)), 0)
+        return _normalize_plan_key(str(plan or _user_base_plan(user)), 0)
     except Exception as e:
         print("AI_QUOTA_EFFECTIVE_PLAN_ERROR:", repr(e))
-        return _normalize_quota_plan_name(_user_base_plan(user), 0)
+        return _normalize_plan_key(_user_base_plan(user), 0)
 
 
-def _fallback_quota(user, plan: str | None = None):
-    effective_plan = _normalize_quota_plan_name(str(plan or _user_base_plan(user) or "essentiel"), 0)
-    tokens_limit = _limit_for_plan(effective_plan)
+def _fallback_quota(user, plan_key: str | None = None):
+    effective_key = _normalize_plan_key(str(plan_key or _user_base_plan(user) or "essentiel"), 0)
+    tokens_limit = _limit_for_plan(effective_key)
+    display_plan = _display_plan_from_key(effective_key)
+
+    daily_limit = 10_000 if effective_key == "trial" else max(1, int(tokens_limit / 30))
 
     return {
         "feature": "global",
-        "plan": effective_plan,
-        "display_plan": "azur" if effective_plan == "trial" else effective_plan,
+        "plan": display_plan,
+        "display_plan": display_plan,
+        "plan_key": effective_key,
         "tokens_used": 0,
         "tokens_limit": tokens_limit,
         "remaining": tokens_limit,
+        "daily_limit": daily_limit,
         "created_at": None,
         "reset_at": None,
     }
 
 
-def serialize_quota(quota, *, plan_override: str | None = None, feature_override: str | None = None):
+def serialize_quota(quota, *, plan_key_override: str | None = None, feature_override: str | None = None):
     if quota is None:
-        effective_plan = _normalize_quota_plan_name(str(plan_override or "essentiel"), 0)
-        tokens_limit = _limit_for_plan(effective_plan)
+        effective_key = _normalize_plan_key(str(plan_key_override or "essentiel"), 0)
+        tokens_limit = _limit_for_plan(effective_key)
+        display_plan = _display_plan_from_key(effective_key)
+        daily_limit = 10_000 if effective_key == "trial" else max(1, int(tokens_limit / 30))
         return {
             "feature": feature_override or "global",
-            "plan": effective_plan,
-            "display_plan": "azur" if effective_plan == "trial" else effective_plan,
+            "plan": display_plan,
+            "display_plan": display_plan,
+            "plan_key": effective_key,
             "tokens_used": 0,
             "tokens_limit": tokens_limit,
             "remaining": tokens_limit,
+            "daily_limit": daily_limit,
             "created_at": None,
             "reset_at": None,
         }
@@ -157,16 +172,16 @@ def serialize_quota(quota, *, plan_override: str | None = None, feature_override
     limit = _to_int(limit_raw, 0)
 
     raw_plan = (
-        plan_override
+        plan_key_override
         or getattr(quota, "plan", None)
         or getattr(quota, "plan_name", None)
         or getattr(quota, "subscription_plan", None)
         or "essentiel"
     )
-    plan = _normalize_quota_plan_name(str(raw_plan), limit)
+    plan_key = _normalize_plan_key(str(raw_plan), limit)
 
     if limit <= 0:
-        limit = _limit_for_plan(plan)
+        limit = _limit_for_plan(plan_key)
 
     remaining_raw = getattr(quota, "remaining", None)
     if remaining_raw is None:
@@ -177,38 +192,45 @@ def serialize_quota(quota, *, plan_override: str | None = None, feature_override
     created_at = getattr(quota, "created_at", None) or getattr(quota, "createdAt", None)
     reset_at = getattr(quota, "reset_at", None) or getattr(quota, "resetAt", None)
 
+    display_plan = _display_plan_from_key(plan_key)
+    daily_limit = 10_000 if plan_key == "trial" else max(1, int(limit / 30))
+
     return {
         "feature": feature,
-        "plan": plan,
-        "display_plan": "azur" if plan == "trial" else plan,
+        "plan": display_plan,
+        "display_plan": display_plan,
+        "plan_key": plan_key,
         "tokens_used": used,
         "tokens_limit": limit,
         "remaining": remaining,
+        "daily_limit": daily_limit,
         "created_at": str(created_at) if created_at else None,
         "reset_at": str(reset_at) if reset_at else None,
     }
 
 
 def _get_display_quota(db: Session, user):
-    effective_plan = _effective_plan(db, user)
+    effective_key = _effective_plan_key(db, user)
 
     try:
         quota = get_or_create_quota(db, _user_id(user), feature="coach")
-        data = serialize_quota(quota, plan_override=effective_plan, feature_override="global")
+        data = serialize_quota(quota, plan_key_override=effective_key, feature_override="global")
 
-        min_limit = _limit_for_plan(effective_plan)
+        min_limit = _limit_for_plan(effective_key)
         if data["tokens_limit"] < min_limit:
             data["tokens_limit"] = min_limit
             data["remaining"] = max(min_limit - _to_int(data["tokens_used"], 0), 0)
 
         if data["tokens_limit"] == 70_000:
-            data["plan"] = "trial"
+            data["plan_key"] = "trial"
+            data["plan"] = "azur"
             data["display_plan"] = "azur"
+            data["daily_limit"] = 10_000
 
         return data
     except Exception as e:
         print("AI_QUOTA_DISPLAY_ERROR:", repr(e))
-        return _fallback_quota(user, effective_plan)
+        return _fallback_quota(user, effective_key)
 
 
 @router.get("/")
@@ -227,14 +249,14 @@ def consume_quota(amount: int, db: Session = Depends(get_db), user=Depends(get_c
         quota = update_quota(db, _user_id(user), amount, feature="coach")
         if quota is None:
             raise HTTPException(status_code=400, detail="Quota insuffisant")
-        effective_plan = _effective_plan(db, user)
-        data = serialize_quota(quota, plan_override=effective_plan, feature_override="global")
+        effective_key = _effective_plan_key(db, user)
+        data = serialize_quota(quota, plan_key_override=effective_key, feature_override="global")
         data["message"] = "Quota mis à jour"
         return data
     except HTTPException:
         raise
     except Exception as e:
         print("AI_QUOTA_CONSUME_ERROR:", repr(e))
-        fallback = _fallback_quota(user, _effective_plan(db, user))
+        fallback = _fallback_quota(user, _effective_plan_key(db, user))
         fallback["message"] = "Quota mis à jour"
         return fallback

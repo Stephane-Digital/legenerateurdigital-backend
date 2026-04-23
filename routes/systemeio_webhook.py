@@ -4,6 +4,7 @@ import hashlib
 from typing import Any, Optional, Set
 
 from fastapi import APIRouter, Request, HTTPException, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -16,6 +17,11 @@ from services.pending_access_service import (
 from services.token_service import create_activation_package
 
 router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
+
+
+class SystemeioTestPayload(BaseModel):
+    event: str
+    payload: dict
 
 
 def _compute_signature(secret: str, raw_body: bytes) -> str:
@@ -122,6 +128,139 @@ def _build_token_bundle(
     }
 
 
+def _process_event(*, db: Session, event: str, payload: dict) -> dict:
+    event = (event or "").upper()
+
+    print("🔥 WEBHOOK SIO PAYLOAD:", payload)
+    print("🔥 EVENT:", event)
+
+    customer = payload.get("customer") or {}
+    email = (
+        customer.get("email")
+        or payload.get("email")
+        or payload.get("contact_email")
+        or ""
+    ).strip().lower()
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Missing email")
+
+    full_name = (
+        customer.get("name")
+        or payload.get("name")
+        or payload.get("full_name")
+        or payload.get("fullName")
+        or None
+    )
+
+    if _is_trial_event(event, payload):
+        pending = upsert_pending_access(
+            db=db,
+            email=email,
+            full_name=full_name,
+            access_type="trial",
+            plan="trial",
+            source_event=event,
+            payload=payload,
+            duration_days=7,
+        )
+
+        token_bundle = _build_token_bundle(
+            db=db,
+            email=email,
+            access_type="trial",
+            plan="trial",
+            expires_in_hours=24,
+        )
+
+        user_id = _get_user_by_email(db, email)
+        if user_id:
+            sync_plan_quotas(db=db, user_id=int(user_id), plan="trial")
+            mark_pending_access_active(db=db, email=email)
+            db.commit()
+            return {
+                "status": "trial_active_existing_user",
+                "plan": "trial",
+                "email": email,
+                "pending": pending,
+                **token_bundle,
+            }
+
+        db.commit()
+        return {
+            "status": "trial_pending",
+            "email": email,
+            "trial_ends_at": pending.get("ends_at"),
+            "pending": pending,
+            **token_bundle,
+        }
+
+    priceplan = payload.get("pricePlan") or {}
+    priceplan_id = priceplan.get("id")
+
+    try:
+        priceplan_id = int(priceplan_id)
+    except Exception:
+        priceplan_id = None
+
+    plan = _resolve_plan(priceplan_id)
+    user_id = _get_user_by_email(db, email)
+
+    if event == "NEW_SALE":
+        if not plan:
+            return {"status": "ignored", "reason": "unknown_plan"}
+
+        pending = upsert_pending_access(
+            db=db,
+            email=email,
+            full_name=full_name,
+            access_type="paid",
+            plan=plan,
+            source_event=event,
+            payload=payload,
+            duration_days=None,
+        )
+
+        token_bundle = _build_token_bundle(
+            db=db,
+            email=email,
+            access_type="paid",
+            plan=plan,
+            expires_in_hours=48,
+        )
+
+        if user_id:
+            sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
+            mark_pending_access_active(db=db, email=email)
+            db.commit()
+            return {
+                "status": "success_existing_user",
+                "email": email,
+                "plan": plan,
+                "pending": pending,
+                **token_bundle,
+            }
+
+        db.commit()
+        return {
+            "status": "paid_pending",
+            "email": email,
+            "plan": plan,
+            "pending": pending,
+            **token_bundle,
+        }
+
+    if event == "SALE_CANCELED":
+        if not user_id:
+            return {"status": "ignored", "reason": "user_not_found"}
+
+        sync_plan_quotas(db=db, user_id=int(user_id), plan="essentiel")
+        db.commit()
+        return {"status": "canceled", "plan": "essentiel"}
+
+    return {"status": "ignored", "event": event}
+
+
 @router.post("/")
 async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
     try:
@@ -138,138 +277,23 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="Invalid signature")
 
         payload = json.loads(raw.decode("utf-8"))
-        print("🔥 WEBHOOK SIO PAYLOAD:", payload)
-        print("🔥 EVENT:", event)
-
-        customer = payload.get("customer") or {}
-        email = (
-            customer.get("email")
-            or payload.get("email")
-            or payload.get("contact_email")
-            or ""
-        ).strip().lower()
-
-        if not email:
-            raise HTTPException(status_code=400, detail="Missing email")
-
-        full_name = (
-            customer.get("name")
-            or payload.get("name")
-            or payload.get("full_name")
-            or payload.get("fullName")
-            or None
-        )
-
-        if _is_trial_event(event, payload):
-            pending = upsert_pending_access(
-                db=db,
-                email=email,
-                full_name=full_name,
-                access_type="trial",
-                plan="trial",
-                source_event=event,
-                payload=payload,
-                duration_days=7,
-            )
-
-            token_bundle = _build_token_bundle(
-                db=db,
-                email=email,
-                access_type="trial",
-                plan="trial",
-                expires_in_hours=24,
-            )
-
-            user_id = _get_user_by_email(db, email)
-            if user_id:
-                sync_plan_quotas(db=db, user_id=int(user_id), plan="trial")
-                mark_pending_access_active(db=db, email=email)
-                db.commit()
-                return {
-                    "status": "trial_active_existing_user",
-                    "plan": "trial",
-                    "email": email,
-                    "pending": pending,
-                    **token_bundle,
-                }
-
-            db.commit()
-            return {
-                "status": "trial_pending",
-                "email": email,
-                "trial_ends_at": pending.get("ends_at"),
-                "pending": pending,
-                **token_bundle,
-            }
-
-        priceplan = payload.get("pricePlan") or {}
-        priceplan_id = priceplan.get("id")
-
-        try:
-            priceplan_id = int(priceplan_id)
-        except Exception:
-            priceplan_id = None
-
-        plan = _resolve_plan(priceplan_id)
-        user_id = _get_user_by_email(db, email)
-
-        if event == "NEW_SALE":
-            if not plan:
-                return {"status": "ignored", "reason": "unknown_plan"}
-
-            pending = upsert_pending_access(
-                db=db,
-                email=email,
-                full_name=full_name,
-                access_type="paid",
-                plan=plan,
-                source_event=event,
-                payload=payload,
-                duration_days=None,
-            )
-
-            token_bundle = _build_token_bundle(
-                db=db,
-                email=email,
-                access_type="paid",
-                plan=plan,
-                expires_in_hours=48,
-            )
-
-            if user_id:
-                sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
-                mark_pending_access_active(db=db, email=email)
-                db.commit()
-                return {
-                    "status": "success_existing_user",
-                    "email": email,
-                    "plan": plan,
-                    "pending": pending,
-                    **token_bundle,
-                }
-
-            db.commit()
-            return {
-                "status": "paid_pending",
-                "email": email,
-                "plan": plan,
-                "pending": pending,
-                **token_bundle,
-            }
-
-        if event == "SALE_CANCELED":
-            if not user_id:
-                return {"status": "ignored", "reason": "user_not_found"}
-
-            sync_plan_quotas(db=db, user_id=int(user_id), plan="essentiel")
-            db.commit()
-            return {"status": "canceled", "plan": "essentiel"}
-
-        return {"status": "ignored", "event": event}
+        return _process_event(db=db, event=event, payload=payload)
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         print("❌ WEBHOOK ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test")
+async def systemeio_webhook_test(data: SystemeioTestPayload, db: Session = Depends(get_db)):
+    try:
+        return _process_event(db=db, event=data.event, payload=data.payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print("❌ WEBHOOK TEST ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))

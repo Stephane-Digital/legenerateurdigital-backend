@@ -22,6 +22,7 @@ router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 DEFAULT_FRONT_URL = "https://legenerateurdigital-front.vercel.app"
 DEFAULT_TOKEN_HOURS = 24
+ROUTE_VERSION = "LGD_TOKEN_SYSTEM_PROD_V2_2026_04_24"
 
 
 class SystemeioTestPayload(BaseModel):
@@ -78,6 +79,14 @@ def _get_user_by_email(db: Session, email: str):
     return result[0] if result else None
 
 
+def _current_database_name(db: Session) -> str:
+    try:
+        row = db.execute(text("SELECT current_database() AS db_name")).mappings().first()
+        return str(row["db_name"]) if row and row.get("db_name") else "unknown"
+    except Exception:
+        return "unknown"
+
+
 def _payload_text(payload: Any) -> str:
     try:
         return json.dumps(payload, ensure_ascii=False).lower()
@@ -109,15 +118,9 @@ def _is_trial_event(event: str, payload: dict) -> bool:
 
 
 def _frontend_base_url() -> str:
-    candidates = [
-        getattr(settings, "LGD_FRONT_URL", None),
-        getattr(settings, "FRONTEND_URL", None),
-    ]
-    for value in candidates:
-        url = str(value or "").strip()
-        if url:
-            return url.rstrip("/")
-    return DEFAULT_FRONT_URL
+    # PROD ONLY: les liens d'activation envoyés aux clients doivent toujours pointer vers Vercel.
+    # On ne lit plus FRONTEND_URL/LGD_FRONT_URL ici pour éviter tout retour accidentel vers localhost.
+    return DEFAULT_FRONT_URL.rstrip("/")
 
 
 def _token_expiration(hours: int) -> datetime:
@@ -246,6 +249,9 @@ def _create_activation_package(
         "activation_token": row["token"],
         "activation_url": activation_url,
         "token_expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
+        "route_version": ROUTE_VERSION,
+        "front_base_used": _frontend_base_url(),
+        "db_name": _current_database_name(db),
     }
 
 
@@ -418,3 +424,12 @@ async def systemeio_webhook_test(data: SystemeioTestPayload, db: Session = Depen
         db.rollback()
         print("❌ WEBHOOK TEST ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/version")
+def systemeio_webhook_version(db: Session = Depends(get_db)):
+    return {
+        "route_version": ROUTE_VERSION,
+        "front_base_used": _frontend_base_url(),
+        "db_name": _current_database_name(db),
+    }

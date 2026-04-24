@@ -46,7 +46,6 @@ from routes.social_connections import router as social_connections_router
 from routes.jobs_publish_due import router as jobs_publish_due_router
 from routes.email_systeme_io import router as systeme_router
 from routes.systeme_sync import router as systeme_sync_router
-from routes.systeme_webhooks import router as systeme_webhooks_router
 from routes.email_analytics_dashboard import router as email_analytics_router
 from routes.lead_engine_ai import router as lead_engine_ai_router
 from routes import planner_make
@@ -183,7 +182,6 @@ app.include_router(systemeio_webhook_router)
 app.include_router(jobs_publish_due_router)
 app.include_router(systeme_router)
 app.include_router(systeme_sync_router)
-app.include_router(systeme_webhooks_router)
 app.include_router(email_analytics_router)
 app.include_router(lead_engine_ai_router)
 app.include_router(planner_make.router)

@@ -256,33 +256,6 @@ def _create_activation_package(
     }
 
 
-def _send_activation_email(
-    *,
-    email: str,
-    full_name: Optional[str],
-    activation_url: str,
-    access_type: str,
-    plan: str,
-    expires_in_hours: int,
-) -> dict:
-    """
-    Envoi email d'activation LGD.
-    Sécurité produit : l'échec d'envoi email ne doit jamais casser le webhook SIO.
-    """
-    try:
-        return send_activation_email_safely(
-            to_email=email,
-            full_name=full_name,
-            activation_url=activation_url,
-            access_type=access_type,
-            plan=plan,
-            expires_in_hours=expires_in_hours,
-        )
-    except Exception as exc:
-        print("⚠️ ACTIVATION EMAIL UNEXPECTED ERROR:", repr(exc))
-        return {"sent": False, "error": str(exc)}
-
-
 def _process_event(*, db: Session, event: str, payload: dict) -> dict:
     event = (event or "").upper()
 
@@ -325,15 +298,16 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             email=email,
             access_type="trial",
             plan="trial",
-            expires_in_hours=24,
+            expires_in_hours=48,
         )
-        activation_email = _send_activation_email(
-            email=email,
-            full_name=full_name,
-            activation_url=token_bundle["activation_url"],
+
+        email_delivery = send_activation_email_safely(
+            to_email=email,
+            activation_url=str(token_bundle.get("activation_url") or ""),
             access_type="trial",
             plan="trial",
-            expires_in_hours=24,
+            expires_in_hours=48,
+            full_name=full_name,
         )
 
         user_id = _get_user_by_email(db, email)
@@ -346,7 +320,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
                 "plan": "trial",
                 "email": email,
                 "pending": pending,
-                "activation_email": activation_email,
+                "email_delivery": email_delivery,
                 **token_bundle,
             }
 
@@ -356,7 +330,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             "email": email,
             "trial_ends_at": pending.get("ends_at"),
             "pending": pending,
-            "activation_email": activation_email,
+            "email_delivery": email_delivery,
             **token_bundle,
         }
 
@@ -393,13 +367,14 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             plan=plan,
             expires_in_hours=48,
         )
-        activation_email = _send_activation_email(
-            email=email,
-            full_name=full_name,
-            activation_url=token_bundle["activation_url"],
+
+        email_delivery = send_activation_email_safely(
+            to_email=email,
+            activation_url=str(token_bundle.get("activation_url") or ""),
             access_type="paid",
             plan=plan,
             expires_in_hours=48,
+            full_name=full_name,
         )
 
         if user_id:
@@ -411,7 +386,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
                 "email": email,
                 "plan": plan,
                 "pending": pending,
-                "activation_email": activation_email,
+                "email_delivery": email_delivery,
                 **token_bundle,
             }
 
@@ -421,7 +396,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             "email": email,
             "plan": plan,
             "pending": pending,
-            "activation_email": activation_email,
+            "email_delivery": email_delivery,
             **token_bundle,
         }
 

@@ -188,9 +188,10 @@ def send_activation_email_safely(
         RESEND_API_URL,
         data=json.dumps(payload).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
+    "Authorization": f"Bearer {api_key}",
+    "Content-Type": "application/json",
+    "User-Agent": "LGD-Backend/1.0",
+},
         method="POST",
     )
 

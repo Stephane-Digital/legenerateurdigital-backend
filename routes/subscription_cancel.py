@@ -65,8 +65,11 @@ def cancel_subscription_request(
             },
         )
 
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Erreur envoi email")
+       if response.status_code not in (200, 202):
+    raise HTTPException(
+        status_code=500,
+        detail=f"Erreur Resend {response.status_code}: {response.text}",
+    )
 
         return {"success": True, "message": "Demande envoyée"}
 

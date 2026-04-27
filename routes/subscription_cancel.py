@@ -1,4 +1,5 @@
 from datetime import datetime
+import html
 import os
 from typing import Any
 
@@ -12,8 +13,19 @@ from routes.auth import get_current_user
 router = APIRouter(prefix="/subscription", tags=["Subscription"])
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
-ADMIN_EMAIL = "contact@legenerateurdigital.com"
-FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "LGD <no-reply@legenerateurdigital.com>")
+
+# IMPORTANT LGD :
+# On réutilise les variables déjà présentes en production Render.
+# Le domaine est déjà validé puisque les emails d'activation token partent correctement.
+FROM_EMAIL = os.getenv(
+    "LGD_ACTIVATION_FROM_EMAIL",
+    "Le Générateur Digital <no-reply@legenerateurdigital.com>",
+).strip()
+
+ADMIN_EMAIL = os.getenv(
+    "LGD_SUPPORT_EMAIL",
+    "contact@legenerateurdigital.com",
+).strip()
 
 
 def _get_user_value(user: Any, key: str, default: str = "") -> str:
@@ -25,7 +37,7 @@ def _get_user_value(user: Any, key: str, default: str = "") -> str:
     if value is None:
         return default
 
-    return str(value)
+    return str(value).strip()
 
 
 @router.post("/cancel-request")
@@ -46,17 +58,32 @@ def cancel_subscription_request(
     if not RESEND_API_KEY:
         raise HTTPException(
             status_code=500,
-            detail="RESEND_API_KEY manquant côté serveur.",
+            detail="RESEND_API_KEY manquant côté serveur Render.",
         )
 
+    if not FROM_EMAIL:
+        raise HTTPException(
+            status_code=500,
+            detail="LGD_ACTIVATION_FROM_EMAIL manquant côté serveur Render.",
+        )
+
+    if not ADMIN_EMAIL:
+        raise HTTPException(
+            status_code=500,
+            detail="LGD_SUPPORT_EMAIL manquant côté serveur Render.",
+        )
+
+    safe_user_name = html.escape(user_name)
+    safe_user_email = html.escape(user_email)
+    safe_user_plan = html.escape(user_plan)
     now = datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC")
 
     html_content = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;padding:20px;color:#111;">
+    <div style="font-family:Arial,Helvetica,sans-serif;padding:20px;color:#111;line-height:1.6;">
       <h2 style="margin:0 0 16px;">Demande de résiliation LGD</h2>
-      <p><strong>Nom :</strong> {user_name}</p>
-      <p><strong>Email :</strong> {user_email}</p>
-      <p><strong>Plan actuel :</strong> {user_plan}</p>
+      <p><strong>Nom :</strong> {safe_user_name}</p>
+      <p><strong>Email :</strong> {safe_user_email}</p>
+      <p><strong>Plan actuel :</strong> {safe_user_plan}</p>
       <p><strong>Date de demande :</strong> {now}</p>
       <hr style="border:none;border-top:1px solid #ddd;margin:20px 0;" />
       <p>
@@ -68,6 +95,15 @@ def cancel_subscription_request(
       </p>
     </div>
     """
+
+    text_content = (
+        "Demande de résiliation LGD\n\n"
+        f"Nom : {user_name}\n"
+        f"Email : {user_email}\n"
+        f"Plan actuel : {user_plan}\n"
+        f"Date de demande : {now}\n\n"
+        "Action à effectuer : résilier manuellement l'abonnement correspondant dans Systeme.io."
+    )
 
     try:
         response = requests.post(
@@ -82,6 +118,7 @@ def cancel_subscription_request(
                 "reply_to": user_email,
                 "subject": "Demande de résiliation abonnement LGD",
                 "html": html_content,
+                "text": text_content,
             },
             timeout=20,
         )
@@ -91,13 +128,32 @@ def cancel_subscription_request(
             detail=f"Erreur réseau Resend: {str(exc)}",
         )
 
+    response_text = response.text or ""
+
+    try:
+        response_json = response.json()
+    except ValueError:
+        response_json = {}
+
     if response.status_code not in (200, 202):
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur Resend {response.status_code}: {response.text}",
+            detail={
+                "message": "Resend a refusé l'envoi de l'email de résiliation.",
+                "resend_status": response.status_code,
+                "resend_body": response_text,
+                "from": FROM_EMAIL,
+                "to": ADMIN_EMAIL,
+            },
         )
+
+    resend_id = response_json.get("id") if isinstance(response_json, dict) else None
 
     return {
         "success": True,
-        "message": "Demande de résiliation envoyée.",
+        "message": "Demande de résiliation envoyée à LGD.",
+        "resend_status": response.status_code,
+        "resend_id": resend_id,
+        "from": FROM_EMAIL,
+        "to": ADMIN_EMAIL,
     }

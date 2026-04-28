@@ -387,7 +387,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
         user_id = _get_user_by_email(db, email)
         if user_id:
             sync_plan_quotas(db=db, user_id=int(user_id), plan="trial")
-            mark_pending_access_active(db=db, email)
+            mark_pending_access_active(db=db, email=email)
             db.commit()
             return {
                 "status": "trial_active_existing_user",
@@ -453,7 +453,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
 
         if user_id:
             sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
-            mark_pending_access_active(db=db, email)
+            mark_pending_access_active(db=db, email=email)
             db.commit()
             return {
                 "status": "success_existing_user",

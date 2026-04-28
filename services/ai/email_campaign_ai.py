@@ -56,6 +56,52 @@ ANGLE_BANK = {
     ],
 }
 
+CTA_VARIANTS_V3 = [
+    "Découvrir maintenant",
+    "Voir comment ça fonctionne",
+    "Accéder à la méthode",
+    "Passer à l’action aujourd’hui",
+    "Commencer simplement",
+]
+
+VIRAL_ANGLE_MODES_V3 = [
+    "mythe à casser",
+    "erreur fréquente",
+    "avant/après",
+    "objection retournée",
+    "micro-story",
+    "déclic pédagogique",
+    "urgence douce",
+    "comparaison avec le statu quo",
+]
+
+
+def _v3_context_block(payload: Any) -> str:
+    niche = _clean_text(_get(payload, "niche"), "")
+    audience = _clean_text(_get(payload, "target_audience"), "")
+    offer = _clean_text(_get(payload, "offer_name"), "")
+    tone = _clean_text(_get(payload, "tone"), "premium")
+    level = _clean_text(_get(payload, "level"), "")
+    if not level:
+        raw = f"{niche} {audience} {offer}".lower()
+        if any(w in raw for w in ["débutant", "débutants", "simple", "lancer"]):
+            level = "beginner"
+        elif any(w in raw for w in ["expert", "avancé", "scaling", "b2b", "premium"]):
+            level = "advanced"
+        else:
+            level = "intermediate"
+
+    return f"""
+CONTEXTE PERSONNALISATION V3
+- Niche: {niche or "à inférer"}
+- Audience: {audience or "à inférer"}
+- Offre: {offer or "à inférer"}
+- Ton préféré: {tone}
+- Niveau détecté: {level}
+- Règle: adapte la pédagogie, la densité et le vocabulaire à ce niveau.
+""".strip()
+
+
 SECTION_RE = {
     "subject": re.compile(r"SUJET\s*:\s*(.+?)(?=\n(?:PREHEADER|PRÉHEADER)\s*:|\Z)", re.IGNORECASE | re.DOTALL),
     "preheader": re.compile(r"(?:PREHEADER|PRÉHEADER)\s*:\s*(.+?)(?=\nCORPS\s*:|\nBODY\s*:|\Z)", re.IGNORECASE | re.DOTALL),
@@ -174,6 +220,7 @@ CONTEXTE
 - Jour: {day}
 - Type d'email: {email_type}
 - Angle obligatoire: {angle}
+- Mode viral V3 recommandé: {random.choice(VIRAL_ANGLE_MODES_V3)}
 - Variation unique anti-répétition: {nonce}
 - Offre: {offer_name}
 - Audience: {target_audience}
@@ -183,8 +230,11 @@ CONTEXTE
 - Preuve / crédibilité: {proof or "non précisée, reste crédible et évite les fausses preuves"}
 - Contexte produit: {product_context or "non précisé"}
 - CTA principal: {primary_cta}
+- Variantes CTA possibles: {", ".join(CTA_VARIANTS_V3)}
 - Ton: {tone}
 - Expéditeur: {sender_name}
+
+{_v3_context_block(payload)}
 
 RAISONNEMENT SILENCIEUX AVANT RÉDACTION
 Analyse sans l'afficher :
@@ -206,6 +256,8 @@ RÈGLES DE COPYWRITING
 - Si l'email est "relance" : urgence douce + bénéfice + décision simple.
 - Si l'email est "vente" : avant/après + valeur + CTA.
 - Ne signe pas l'email dans le CORPS. Le frontend ajoute la signature.
+- Si le CTA principal est faible ou trop vague, rends-le plus désirable sans changer l'intention.
+- Crée une sensation d'élan : le lecteur doit savoir quoi faire ensuite.
 - N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
 
 FORMAT STRICT

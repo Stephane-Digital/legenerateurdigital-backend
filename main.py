@@ -53,6 +53,7 @@ from routes.ai_caption import router as ai_caption_router
 from routes.password_reset import router as password_reset_router
 from routes.subscription_cancel import router as subscription_cancel_router
 from routes.trend_radar import router as trend_radar_router
+from routes.cmo_ai import router as cmo_ai_router
 
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
@@ -191,6 +192,7 @@ app.include_router(ai_caption_router)
 app.include_router(password_reset_router)
 app.include_router(subscription_cancel_router)
 app.include_router(trend_radar_router)
+app.include_router(cmo_ai_router)
 
 
 print("========== ROUTES CHARGEES ==========")

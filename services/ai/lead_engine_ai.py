@@ -39,6 +39,8 @@ Règles absolues :
 - jamais de copie mot à mot d'un contenu fourni ;
 - si le brief est faible, enrichis-le avec des hypothèses raisonnables clairement utiles ;
 - propose des variantes A/B quand cela augmente la conversion.
+- ajoute systématiquement un angle principal recommandé et explique brièvement pourquoi il est prioritaire.
+- si possible, propose une version "simple débutant" et une version "premium avancée".
 '''.strip()
 
 
@@ -136,6 +138,7 @@ INSTRUCTIONS DE SORTIE
 - Si l'objectif est un lead magnet, fournis : titre, promesse, plan, bénéfices, hook, CTA, angle différenciant.
 - Si l'objectif est hooks/CTA, fournis des variantes A/B/C fortes et différenciées.
 - Termine par une recommandation courte : "À utiliser en priorité : ...".
+- Ajoute une mini-section "Pourquoi cet angle peut convertir" en 2 lignes maximum.
 '''.strip()
 
 

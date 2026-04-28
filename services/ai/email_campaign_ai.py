@@ -124,9 +124,7 @@ def _fallback_email(*, day: int, email_type: str, offer_name: str, target_audien
         f"Bonjour,\n\n"
         f"{intros[email_type]}\n\n"
         f"{middles[email_type]}\n\n"
-        f"Angle du jour : {angle}.\n\n"
         f"{closes[email_type]}\n\n"
-        f"À très vite,\n{sender_name}\n\n"
         f"CTA : {primary_cta}"
     )
     return {
@@ -159,33 +157,58 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
     campaign_type = _clean_text(_get(payload, "campaign_type"), "vente")
     campaign_name = _clean_text(_get(payload, "name"), "Campagne E-mailing IA")
-    return f"""
-Tu écris UN SEUL email marketing en français, premium, humain, concret, vraiment distinct des autres jours.
-Jour: {day}
-Type: {email_type}
-Angle obligatoire: {angle}
-Variation unique obligatoire: {nonce}
+    product_context = _clean_text(_get(payload, "product_context"), "")
+    objection = _clean_text(_get(payload, "main_objection"), "")
+    proof = _clean_text(_get(payload, "proof"), "")
 
-Contexte:
+    return f"""
+Tu es Emailing IA LGD V2 : copywriter senior direct-response + stratège Systeme.io.
+
+MISSION
+Écris UN SEUL email marketing en français, prêt à être utilisé dans une séquence Systeme.io.
+L'email doit être humain, naturel, crédible, orienté conversion, et distinct des autres jours.
+
+CONTEXTE
 - Campagne: {campaign_name}
 - Type campagne: {campaign_type}
+- Jour: {day}
+- Type d'email: {email_type}
+- Angle obligatoire: {angle}
+- Variation unique anti-répétition: {nonce}
 - Offre: {offer_name}
 - Audience: {target_audience}
 - Promesse: {main_promise}
-- Objectif: {main_objective}
+- Objectif utilisateur: {main_objective}
+- Objection principale: {objection or "non précisée, à inférer"}
+- Preuve / crédibilité: {proof or "non précisée, reste crédible et évite les fausses preuves"}
+- Contexte produit: {product_context or "non précisé"}
 - CTA principal: {primary_cta}
 - Ton: {tone}
 - Expéditeur: {sender_name}
 
-Contraintes:
-- Sujet court et fort.
-- Préheader différent du sujet.
-- Corps entre 180 et 320 mots.
-- Utilise un angle spécifique à ce jour, sans répéter les formulations d'un autre jour.
-- Ne dis jamais "angle du jour" ni "variation".
-- Pas de JSON.
-- Réponds STRICTEMENT avec ce format :
+RAISONNEMENT SILENCIEUX AVANT RÉDACTION
+Analyse sans l'afficher :
+1. douleur principale,
+2. désir profond,
+3. objection ou frein,
+4. transformation promise,
+5. mécanisme de persuasion le plus adapté,
+6. CTA le plus fluide.
 
+RÈGLES DE COPYWRITING
+- Première phrase = hook clair, humain, concret.
+- Phrases courtes. Respiration. Pas de pavé compact.
+- Évite le ton corporate, scolaire, robotique ou trop vendeur.
+- Ne copie jamais un contenu existant : transforme l'angle, la structure et les formulations.
+- Pas de fausse preuve, pas de promesse irréaliste, pas de manipulation.
+- Si l'email est "nurture" : valeur + prise de conscience.
+- Si l'email est "objection" : rassurer + recadrer le blocage.
+- Si l'email est "relance" : urgence douce + bénéfice + décision simple.
+- Si l'email est "vente" : avant/après + valeur + CTA.
+- Ne signe pas l'email dans le CORPS. Le frontend ajoute la signature.
+- N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
+
+FORMAT STRICT
 SUJET: ...
 PREHEADER: ...
 CORPS:
@@ -204,8 +227,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     parts = _extract_sections(str(raw))
 
     body = _clean_text(parts.get("body"), "")
-    if body and sender_name not in body:
-        body = f"{body}\n\nÀ très vite,\n{sender_name}"
+    # Signature volontairement gérée côté frontend pour éviter les doublons dans Systeme.io.
+    body = re.sub(r"(?is)\n*à\s+(?:très\s+vite|bientôt)[, !]*\n?.*$", "", body).strip()
 
     return {
         "day": day,
@@ -292,4 +315,3 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
         "sender_name": sender_name,
         "emails": emails,
     }
-

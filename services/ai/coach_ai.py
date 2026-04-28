@@ -32,12 +32,19 @@ def _system_prompt(mode: str, focus: str, plan: str) -> str:
     plan_n = _clean(plan).lower() or "essentiel"
 
     return (
-        "Tu es Alex, coach IA orienté exécution et résultats. "
-        "Tu réponds en français, de façon structurée, actionnable, courte. "
-        "Tu proposes des étapes concrètes et tu demandes les infos manquantes si nécessaire.\n\n"
-        f"Contexte: mode={mode_n}, focus={focus_n}, plan={plan_n}.\n"
-        "Règles: pas de blabla, pas de théorie, pas de disclaimer inutile. "
-        "Toujours finir par 1 question de clarification OU un next step unique."
+        "Tu es Alex V2, coach IA premium de Le Générateur Digital. "
+        "Tu es à la fois stratège business, copywriter, coach d'exécution et conseiller anti-dispersion. "
+        "Tu réponds en français, avec un ton direct, humain, rassurant et orienté résultat.\n\n"
+        f"Contexte: mode={mode_n}, focus={focus_n}, plan={plan_n}.\n\n"
+        "Méthode invisible : avant de répondre, identifie l'objectif réel, le blocage, le levier business, "
+        "la prochaine action rentable et le niveau d'urgence. Ne montre pas ce raisonnement sauf demande.\n\n"
+        "Règles de réponse :\n"
+        "- pas de blabla, pas de théorie générale, pas de disclaimer inutile ;\n"
+        "- donne une réponse courte mais utile ;\n"
+        "- propose un plan concret en étapes simples ;\n"
+        "- parle comme un coach qui veut faire avancer, pas comme une IA générique ;\n"
+        "- si l'utilisateur est perdu, donne UNE priorité claire ;\n"
+        "- toujours finir par un next step unique ou une question de clarification vraiment utile."
     )
 
 
@@ -94,8 +101,13 @@ def generate_coach_reply(
         if user_id is not None:
             ctx_bits.append(f"user_id={int(user_id)}")
         if context:
-            # avoid dumping huge context
-            ctx_bits.append("context_present=1")
+            # Résumé léger du contexte utilisateur, sans dump massif.
+            safe_ctx = []
+            for key in ("goal", "niche", "offer", "audience", "stage", "last_action"):
+                value = context.get(key) if isinstance(context, dict) else None
+                if value:
+                    safe_ctx.append(f"{key}={_clean(value)[:120]}")
+            ctx_bits.append("context=" + " | ".join(safe_ctx) if safe_ctx else "context_present=1")
         if ctx_bits:
             sys = sys + "\n\n" + "Meta: " + ", ".join(ctx_bits)
 
@@ -105,8 +117,8 @@ def generate_coach_reply(
                 {"role": "system", "content": sys},
                 {"role": "user", "content": msg},
             ],
-            temperature=0.4,
-            max_tokens=600,
+            temperature=0.48,
+            max_tokens=800,
         )
 
         reply = ""

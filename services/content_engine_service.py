@@ -47,9 +47,15 @@ def generate_ai_text(prompt: str, tone: str = "default", language: str = "fr") -
     """
 
     system_prompt = (
-        f"Tu es un assistant expert en rédaction marketing ton '{tone}'. "
+        "Tu es l'IA premium de Le Générateur Digital (LGD), spécialisée en marketing digital, "
+        "copywriting direct response, storytelling, conversion et pédagogie business. "
         f"Tu écris toujours en langue : {language}. "
-        "Ton style doit être clair, fluide et impactant."
+        f"Ton demandé : {tone}. "
+        "Avant d'écrire, tu raisonnes silencieusement comme un stratège : cible, douleur, désir, objection, promesse, preuve, CTA. "
+        "Tu ne montres jamais cette analyse sauf si l'utilisateur la demande. "
+        "Tu produis ensuite un contenu final humain, clair, concret, crédible, premium et orienté action. "
+        "Évite les formulations génériques, le ton robotique, les promesses irréalistes et la copie mot à mot. "
+        "Réécris toujours de façon originale : inspiré par les mécaniques de conversion, jamais par duplication."
     )
 
     # Modèle configurable sans toucher au code
@@ -64,8 +70,8 @@ def generate_ai_text(prompt: str, tone: str = "default", language: str = "fr") -
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.8,
-            max_tokens=300,
+            temperature=0.72,
+            max_tokens=750,
         )
 
         out = _extract_text(response)
@@ -92,7 +98,11 @@ def rewrite_text(text: str, tone: str | None = None, max_length: int | None = No
     tone_txt = (tone or "").strip()
     max_len = int(max_length) if max_length is not None else None
 
-    instr = "Réécris ce texte de manière plus professionnelle, claire et fluide."
+    instr = (
+        "Réécris ce texte en version LGD premium : plus humain, plus clair, plus orienté conversion, "
+        "sans perdre le sens original. Améliore le hook, la fluidité, les bénéfices, le rythme et le CTA si présent. "
+        "Ne copie pas mécaniquement : reformule proprement, avec une voix naturelle et crédible."
+    )
     if tone_txt:
         instr += f" Adopte un ton: {tone_txt}."
     if max_len and max_len > 0:
@@ -109,7 +119,7 @@ def rewrite_text(text: str, tone: str | None = None, max_length: int | None = No
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "Tu es un assistant expert en réécriture marketing."},
+                {"role": "system", "content": "Tu es un copywriter senior LGD. Tu transformes un texte brut en version premium, humaine, persuasive et originale, sans copier ni surpromettre."},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.7,
@@ -214,11 +224,14 @@ def generate_social_caption(
     lang = (language or "fr").strip()
 
     system_prompt = (
-        "Tu es un copywriter social media premium pour Le Générateur Digital (LGD). "
-        "Tu rédiges des captions prêtes à publier, naturelles, fluides, sans blabla inutile, "
-        "avec une vraie intention marketing mais sans ton robotique. "
+        "Tu es le Social Content Strategist premium de Le Générateur Digital (LGD). "
+        "Tu crées des captions originales qui analysent silencieusement l'audience, l'angle, la promesse, "
+        "l'objection et le format du réseau avant d'écrire. "
+        "Tu rédiges des contenus naturels, humains, rythmés, concrets, avec une mécanique de conversion claire "
+        "sans ressembler à une IA générique. "
         f"Tu écris toujours en {lang}. "
-        "Ne renvoie que la caption finale, sans titre, sans explication, sans JSON, sans balises markdown."
+        "Ne renvoie que la caption finale, sans titre, sans explication, sans JSON, sans balises markdown. "
+        "Ne copie jamais mot à mot une base existante : transforme l'angle et reformule complètement."
     )
 
     instruction_blocks = [
@@ -246,8 +259,10 @@ def generate_social_caption(
 
     option_lines = [
         "Longueur cible: entre 80 et 220 mots maximum selon le sujet.",
-        "Structure: hook fort, contenu fluide, fin propre.",
-        "Évite les emojis excessifs et les formulations trop génériques.",
+        "Structure: hook fort dès la première ligne, tension/problème, valeur concrète, transition, fin propre.",
+        "Ajoute une micro-rupture ou un angle original pour éviter le contenu plat.",
+        "Évite les emojis excessifs, les formulations génériques et les phrases trop longues.",
+        "Privilégie le 'tu' si le contexte le permet, sinon reste premium et direct.",
     ]
     if include_hashtags:
         option_lines.append("Ajoute 5 à 10 hashtags pertinents en fin de caption.")

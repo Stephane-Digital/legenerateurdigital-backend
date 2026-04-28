@@ -49,3 +49,4 @@ class EmailCampaign(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="email_campaigns")
+

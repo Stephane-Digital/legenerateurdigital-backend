@@ -4,6 +4,37 @@ import os
 from openai import OpenAI
 from config.settings import settings
 
+LGD_V3_ANGLE_MODES = [
+    "mythe à déconstruire",
+    "erreur fréquente de l'audience",
+    "avant/après concret",
+    "micro-histoire personnelle",
+    "prise de conscience simple",
+    "provocation intelligente mais crédible",
+    "checklist utile",
+    "objection retournée en opportunité",
+]
+
+LGD_V3_LEVEL_RULES = {
+    "beginner": "Explique simplement, rassure, évite le jargon et donne une prochaine action évidente.",
+    "intermediate": "Va droit au but, donne une stratégie claire et des exemples applicables.",
+    "advanced": "Sois direct, dense, stratégique, sans pédagogie inutile.",
+}
+
+def _v3_infer_level(text: str) -> str:
+    raw = str(text or "").lower()
+    if any(word in raw for word in ["débutant", "je commence", "je débute", "simple", "pas technique"]):
+        return "beginner"
+    if any(word in raw for word in ["avancé", "expert", "scaler", "optimiser", "kpi", "funnel"]):
+        return "advanced"
+    return "intermediate"
+
+def _v3_pick_angle(seed: str = "") -> str:
+    import random
+    if seed:
+        random.seed(str(seed)[:80])
+    return random.choice(LGD_V3_ANGLE_MODES)
+
 # ============================================================
 # INITIALISATION OPENAI (v1+)
 # ============================================================
@@ -52,6 +83,7 @@ def generate_ai_text(prompt: str, tone: str = "default", language: str = "fr") -
         f"Tu écris toujours en langue : {language}. "
         f"Ton demandé : {tone}. "
         "Avant d'écrire, tu raisonnes silencieusement comme un stratège : cible, douleur, désir, objection, promesse, preuve, CTA. "
+        "Tu ajoutes une couche V3 : niveau utilisateur, angle viral intelligent, différenciation, non-répétition. "
         "Tu ne montres jamais cette analyse sauf si l'utilisateur la demande. "
         "Tu produis ensuite un contenu final humain, clair, concret, crédible, premium et orienté action. "
         "Évite les formulations génériques, le ton robotique, les promesses irréalistes et la copie mot à mot. "
@@ -257,9 +289,14 @@ def generate_social_caption(
             f"Base existante à améliorer/régénérer sans la recopier mot à mot:\n{str(existing_caption).strip()}"
         )
 
+    v3_seed = " ".join(parts)
+    v3_level = _v3_infer_level(v3_seed)
+    v3_angle = _v3_pick_angle(v3_seed)
     option_lines = [
         "Longueur cible: entre 80 et 220 mots maximum selon le sujet.",
         "Structure: hook fort dès la première ligne, tension/problème, valeur concrète, transition, fin propre.",
+        f"Angle viral intelligent à utiliser: {v3_angle}.",
+        f"Niveau utilisateur détecté: {v3_level}. Règle: {LGD_V3_LEVEL_RULES.get(v3_level, LGD_V3_LEVEL_RULES['intermediate'])}",
         "Ajoute une micro-rupture ou un angle original pour éviter le contenu plat.",
         "Évite les emojis excessifs, les formulations génériques et les phrases trop longues.",
         "Privilégie le 'tu' si le contexte le permet, sinon reste premium et direct.",

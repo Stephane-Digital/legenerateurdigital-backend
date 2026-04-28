@@ -23,7 +23,7 @@ router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 DEFAULT_FRONT_URL = "https://legenerateurdigital-front.vercel.app"
 DEFAULT_TOKEN_HOURS = 24
-ROUTE_VERSION = "LGD_TOKEN_SYSTEM_PROD_V2_2026_04_24"
+ROUTE_VERSION = "LGD_TOKEN_SYSTEM_PROD_V2_2026_04_28_SIO_GENERIC_FIX"
 
 
 class SystemeioTestPayload(BaseModel):
@@ -95,6 +95,73 @@ def _payload_text(payload: Any) -> str:
         return str(payload).lower()
 
 
+def _find_first_value_by_keys(data: Any, keys: set[str]) -> Optional[Any]:
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if str(key).strip().lower() in keys and value not in (None, ""):
+                return value
+
+        for value in data.values():
+            found = _find_first_value_by_keys(value, keys)
+            if found not in (None, ""):
+                return found
+
+    if isinstance(data, list):
+        for item in data:
+            found = _find_first_value_by_keys(item, keys)
+            if found not in (None, ""):
+                return found
+
+    return None
+
+
+def _extract_email(payload: dict) -> str:
+    customer = payload.get("customer") if isinstance(payload, dict) else None
+    contact = payload.get("contact") if isinstance(payload, dict) else None
+
+    candidates = [
+        customer.get("email") if isinstance(customer, dict) else None,
+        contact.get("email") if isinstance(contact, dict) else None,
+        payload.get("email") if isinstance(payload, dict) else None,
+        payload.get("contact_email") if isinstance(payload, dict) else None,
+        payload.get("customer_email") if isinstance(payload, dict) else None,
+        _find_first_value_by_keys(payload, {"email", "contact_email", "customer_email"}),
+    ]
+
+    for candidate in candidates:
+        clean = str(candidate or "").strip().lower()
+        if "@" in clean:
+            return clean
+
+    return ""
+
+
+def _extract_full_name(payload: dict) -> Optional[str]:
+    customer = payload.get("customer") if isinstance(payload, dict) else None
+    contact = payload.get("contact") if isinstance(payload, dict) else None
+
+    direct = (
+        customer.get("name") if isinstance(customer, dict) else None
+    ) or (
+        contact.get("name") if isinstance(contact, dict) else None
+    ) or (
+        payload.get("name") if isinstance(payload, dict) else None
+    ) or (
+        payload.get("full_name") if isinstance(payload, dict) else None
+    ) or (
+        payload.get("fullName") if isinstance(payload, dict) else None
+    ) or _find_first_value_by_keys(payload, {"name", "full_name", "fullname"})
+
+    if direct:
+        return str(direct).strip()
+
+    first_name = _find_first_value_by_keys(payload, {"first_name", "firstname", "prenom", "prénom"})
+    last_name = _find_first_value_by_keys(payload, {"last_name", "lastname", "nom"})
+
+    joined = " ".join([str(v).strip() for v in (first_name, last_name) if str(v or "").strip()])
+    return joined or None
+
+
 def _is_trial_event(event: str, payload: dict) -> bool:
     event_value = str(event or "").strip().lower()
     raw = _payload_text(payload)
@@ -107,6 +174,7 @@ def _is_trial_event(event: str, payload: dict) -> bool:
         "gratuit",
         "free trial",
         "essai gratuit",
+        "lgd_trial_7j",
     )
 
     if any(keyword in event_value for keyword in trial_keywords):
@@ -118,9 +186,29 @@ def _is_trial_event(event: str, payload: dict) -> bool:
     return False
 
 
+def _infer_event_from_payload(payload: dict, fallback: str = "") -> str:
+    direct = (
+        fallback
+        or (payload.get("event") if isinstance(payload, dict) else "")
+        or (payload.get("type") if isinstance(payload, dict) else "")
+        or (payload.get("event_type") if isinstance(payload, dict) else "")
+    )
+
+    direct = str(direct or "").strip().upper()
+    if direct:
+        return direct
+
+    if _is_trial_event("", payload):
+        return "TRIAL_OPTIN"
+
+    raw = _payload_text(payload)
+    if "new_sale" in raw or "sale" in raw or "priceplan" in raw or "price_plan" in raw:
+        return "NEW_SALE"
+
+    return "UNKNOWN"
+
+
 def _frontend_base_url() -> str:
-    # PROD ONLY: les liens d'activation envoyés aux clients doivent toujours pointer vers Vercel.
-    # On ne lit plus FRONTEND_URL/LGD_FRONT_URL ici pour éviter tout retour accidentel vers localhost.
     return DEFAULT_FRONT_URL.rstrip("/")
 
 
@@ -162,7 +250,6 @@ def _ensure_activation_tokens_table(db: Session) -> None:
             """
         )
     )
-    # Harmonise la prod si la table existe déjà sans défaut sur created_at
     db.execute(
         text(
             """
@@ -257,29 +344,16 @@ def _create_activation_package(
 
 
 def _process_event(*, db: Session, event: str, payload: dict) -> dict:
-    event = (event or "").upper()
+    event = _infer_event_from_payload(payload, event)
 
     print("🔥 WEBHOOK SIO PAYLOAD:", payload)
     print("🔥 EVENT:", event)
 
-    customer = payload.get("customer") or {}
-    email = (
-        customer.get("email")
-        or payload.get("email")
-        or payload.get("contact_email")
-        or ""
-    ).strip().lower()
-
+    email = _extract_email(payload)
     if not email:
         raise HTTPException(status_code=400, detail="Missing email")
 
-    full_name = (
-        customer.get("name")
-        or payload.get("name")
-        or payload.get("full_name")
-        or payload.get("fullName")
-        or None
-    )
+    full_name = _extract_full_name(payload)
 
     if _is_trial_event(event, payload):
         pending = upsert_pending_access(
@@ -313,7 +387,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
         user_id = _get_user_by_email(db, email)
         if user_id:
             sync_plan_quotas(db=db, user_id=int(user_id), plan="trial")
-            mark_pending_access_active(db=db, email=email)
+            mark_pending_access_active(db=db, email)
             db.commit()
             return {
                 "status": "trial_active_existing_user",
@@ -334,8 +408,8 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             **token_bundle,
         }
 
-    priceplan = payload.get("pricePlan") or {}
-    priceplan_id = priceplan.get("id")
+    priceplan = payload.get("pricePlan") or payload.get("price_plan") or {}
+    priceplan_id = priceplan.get("id") if isinstance(priceplan, dict) else None
 
     try:
         priceplan_id = int(priceplan_id)
@@ -347,7 +421,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
 
     if event == "NEW_SALE":
         if not plan:
-            return {"status": "ignored", "reason": "unknown_plan"}
+            return {"status": "ignored", "reason": "unknown_plan", "email": email}
 
         pending = upsert_pending_access(
             db=db,
@@ -379,7 +453,7 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
 
         if user_id:
             sync_plan_quotas(db=db, user_id=int(user_id), plan=plan)
-            mark_pending_access_active(db=db, email=email)
+            mark_pending_access_active(db=db, email)
             db.commit()
             return {
                 "status": "success_existing_user",
@@ -402,31 +476,42 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
 
     if event == "SALE_CANCELED":
         if not user_id:
-            return {"status": "ignored", "reason": "user_not_found"}
+            return {"status": "ignored", "reason": "user_not_found", "email": email}
 
         sync_plan_quotas(db=db, user_id=int(user_id), plan="essentiel")
         db.commit()
-        return {"status": "canceled", "plan": "essentiel"}
+        return {"status": "canceled", "plan": "essentiel", "email": email}
 
-    return {"status": "ignored", "event": event}
+    return {"status": "ignored", "event": event, "email": email}
 
 
-@router.post("/")
-async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
+async def _handle_systemeio_webhook(request: Request, db: Session) -> dict:
     try:
-        secret = (settings.SYSTEMEIO_WEBHOOK_SECRET or "").strip()
-        if not secret:
-            raise HTTPException(status_code=500, detail="Webhook secret missing")
-
         raw = await request.body()
+        raw_text = raw.decode("utf-8", errors="replace") if raw else "{}"
+
+        try:
+            payload = json.loads(raw_text) if raw_text.strip() else {}
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Payload must be a JSON object")
+
+        secret = (settings.SYSTEMEIO_WEBHOOK_SECRET or "").strip()
         signature = request.headers.get("X-Webhook-Signature", "")
         event = (request.headers.get("X-Webhook-Event", "") or "").upper()
 
-        expected = _compute_signature(secret, raw)
-        if not signature or not hmac.compare_digest(signature, expected):
-            raise HTTPException(status_code=401, detail="Invalid signature")
+        # Compatibilité LGD :
+        # - Les vrais webhooks signés restent vérifiés.
+        # - Les actions Systeme.io "Appeler un webhook" depuis une page/tunnel ne fournissent pas toujours
+        #   X-Webhook-Signature / X-Webhook-Event. Elles sont maintenant acceptées et l'événement
+        #   est déduit du payload/tag LGD_TRIAL_7J.
+        if signature and secret:
+            expected = _compute_signature(secret, raw)
+            if not hmac.compare_digest(signature, expected):
+                raise HTTPException(status_code=401, detail="Invalid signature")
 
-        payload = json.loads(raw.decode("utf-8"))
         return _process_event(db=db, event=event, payload=payload)
 
     except HTTPException:
@@ -435,6 +520,16 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
         db.rollback()
         print("❌ WEBHOOK ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("")
+async def systemeio_webhook_no_slash(request: Request, db: Session = Depends(get_db)):
+    return await _handle_systemeio_webhook(request=request, db=db)
+
+
+@router.post("/")
+async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
+    return await _handle_systemeio_webhook(request=request, db=db)
 
 
 @router.post("/test")

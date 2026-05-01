@@ -122,6 +122,16 @@ def _clean_text(value: Any, fallback: str = "") -> str:
     text = str(value if value is not None else fallback).strip()
     return text or fallback
 
+def _keep_only_first_email(raw: str) -> str:
+    """
+    Coupe tout si le modèle génère plusieurs emails
+    """
+    matches = list(re.finditer(r"(?im)^\s*SUJET\s*:", raw))
+
+    if len(matches) > 1:
+        raw = raw[matches[0].start():matches[1].start()]
+
+    return raw.strip()
 
 def _pattern_for_days(days: int) -> List[str]:
     if days in EMAIL_TYPE_PATTERNS:
@@ -136,12 +146,14 @@ def _pattern_for_days(days: int) -> List[str]:
 
 
 def _extract_sections(text: str) -> Dict[str, str]:
-    src = (text or "").strip()
+    src = _keep_only_first_email((text or "").strip())
     out: Dict[str, str] = {}
+
     for key, pattern in SECTION_RE.items():
         match = pattern.search(src)
         if match:
             out[key] = match.group(1).strip()
+
     return out
 
 
@@ -278,7 +290,7 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     raw = generate_ai_text(prompt=_build_prompt(payload=payload, day=day, email_type=email_type, angle=angle, nonce=nonce), tone=tone, language="fr")
     parts = _extract_sections(str(raw))
 
-    body = _clean_text(parts.get("body"), "")
+    body = re.split(r"(?im)^\\s*SUJET\\s*:", body)[0].strip()
     # Signature volontairement gérée côté frontend pour éviter les doublons dans Systeme.io.
     body = re.sub(r"(?is)\n*à\s+(?:très\s+vite|bientôt)[, !]*\n?.*$", "", body).strip()
 

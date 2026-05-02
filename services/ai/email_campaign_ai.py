@@ -336,9 +336,7 @@ Pour {clean_audience}, le premier déclic est simple : arrêter de chercher l’
 
 Avec {clean_offer}, l’objectif est de transformer ce flou en prochaine étape concrète : une offre plus claire, un message plus simple, et un chemin qui pousse enfin vers {clean_objective.lower()}.
 
-Tu n’as pas besoin de tout maîtriser pour commencer. Tu as besoin d’un premier pas visible.
-
-{clean_cta}"""
+Tu n’as pas besoin de tout maîtriser pour commencer. Tu as besoin d’un premier pas visible."""
     elif day == 2:
         body = f"""Bonjour,
 
@@ -356,9 +354,7 @@ Pas parfaite.
 
 Vendable.
 
-C’est là que {clean_offer} devient utile : t’aider à sortir de la théorie et à construire quelque chose que ton audience peut comprendre, désirer et choisir.
-
-{clean_cta}"""
+C’est là que {clean_offer} devient utile : t’aider à sortir de la théorie et à construire quelque chose que ton audience peut comprendre, désirer et choisir."""
     elif day == 3:
         body = f"""Bonjour,
 
@@ -374,9 +370,7 @@ Pour {clean_audience}, la question n’est pas : “est-ce que tout existe déj�
 
 La vraie question est : “est-ce que quelqu’un peut m’aider à passer de la confusion à une action claire ?”
 
-C’est précisément le rôle de {clean_offer} : raccourcir le chemin entre l’idée et l’exécution.
-
-{clean_cta}"""
+C’est précisément le rôle de {clean_offer} : raccourcir le chemin entre l’idée et l’exécution."""
     elif day == 4:
         body = f"""Bonjour,
 
@@ -398,9 +392,7 @@ C’est ce que {clean_offer} doit permettre : prendre ce que tu as déjà en tê
 
 Le but n’est pas de devenir parfait.
 
-Le but est de créer une version assez claire pour être testée, améliorée, puis vendue.
-
-{clean_cta}"""
+Le but est de créer une version assez claire pour être testée, améliorée, puis vendue."""
     elif day == 5:
         body = f"""Bonjour,
 
@@ -420,9 +412,7 @@ Pour {clean_audience}, {clean_offer} sert justement à ça : transformer l’int
 
 Et une fois que c’est concret, tu n’es plus dans “un jour peut-être”.
 
-Tu es déjà en train d’avancer.
-
-{clean_cta}"""
+Tu es déjà en train d’avancer."""
     elif day == 6:
         body = f"""Bonjour,
 
@@ -444,9 +434,7 @@ C’est même exactement le signe qu’il faut structurer plutôt que continuer 
 
 Pas pour faire joli.
 
-Pour avancer.
-
-{clean_cta}"""
+Pour avancer."""
     else:
         body = f"""Bonjour,
 
@@ -468,9 +456,7 @@ La décision est simple.
 
 Rester dans la préparation.
 
-Ou commencer maintenant.
-
-{clean_cta}"""
+Ou commencer maintenant."""
 
     return {
         "day": day,

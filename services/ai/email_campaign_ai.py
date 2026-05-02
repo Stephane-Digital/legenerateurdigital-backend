@@ -667,7 +667,7 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         "email_type": email_type,
         "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
         "preheader": _clean_text(parts.get("preheader"), offer_name),
-        "body": _clean_text(body, f"Bonjour {{prenom}},\n\n{offer_name}"),
+        "body": _clean_text(body, ""),
         "cta": cta,
     }
 
@@ -682,25 +682,17 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
         subject_key = re.sub(r"\s+", " ", _clean_text(email.get("subject"), "").lower()).strip()
         body_key = re.sub(r"\s+", " ", _clean_text(email.get("body"), "").lower()).strip()[:360]
 
-        if (
-            not body_key
-            or subject_key in seen_subjects
-            or body_key in seen_bodies
-            or _is_bad_template(str(email.get("body") or ""))
-        ):
-            email = _fallback_email(
-                day=day,
-                email_type=email_types[index] if index < len(email_types) else "vente",
-                offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
-                target_audience=_clean_text(_get(payload, "target_audience"), "votre audience"),
-                main_promise=_clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat"),
-                main_objective=_clean_text(_get(payload, "main_objective"), "passer à l'action"),
-                primary_cta=_clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant"),
-                sender_name=_clean_text(_get(payload, "sender_name"), "Le Générateur Digital"),
-                tone=_clean_text(_get(payload, "tone"), "premium"),
-            )
-            subject_key = re.sub(r"\s+", " ", _clean_text(email.get("subject"), "").lower()).strip()
-            body_key = re.sub(r"\s+", " ", _clean_text(email.get("body"), "").lower()).strip()[:360]
+        if not body_key:
+            raise ValueError(f"Email IA jour {day} vide : génération live annulée.")
+
+        if subject_key in seen_subjects:
+            raise ValueError(f"Email IA jour {day} rejeté : sujet trop similaire.")
+
+        if body_key in seen_bodies:
+            raise ValueError(f"Email IA jour {day} rejeté : corps trop similaire.")
+
+        if _is_bad_template(str(email.get("body") or "")):
+            raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
 
         email["cta"] = _cta_variant(email.get("cta"), day)
 
@@ -719,69 +711,47 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
     email_types = _pattern_for_days(duration_days)
 
     base_nonce = f"{uuid.uuid4().hex[:8]}-{random.randint(1000, 9999)}"
-    emails: List[Dict[str, Any]] = []
 
-    for index in range(duration_days):
-        day = index + 1
-        email_type = email_types[index]
-        angle_options = ANGLE_BANK.get(email_type, ["angle simple"])
-        angle = angle_options[(index + random.randint(0, len(angle_options) - 1)) % len(angle_options)]
-        try:
-            email = _generate_one_email(
-                payload=payload,
-                day=day,
-                email_type=email_type,
-                angle=angle,
-                nonce=f"{base_nonce}-{day}",
-            )
-        except Exception:
-            email = _fallback_email(
-                day=day,
-                email_type=email_type,
-                offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
-                target_audience=_clean_text(_get(payload, "target_audience"), "votre audience"),
-                main_promise=_clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat"),
-                main_objective=_clean_text(_get(payload, "main_objective"), "passer à l'action"),
-                primary_cta=_clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant"),
-                sender_name=sender_name,
-                tone=_clean_text(_get(payload, "tone"), "premium"),
-            )
-        emails.append(email)
+    def generate_live_pass(pass_name: str, angle_offset: int) -> List[Dict[str, Any]]:
+        generated: List[Dict[str, Any]] = []
 
-    if _looks_too_similar(emails):
-        second_pass: List[Dict[str, Any]] = []
         for index in range(duration_days):
             day = index + 1
             email_type = email_types[index]
             angle_options = ANGLE_BANK.get(email_type, ["angle simple"])
-            angle = angle_options[(index + 2) % len(angle_options)]
-            try:
-                second_pass.append(
-                    _generate_one_email(
-                        payload=payload,
-                        day=day,
-                        email_type=email_type,
-                        angle=angle,
-                        nonce=f"{base_nonce}-retry-{day}",
-                    )
-                )
-            except Exception:
-                second_pass.append(
-                    _fallback_email(
-                        day=day,
-                        email_type=email_type,
-                        offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
-                        target_audience=_clean_text(_get(payload, "target_audience"), "votre audience"),
-                        main_promise=_clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat"),
-                        main_objective=_clean_text(_get(payload, "main_objective"), "passer à l'action"),
-                        primary_cta=_clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant"),
-                        sender_name=sender_name,
-                        tone=_clean_text(_get(payload, "tone"), "premium"),
-                    )
-                )
-        emails = second_pass
+            angle = angle_options[(index + angle_offset) % len(angle_options)]
 
-    emails = _dedupe_final_emails(emails, payload, email_types)
+            generated.append(
+                _generate_one_email(
+                    payload=payload,
+                    day=day,
+                    email_type=email_type,
+                    angle=angle,
+                    nonce=f"{base_nonce}-{pass_name}-{day}",
+                )
+            )
+
+        return _dedupe_final_emails(generated, payload, email_types)
+
+    try:
+        emails = generate_live_pass("live", random.randint(0, 999))
+    except Exception as first_error:
+        try:
+            emails = generate_live_pass("retry", 3)
+        except Exception as retry_error:
+            raise RuntimeError(
+                "Génération IA live impossible. Aucun fallback local n’a été utilisé. "
+                f"Erreur initiale: {first_error}. Erreur retry: {retry_error}"
+            ) from retry_error
+
+    if _looks_too_similar(emails):
+        try:
+            emails = generate_live_pass("similarity-retry", 5)
+        except Exception as similarity_error:
+            raise RuntimeError(
+                "La génération IA live a produit une séquence trop similaire. "
+                "Aucun fallback local n’a été utilisé."
+            ) from similarity_error
 
     return {
         "campaign_name": campaign_name,

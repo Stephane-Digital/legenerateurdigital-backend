@@ -238,19 +238,39 @@ def _sanitize_body(body: str) -> str:
     cleaned = re.split(r"(?im)^\s*SUJET\s*:", cleaned)[0].strip()
     cleaned = re.split(r"(?im)^\s*(?:PREHEADER|PRÉHEADER)\s*:", cleaned)[0].strip()
 
-    # ❌ supprimer fins faibles
-    cleaned = re.sub(r"(?is)\n*à\s+bientôt.*$", "", cleaned).strip()
-    cleaned = re.sub(r"(?is)\n*à\s+très\s+vite.*$", "", cleaned).strip()
-    cleaned = re.sub(r"(?is)\n*Alex IA[\s\S]*$", "", cleaned).strip()
+    # Supprime les signatures faibles ou automatiques qui cassent la tension de vente.
+    cleaned = re.sub(r"(?is)\n*à\s+bientôt(?:\s+peut-être)?[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*à\s+très\s+vite[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*Alex IA\s*🤖[\s\S]*$", "", cleaned).strip()
     cleaned = re.sub(r"(?is)\n*Ton Coach LGD[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*Le Générateur Digital\s*$", "", cleaned).strip()
     cleaned = re.sub(r"(?is)\n*LGD\s*$", "", cleaned).strip()
 
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
-    # ✅ FORCER PERSONNALISATION
-    if not cleaned.lower().startswith("bonjour"):
-        cleaned = f"Bonjour {{prenom}},\n\n" + cleaned
 
+def _strip_cta_from_body(body: str, cta: str) -> str:
+    cleaned = _sanitize_body(body)
+    clean_cta = _normalize_text(cta).strip()
+
+    if clean_cta:
+        escaped = re.escape(clean_cta)
+        cleaned = re.sub(rf"(?im)^\s*👉?\s*{escaped}\s*[.!?]?\s*$", "", cleaned).strip()
+        cleaned = re.sub(rf"(?is)\n+\s*👉?\s*{escaped}\s*[.!?]?\s*$", "", cleaned).strip()
+
+    # Retire les CTA génériques fréquents si le modèle les ajoute dans le corps.
+    generic_cta_patterns = [
+        r"(?im)^\s*👉?\s*téléchargez votre guide gratuit maintenant\s*!?\s*$",
+        r"(?im)^\s*👉?\s*découvrez comment commencer dès aujourd'hui\s*!?\s*$",
+        r"(?im)^\s*👉?\s*inscrivez-vous dès maintenant pour découvrir notre méthode\s*!?\s*$",
+        r"(?im)^\s*👉?\s*passez à l’action maintenant\s*!?\s*$",
+        r"(?im)^\s*👉?\s*commencez maintenant\s*!?\s*$",
+    ]
+    for pattern in generic_cta_patterns:
+        cleaned = re.sub(pattern, "", cleaned).strip()
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
 
@@ -334,7 +354,7 @@ def _fallback_email(
     clean_cta = _clean_text(primary_cta, "Passer à l’action maintenant")
 
     if day == 1:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 Tu as peut-être déjà vécu ce moment étrange : tu sais que tu veux avancer, tu as lu des conseils, regardé des vidéos, noté des idées… mais rien ne sort vraiment.
 
@@ -348,7 +368,7 @@ Avec {clean_offer}, l’objectif est de transformer ce flou en prochaine étape 
 
 Tu n’as pas besoin de tout maîtriser pour commencer. Tu as besoin d’un premier pas visible."""
     elif day == 2:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 L’erreur la plus fréquente, ce n’est pas de ne rien faire.
 
@@ -366,7 +386,7 @@ Vendable.
 
 C’est là que {clean_offer} devient utile : t’aider à sortir de la théorie et à construire quelque chose que ton audience peut comprendre, désirer et choisir."""
     elif day == 3:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 Tu peux avoir l’impression qu’il est trop tard.
 
@@ -382,7 +402,7 @@ La vraie question est : “est-ce que quelqu’un peut m’aider à passer de la
 
 C’est précisément le rôle de {clean_offer} : raccourcir le chemin entre l’idée et l’exécution."""
     elif day == 4:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 La solution n’est pas de créer plus.
 
@@ -404,7 +424,7 @@ Le but n’est pas de devenir parfait.
 
 Le but est de créer une version assez claire pour être testée, améliorée, puis vendue."""
     elif day == 5:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 Imagine dans 7 jours.
 
@@ -424,7 +444,7 @@ Et une fois que c’est concret, tu n’es plus dans “un jour peut-être”.
 
 Tu es déjà en train d’avancer."""
     elif day == 6:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 Avant de repousser encore, vérifie simplement ces quatre points.
 
@@ -446,7 +466,7 @@ Pas pour faire joli.
 
 Pour avancer."""
     else:
-        body = f"""Bonjour,
+        body = f"""Bonjour {{prenom}},
 
 Tu peux continuer à apprendre.
 
@@ -495,54 +515,86 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
     main_objective = _clean_text(_get(payload, "main_objective"), "passer à l'action")
     primary_cta = _clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant")
-    campaign_name = _clean_text(_get(payload, "name"), "Campagne")
+    tone = _clean_text(_get(payload, "tone"), "premium")
+    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
+    campaign_type = _clean_text(_get(payload, "campaign_type"), "vente")
+    campaign_name = _clean_text(_get(payload, "name"), "Campagne E-mailing IA")
+    product_context = _clean_text(_get(payload, "product_context"), "")
+    objection = _clean_text(_get(payload, "main_objection"), "")
+    proof = _clean_text(_get(payload, "proof"), "")
+    archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
 
     return f"""
-Tu es Emailing IA LGD V8.1 : copywriter orienté conversion.
+Tu es Emailing IA LGD V7.3 : copywriter senior direct-response + stratège Systeme.io.
 
 MISSION
-Écris UN SEUL email qui pousse à une décision.
+Écris EXACTEMENT UN SEUL email marketing en français, prêt à être utilisé dans une séquence Systeme.io.
+L'email doit être humain, naturel, crédible, orienté conversion, et distinct des autres jours.
 
-RÈGLES
-- ton humain
-- direct
-- pas de blabla
-- pas de phrases marketing génériques
-
-PSYCHOLOGIE
-Inclure :
-- une vérité qui pique
-- OU une erreur fréquente
-- OU une projection
-
-CTA
-- jamais générique
-- doit forcer une décision
-- différent à chaque email
-
-STYLE
-- phrases courtes
-- naturel
-
-EMOJIS
-- 0 à 2 max 😐 🤔 👀 ⚠️
+VERROU ANTI-DOUBLON ABSOLU
+- Tu dois générer EXACTEMENT UN SEUL email.
+- Tu ne dois jamais répéter le format SUJET / PREHEADER / CORPS / CTA deux fois.
+- Tu ne dois jamais écrire plusieurs versions du même email.
+- Tu ne dois jamais ajouter un second email après le CTA.
+- Tu ne dois jamais répéter le préheader après le corps.
+- Tu ne dois jamais signer l'email : la signature est gérée ailleurs.
+- Tu ne dois jamais utiliser ces blocs : "🎁 Ce que je te propose", "💡 Ce qui change vraiment", "Alex IA", "Ton Coach LGD".
+- Si tu as envie de proposer plusieurs variantes, choisis la meilleure et n'en donne qu'une.
 
 CONTEXTE
-Offre: {offer_name}
-Audience: {target_audience}
-Promesse: {main_promise}
-Objectif: {main_objective}
-Jour: {day}
-Type: {email_type}
+- Campagne: {campaign_name}
+- Type campagne: {campaign_type}
+- Jour: {day}
+- Rôle psychologique du jour: {archetype["role"]}
+- Type d'email: {email_type}
+- Angle obligatoire: {angle}
+- Mode viral V3 recommandé: {random.choice(VIRAL_ANGLE_MODES_V3)}
+- Variation unique anti-répétition: {nonce}
+- Offre: {offer_name}
+- Audience: {target_audience}
+- Promesse: {main_promise}
+- Objectif utilisateur: {main_objective}
+- Objection principale: {objection or "non précisée, à inférer"}
+- Preuve / crédibilité: {proof or "non précisée, reste crédible et évite les fausses preuves"}
+- Contexte produit: {product_context or "non précisé"}
+- CTA principal: {primary_cta}
+- Variantes CTA possibles: {", ".join(CTA_VARIANTS_V3)}
+- Ton: {tone}
+- Expéditeur: {sender_name}
 
-FORMAT
+{_v3_context_block(payload)}
+
+RÈGLES DE COPYWRITING
+- Première phrase = hook clair, humain, concret.
+- Phrases courtes. Respiration. Pas de pavé compact.
+- Évite le ton corporate, scolaire, robotique ou trop vendeur.
+- Ne copie jamais un contenu existant : transforme l'angle, la structure et les formulations.
+- Pas de fausse preuve, pas de promesse irréaliste, pas de manipulation.
+- Si l'email est "nurture" : valeur + prise de conscience.
+- Si l'email est "objection" : rassurer + recadrer le blocage.
+- Si l'email est "relance" : urgence douce + bénéfice + décision simple.
+- Si l'email est "vente" : avant/après + valeur + CTA.
+- Ne signe pas l'email dans le CORPS. Le frontend ajoute la signature.
+- Si le CTA principal est faible ou trop vague, rends-le plus désirable sans changer l'intention.
+- Crée une sensation d'élan : le lecteur doit savoir quoi faire ensuite.
+- N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
+
+RÈGLES SORTIE EMAIL — CRITIQUE
+- Le CORPS ne doit jamais répéter le CTA.
+- Le CORPS ne doit jamais contenir une ligne commençant par 👉.
+- Le CTA doit apparaître uniquement dans le champ CTA.
+- N'écris jamais "À bientôt peut-être", "À bientôt", "À très vite", "LGD" ou une signature dans le CORPS.
+- Commence le CORPS par "Bonjour {prenom},".
+
+FORMAT STRICT OBLIGATOIRE
 SUJET: ...
 PREHEADER: ...
 CORPS:
 ...
 CTA: {primary_cta}
 
-STOP après CTA
+RAPPEL FINAL
+Après la ligne CTA, tu t'arrêtes. Tu n'ajoutes rien.
 """.strip()
 
 
@@ -558,7 +610,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         language="fr",
     )
     parts = _extract_sections(str(raw))
-    body = _sanitize_body(_clean_text(parts.get("body"), ""))
+    cta = _clean_text(parts.get("cta"), primary_cta)
+    body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
 
     if _is_bad_template(body):
         raise ValueError("Sortie IA rejetée : template générique ou répétitif détecté.")
@@ -568,8 +621,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         "email_type": email_type,
         "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
         "preheader": _clean_text(parts.get("preheader"), offer_name),
-        "body": _clean_text(body, f"Bonjour,\n\n{offer_name}\n\n{primary_cta}"),
-        "cta": _clean_text(parts.get("cta"), primary_cta),
+        "body": _clean_text(body, f"Bonjour {{prenom}},\n\n{offer_name}"),
+        "cta": cta,
     }
 
 

@@ -622,6 +622,43 @@ RÈGLES DE COPYWRITING
 - Si le CTA principal est faible ou trop vague, rends-le plus désirable sans changer l'intention.
 - Crée une sensation d'élan : le lecteur doit savoir quoi faire ensuite.
 - N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
+- Écris comme si tu parlais à une seule personne, pas à un groupe.
+- Utilise “tu” plutôt que “vous”.
+- Utilise des phrases courtes. Parfois très courtes.
+- Introduis de la tension, du doute ou une vérité inconfortable.
+- Évite les phrases génériques comme “Vous souhaitez…” ou “Imaginez…”.
+- Commence certains emails par une pensée brute ou une observation directe.
+- Tu peux casser le rythme (ligne seule, punchline, contraste).
+- Le lecteur doit ressentir quelque chose, pas juste comprendre.
+
+ANTI-GÉNÉRIQUE (OBLIGATOIRE)
+- Interdit d’écrire comme un article ou une formation.
+- Interdit d’expliquer, tu dois faire ressentir.
+- Interdit d’être neutre ou “correct”.
+- Chaque email doit avoir une personnalité différente.
+- Si le texte pourrait être utilisé par n’importe qui → il est mauvais.
+
+PSYCHOLOGIE DE CONVERSION
+- Le lecteur doit se reconnaître dès les 2 premières lignes.
+- Tu dois créer une micro-tension : problème → inconfort → envie de résoudre.
+- Tu dois faire sentir qu’il perd quelque chose s’il n’agit pas.
+- Tu dois donner une sensation de mouvement : passer de X à Y.
+- Chaque email doit donner envie de lire le suivant.
+
+STRUCTURE INVISIBLE
+Chaque email doit suivre ce flow sans le dire :
+1. Hook : accroche directe ou perturbante.
+2. Réalité : problème vécu.
+3. Déclic : nouvelle perception.
+4. Projection : ce qui change.
+5. Action : CTA.
+
+Ne jamais annoncer la structure.
+
+CONTRAINTE FINALE
+Si ton email ressemble à un texte “propre et poli”, recommence.
+On veut un email qui fait dire :
+“Ok… c’est exactement moi.”
 
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.

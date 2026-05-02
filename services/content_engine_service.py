@@ -348,3 +348,4 @@ def generate_social_caption(
 
     except Exception as e:
         raise Exception(f"Erreur Caption IA: {str(e)}")
+

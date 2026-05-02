@@ -660,6 +660,39 @@ Si ton email ressemble à un texte “propre et poli”, recommence.
 On veut un email qui fait dire :
 “Ok… c’est exactement moi.”
 
+RUPTURE DE PATTERN (ULTRA IMPORTANT)
+
+- Interdit de commencer par :
+  “Chaque jour…”
+  “Tu sais…”
+  “Imagine…”
+  “As-tu déjà…”
+  “Beaucoup de gens…”
+
+- Commence parfois directement par :
+  une phrase courte
+  une vérité brutale
+  une contradiction
+  une pensée intérieure
+
+Exemples de départ autorisés :
+
+- “Tu bloques.”
+- “Rien n’a changé.”
+- “Tu réfléchis trop.”
+- “On va être honnête.”
+- “Le problème n’est pas ce que tu crois.”
+
+- Tu peux écrire des lignes seules pour créer du rythme.
+
+Exemple :
+
+Tu bloques.
+
+Pas parce que tu ne sais pas.
+
+Mais parce que tu attends encore.
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

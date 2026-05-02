@@ -583,6 +583,8 @@ RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.
 - Le CTA doit apparaître uniquement dans le champ CTA.
+- Le CTA final doit être différent pour chaque jour de séquence.
+- Ne réutilise jamais exactement le CTA principal dans les 7 emails.
 - N'écris jamais "À bientôt peut-être", "À bientôt", "À très vite", "LGD" ou une signature dans le CORPS.
 - Commence le CORPS par "Bonjour {prenom},".
 
@@ -591,7 +593,7 @@ SUJET: ...
 PREHEADER: ...
 CORPS:
 ...
-CTA: {primary_cta}
+CTA: Reformule un CTA court, spécifique au jour {day}, différent des autres emails, sans emoji.
 
 RAPPEL FINAL
 Après la ligne CTA, tu t'arrêtes. Tu n'ajoutes rien.

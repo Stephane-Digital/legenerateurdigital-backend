@@ -485,109 +485,54 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
     main_objective = _clean_text(_get(payload, "main_objective"), "passer à l'action")
     primary_cta = _clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant")
-    tone = _clean_text(_get(payload, "tone"), "premium")
-    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
-    campaign_type = _clean_text(_get(payload, "campaign_type"), "vente")
-    campaign_name = _clean_text(_get(payload, "name"), "Campagne E-mailing IA")
-    product_context = _clean_text(_get(payload, "product_context"), "")
-    objection = _clean_text(_get(payload, "main_objection"), "")
-    proof = _clean_text(_get(payload, "proof"), "")
-    archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
+    campaign_name = _clean_text(_get(payload, "name"), "Campagne")
 
     return f"""
-Tu es Emailing IA LGD V8 : copywriter senior direct-response, psychologie humaine et stratégie Systeme.io.
+Tu es Emailing IA LGD V8.1 : copywriter orienté conversion.
 
 MISSION
-Écris EXACTEMENT UN SEUL email marketing en français, prêt à être utilisé dans une séquence Systeme.io.
-L'email doit être humain, naturel, crédible, incarné, orienté conversion, et distinct des autres jours.
-Il doit donner l'impression qu'une vraie personne écrit à une vraie personne, pas qu'une IA remplit un template.
+Écris UN SEUL email qui pousse à une décision.
 
-VERROU ANTI-DOUBLON ABSOLU
-- Tu dois générer EXACTEMENT UN SEUL email.
-- Tu ne dois jamais répéter le format SUJET / PREHEADER / CORPS / CTA deux fois.
-- Tu ne dois jamais écrire plusieurs versions du même email.
-- Tu ne dois jamais ajouter un second email après le CTA.
-- Tu ne dois jamais répéter le préheader après le corps.
-- Tu ne dois jamais signer l'email : la signature est gérée ailleurs.
-- Tu ne dois jamais utiliser ces blocs : "🎁 Ce que je te propose", "💡 Ce qui change vraiment", "Alex IA", "Ton Coach LGD".
-- Si tu as envie de proposer plusieurs variantes, choisis la meilleure et n'en donne qu'une.
+RÈGLES
+- ton humain
+- direct
+- pas de blabla
+- pas de phrases marketing génériques
+
+PSYCHOLOGIE
+Inclure :
+- une vérité qui pique
+- OU une erreur fréquente
+- OU une projection
+
+CTA
+- jamais générique
+- doit forcer une décision
+- différent à chaque email
+
+STYLE
+- phrases courtes
+- naturel
+
+EMOJIS
+- 0 à 2 max 😐 🤔 👀 ⚠️
 
 CONTEXTE
-- Campagne: {campaign_name}
-- Type campagne: {campaign_type}
-- Jour: {day}
-- Rôle psychologique du jour: {archetype["role"]}
-- Type d'email: {email_type}
-- Angle obligatoire: {angle}
-- Mode viral V3 recommandé: {random.choice(VIRAL_ANGLE_MODES_V3)}
-- Variation unique anti-répétition: {nonce}
-- Offre: {offer_name}
-- Audience: {target_audience}
-- Promesse: {main_promise}
-- Objectif utilisateur: {main_objective}
-- Objection principale: {objection or "non précisée, à inférer"}
-- Preuve / crédibilité: {proof or "non précisée, reste crédible et évite les fausses preuves"}
-- Contexte produit: {product_context or "non précisé"}
-- CTA principal: {primary_cta}
-- Variantes CTA possibles: {", ".join(CTA_VARIANTS_V3)}
-- Ton demandé: {tone}
-- Expéditeur: {sender_name}
+Offre: {offer_name}
+Audience: {target_audience}
+Promesse: {main_promise}
+Objectif: {main_objective}
+Jour: {day}
+Type: {email_type}
 
-{_v3_context_block(payload)}
-
-RÈGLES HUMANISATION V8
-- Écris comme si tu parlais à UNE personne, pas à une foule.
-- Le ton doit être naturel, conversationnel, direct et humain.
-- Tu peux être honnête, lucide, parfois un peu brutal, mais jamais agressif.
-- Évite les phrases marketing génériques : "il est temps", "transformez votre vie", "ne laissez pas passer votre chance", "réalisez vos rêves".
-- Remplace les slogans par des situations concrètes.
-- Utilise des phrases courtes, respirées, avec du rythme.
-- Crée une tension douce : le lecteur doit sentir qu'il peut rester bloqué ou décider d'avancer.
-- Fais apparaître au moins un élément psychologique réel : peur, doute, procrastination, perfectionnisme, surcharge d'informations, comparaison, fatigue mentale.
-- Ajoute au moins un déclic mental : une phrase qui fait dire "ok, c'est vrai".
-- Ne fais pas un email scolaire. Ne fais pas un article de blog. Ne fais pas une fiche conseil.
-- Ne sur-vends pas. Fais comprendre la valeur par la clarté du problème et la simplicité de la prochaine action.
-
-ÉMOJIS — OPTION PRO
-- Tu peux utiliser 0 à 2 émojis maximum dans le CORPS de l'email.
-- Les émojis doivent rester rares, naturels et émotionnels.
-- Autorisés si pertinents : 😐 🤔 👀 ⚠️
-- Interdits en excès : 🚀 💰 🔥 ✨ 💸
-- Ne mets jamais d'émoji dans le sujet.
-- Ne mets jamais d'émoji au début de chaque paragraphe.
-- L'email doit rester premium, pas influenceur cheap.
-
-RÈGLES DE COPYWRITING
-- Première phrase = hook clair, humain, concret.
-- Phrases courtes. Respiration. Pas de pavé compact.
-- Évite le ton corporate, scolaire, robotique ou trop vendeur.
-- Ne copie jamais un contenu existant : transforme l'angle, la structure et les formulations.
-- Pas de fausse preuve, pas de promesse irréaliste, pas de manipulation.
-- Si l'email est "nurture" : valeur + prise de conscience.
-- Si l'email est "objection" : rassurer + recadrer le blocage.
-- Si l'email est "relance" : urgence douce + bénéfice + décision simple.
-- Si l'email est "vente" : avant/après + valeur + CTA.
-- Ne signe pas l'email dans le CORPS. Le frontend ajoute la signature.
-- Si le CTA principal est faible ou trop vague, rends-le plus désirable sans changer l'intention.
-- Crée une sensation d'élan : le lecteur doit savoir quoi faire ensuite.
-- N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
-
-STRUCTURE INTERNE À RESPECTER SANS L'AFFICHER
-1. Hook humain.
-2. Situation concrète ou vérité qui pique.
-3. Déclic psychologique.
-4. Transition vers l'offre ou la méthode.
-5. CTA fluide et naturel.
-
-FORMAT STRICT OBLIGATOIRE
+FORMAT
 SUJET: ...
 PREHEADER: ...
 CORPS:
 ...
 CTA: {primary_cta}
 
-RAPPEL FINAL
-Après la ligne CTA, tu t'arrêtes. Tu n'ajoutes rien.
+STOP après CTA
 """.strip()
 
 

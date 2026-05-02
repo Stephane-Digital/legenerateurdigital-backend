@@ -255,4 +255,3 @@ def prepare_systeme_io_campaign(
         delivery_status=campaign.delivery_status,
         payload=prepared_payload,
     )
-

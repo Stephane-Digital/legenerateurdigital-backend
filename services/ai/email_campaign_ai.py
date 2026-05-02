@@ -333,6 +333,50 @@ CONTEXTE PERSONNALISATION V3
 """.strip()
 
 
+def _cta_variant(base_cta: Any, day: int) -> str:
+    """
+    Évite un CTA identique sur toute la séquence.
+    On conserve l'intention du CTA utilisateur, mais on varie la formulation par jour.
+    """
+    base = _clean_text(base_cta, "Passer à l’action maintenant")
+    normalized = base.lower()
+
+    if any(word in normalized for word in ["coach", "coaching", "session", "réserve", "reserve", "appel", "audit"]):
+        variants = [
+            "Réserve ta session et clarifie ton prochain pas.",
+            "Bloque ta session avant de repartir dans la théorie.",
+            "Réserve ton créneau pour transformer le flou en plan clair.",
+            "Planifie ta session et avance avec une méthode simple.",
+            "Réserve ta session pour passer de l’idée à l’action.",
+            "Choisis ton créneau avant de repousser encore.",
+            "Réserve maintenant si tu veux vraiment commencer.",
+        ]
+    elif any(word in normalized for word in ["guide", "télécharge", "telecharge", "ressource"]):
+        variants = [
+            "Télécharge le guide et clarifie ton premier pas.",
+            "Récupère le guide pour éviter de repartir dans la théorie.",
+            "Télécharge le guide et vérifie si cette méthode te correspond.",
+            "Accède au guide pour structurer ton offre plus simplement.",
+            "Télécharge le guide et transforme ton idée en action concrète.",
+            "Récupère le guide avant de repousser encore.",
+            "Télécharge le guide si tu veux vraiment commencer maintenant.",
+        ]
+    else:
+        variants = [
+            "Passe à l’étape suivante avec un plan clair.",
+            "Commence par une action simple aujourd’hui.",
+            "Avance maintenant au lieu de repartir dans la réflexion.",
+            "Clarifie ton offre et teste une première version.",
+            "Transforme ton idée en prochaine action concrète.",
+            "Fais le premier pas avant de repousser encore.",
+            "Décide maintenant si tu veux vraiment avancer.",
+        ]
+
+    if day <= 0:
+        day = 1
+    return variants[(day - 1) % len(variants)]
+
+
 def _fallback_email(
     *,
     day: int,
@@ -351,7 +395,7 @@ def _fallback_email(
     clean_audience = _clean_text(target_audience, "les personnes qui veulent avancer")
     clean_promise = _clean_text(main_promise, "obtenir un résultat concret")
     clean_objective = _clean_text(main_objective, "passer à l’action")
-    clean_cta = _clean_text(primary_cta, "Passer à l’action maintenant")
+    clean_cta = _cta_variant(primary_cta, day)
 
     if day == 1:
         body = f"""Bonjour {{prenom}},
@@ -612,7 +656,7 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         language="fr",
     )
     parts = _extract_sections(str(raw))
-    cta = _clean_text(parts.get("cta"), primary_cta)
+    cta = _cta_variant(_clean_text(parts.get("cta"), primary_cta), day)
     body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
 
     if _is_bad_template(body):
@@ -657,6 +701,8 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
             )
             subject_key = re.sub(r"\s+", " ", _clean_text(email.get("subject"), "").lower()).strip()
             body_key = re.sub(r"\s+", " ", _clean_text(email.get("body"), "").lower()).strip()[:360]
+
+        email["cta"] = _cta_variant(email.get("cta"), day)
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

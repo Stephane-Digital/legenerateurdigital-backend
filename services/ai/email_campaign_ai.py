@@ -234,13 +234,23 @@ def _remove_duplicate_halves(text: str) -> str:
 
 def _sanitize_body(body: str) -> str:
     cleaned = _remove_duplicate_halves(body)
+
     cleaned = re.split(r"(?im)^\s*SUJET\s*:", cleaned)[0].strip()
     cleaned = re.split(r"(?im)^\s*(?:PREHEADER|PRÉHEADER)\s*:", cleaned)[0].strip()
-    cleaned = re.sub(r"(?is)\n*à\s+(?:très\s+vite|bientôt)[, !]*\n?.*$", "", cleaned).strip()
-    cleaned = re.sub(r"(?is)\n*Alex IA\s*🤖[\s\S]*$", "", cleaned).strip()
+
+    # ❌ supprimer fins faibles
+    cleaned = re.sub(r"(?is)\n*à\s+bientôt.*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*à\s+très\s+vite.*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*Alex IA[\s\S]*$", "", cleaned).strip()
     cleaned = re.sub(r"(?is)\n*Ton Coach LGD[\s\S]*$", "", cleaned).strip()
     cleaned = re.sub(r"(?is)\n*LGD\s*$", "", cleaned).strip()
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+    # ✅ FORCER PERSONNALISATION
+    if not cleaned.lower().startswith("bonjour"):
+        cleaned = f"Bonjour {{prenom}},\n\n" + cleaned
+
     return cleaned.strip()
 
 

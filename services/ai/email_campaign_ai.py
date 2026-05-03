@@ -1148,6 +1148,36 @@ Créer un moment :
 
 “Je ne m’attendais pas à ça.”
 
+SIGNATURE LGD (DIFFÉRENCIATION)
+
+- Chaque email doit contenir au moins une phrase unique, inattendue.
+
+- Une phrase que le lecteur pourrait retenir.
+
+Exemples :
+
+- “Tu n’as pas un problème de méthode. Tu as un problème d’honnêteté avec toi-même.”
+- “Tu ne manques pas d’idées. Tu manques de courage.”
+- “Le problème n’est pas ce que tu ne sais pas. C’est ce que tu évites.”
+
+---
+
+EMAIL DIFFÉRENT
+
+- Un email doit être très court
+- Un email doit être presque silencieux
+- Un email doit être dérangeant
+- Un email doit être inattendu
+
+---
+
+OBJECTIF
+
+Créer une trace mentale.
+
+Si tous les emails se ressemblent → échec.
+Si un email reste en tête → succès.
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

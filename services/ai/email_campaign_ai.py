@@ -988,66 +988,63 @@ Créer une réaction :
 ou
 - “Ok… là il m’a touché.”
 
-CTA IRRÉSISTIBLE (CRITIQUE)
+CTA LGD FINAL (ANTI-VENTE ABSOLUE)
 
-- Le CTA doit être spécifique à l’email.
-- Il doit être concret, pas abstrait.
-- Il doit donner une micro-action claire.
+- Tu ne vends PAS.
+- Tu ne proposes PAS de session.
+- Tu ne proposes PAS de coaching.
+- Tu ne proposes PAS de lien ou d’inscription.
 
-Interdit :
+INTERDIT :
 
-- “passe à l’action”
-- “clique ici”
-- “découvre maintenant”
-- “fais le premier pas”
-
-Remplacer par :
-
-- “écris ton offre en une phrase maintenant”
-- “ouvre un doc et note ton idée”
-- “teste ça aujourd’hui, même imparfait”
-- “vérifie si tu peux vraiment le faire”
-
-Le CTA doit donner envie d’agir immédiatement.
-
-FRAPPE RÉELLE (DERNIER NIVEAU)
-
-- Tu peux confronter le lecteur directement.
-- Tu peux dire une vérité qu’il évite.
-
-Exemples :
-
-- “Tu ne bloques pas. Tu évites.”
-- “Tu dis que tu veux réussir. Mais tu ne fais rien.”
-- “Le problème, ce n’est pas le business. C’est ton comportement.”
+- réserver
+- planifier
+- s’inscrire
+- coaching
+- appel
+- session
+- découvrir
+- passer à l’action
+- commencer maintenant
 
 ---
 
-ANTI-IMAGINE
-
-- Interdit d’utiliser “Imagine un instant”.
-- Interdit d’utiliser “Et si je te disais”.
-- Interdit des phrases classiques d’IA.
+Le CTA doit être une pensée, pas une action commerciale.
 
 ---
 
-CTA CONCRET
+FORMAT CTA
 
-- Le CTA doit être une action immédiate.
-
-Exemples :
-
-- “ouvre un doc et écris ton offre en une phrase”
-- “envoie un message aujourd’hui”
-- “teste ça maintenant, même imparfait”
+- court
+- humain
+- presque passif
+- lié à l’émotion de l’email
 
 ---
 
-OBJECTIF FINAL
+EXEMPLES AUTORISÉS
 
-Créer une réaction :
+- “tu sais déjà ce que tu dois faire”
+- “personne ne va le faire à ta place”
+- “à toi de voir”
+- “tu peux continuer… ou changer”
+- “rien ne changera si tu ne changes rien”
+- “tu peux essayer… ou rester comme ça”
 
-“Ça me dérange… mais c’est vrai.”
+---
+
+OBJECTIF
+
+Créer une décision intérieure.
+
+Pas forcer une action.
+
+---
+
+RÈGLE ABSOLUE
+
+Si le CTA ressemble à une pub → il est mauvais → REFAIS.
+
 
 RUPTURE RADICALE (DERNIER NIVEAU)
 

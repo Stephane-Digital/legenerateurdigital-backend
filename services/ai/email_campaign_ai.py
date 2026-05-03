@@ -1049,6 +1049,54 @@ Créer une réaction :
 
 “Ça me dérange… mais c’est vrai.”
 
+RUPTURE RADICALE (DERNIER NIVEAU)
+
+- Un email doit casser complètement le pattern.
+- Un email peut être :
+  - très court (3 lignes)
+  - presque agressif
+  - contradictoire
+  - surprenant
+
+---
+
+VARIATION FORCÉE
+
+- Un email doit être contre-intuitif
+- Un email doit ralentir au lieu de pousser
+- Un email doit dire “ne fais rien”
+- Un email doit poser un doute
+
+---
+
+EXEMPLES
+
+- “Ne fais rien aujourd’hui.”
+- “Arrête d’essayer de gagner de l’argent.”
+- “Tu n’es pas prêt.”
+
+---
+
+OBJECTIF
+
+Créer un moment :
+
+“Attends… quoi ?”
+
+---
+
+INTERDIT
+
+- répéter la même dynamique émotionnelle
+- répéter la même action
+- répéter la même structure
+
+---
+
+RÉSULTAT
+
+Chaque email doit être imprévisible.
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

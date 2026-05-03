@@ -335,9 +335,10 @@ CONTEXTE PERSONNALISATION V3
 
 def _cta_variant(base_cta: Any, day: int) -> str:
     """
-    Évite un CTA identique sur toute la séquence.
-    On conserve l'intention du CTA utilisateur, mais on varie la formulation par jour.
+    Ne modifie PAS le CTA généré par l’IA.
+    On fait confiance au prompt LGD.
     """
+    return _clean_text(base_cta, "")
     base = _clean_text(base_cta, "Passer à l’action maintenant")
     normalized = base.lower()
 
@@ -1317,7 +1318,7 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         language="fr",
     )
     parts = _extract_sections(str(raw))
-    cta = _cta_variant(_clean_text(parts.get("cta"), primary_cta), day)
+    cta = _clean_text(parts.get("cta"), "")
     body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
 
     if _is_bad_template(body):

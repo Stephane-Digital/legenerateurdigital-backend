@@ -1289,6 +1289,10 @@ Pas juste un email lu.
 
 Un email retenu.
 
+Interdit ABSOLU d'utiliser :
+"Imagine"
+"Imagine un instant"
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.
@@ -1297,6 +1301,7 @@ RÈGLES SORTIE EMAIL — CRITIQUE
 - Ne réutilise jamais exactement le CTA principal dans les 7 emails.
 - N'écris jamais "À bientôt peut-être", "À bientôt", "À très vite", "LGD" ou une signature dans le CORPS.
 - Commence le CORPS par "Bonjour {{prenom}},".
+- Interdit de répéter une même phrase finale sur plusieurs emails.
 
 FORMAT STRICT OBLIGATOIRE
 SUJET: ...

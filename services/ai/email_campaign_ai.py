@@ -1356,7 +1356,7 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
         if _is_bad_template(str(email.get("body") or "")):
             raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
 
-        email["cta"] = _cta_variant(email.get("cta"), day)
+        email["cta"] = _clean_text(email.get("cta"), "")
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

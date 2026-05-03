@@ -1010,6 +1010,45 @@ Remplacer par :
 
 Le CTA doit donner envie d’agir immédiatement.
 
+FRAPPE RÉELLE (DERNIER NIVEAU)
+
+- Tu peux confronter le lecteur directement.
+- Tu peux dire une vérité qu’il évite.
+
+Exemples :
+
+- “Tu ne bloques pas. Tu évites.”
+- “Tu dis que tu veux réussir. Mais tu ne fais rien.”
+- “Le problème, ce n’est pas le business. C’est ton comportement.”
+
+---
+
+ANTI-IMAGINE
+
+- Interdit d’utiliser “Imagine un instant”.
+- Interdit d’utiliser “Et si je te disais”.
+- Interdit des phrases classiques d’IA.
+
+---
+
+CTA CONCRET
+
+- Le CTA doit être une action immédiate.
+
+Exemples :
+
+- “ouvre un doc et écris ton offre en une phrase”
+- “envoie un message aujourd’hui”
+- “teste ça maintenant, même imparfait”
+
+---
+
+OBJECTIF FINAL
+
+Créer une réaction :
+
+“Ça me dérange… mais c’est vrai.”
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

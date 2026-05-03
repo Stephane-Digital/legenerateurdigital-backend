@@ -988,6 +988,28 @@ Créer une réaction :
 ou
 - “Ok… là il m’a touché.”
 
+CTA IRRÉSISTIBLE (CRITIQUE)
+
+- Le CTA doit être spécifique à l’email.
+- Il doit être concret, pas abstrait.
+- Il doit donner une micro-action claire.
+
+Interdit :
+
+- “passe à l’action”
+- “clique ici”
+- “découvre maintenant”
+- “fais le premier pas”
+
+Remplacer par :
+
+- “écris ton offre en une phrase maintenant”
+- “ouvre un doc et note ton idée”
+- “teste ça aujourd’hui, même imparfait”
+- “vérifie si tu peux vraiment le faire”
+
+Le CTA doit donner envie d’agir immédiatement.
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

@@ -278,7 +278,11 @@ def _is_bad_template(text: str) -> bool:
     normalized = _normalize_text(text).lower()
     if not normalized:
         return True
-    return any(marker in normalized for marker in BAD_TEMPLATE_MARKERS)
+
+    score = sum(1 for marker in BAD_TEMPLATE_MARKERS if marker in normalized)
+
+    # Tolérance volontaire : un seul marqueur isolé ne doit plus bloquer une bonne sortie IA.
+    return score >= 2
 
 
 def _pattern_for_days(days: int) -> List[str]:
@@ -548,8 +552,8 @@ def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
         return False
     subjects = [(_clean_text(e.get("subject"), "")).lower() for e in emails]
     prefixes = [(_clean_text(e.get("body"), "")[:260]).lower() for e in emails]
-    repeated_subjects = len(set(subjects)) <= max(1, len(subjects) // 2)
-    repeated_prefixes = len(set(prefixes)) <= max(1, len(prefixes) // 2)
+    repeated_subjects = len(set(subjects)) <= max(1, len(subjects) // 3)
+    repeated_prefixes = len(set(prefixes)) <= max(1, len(prefixes) // 3)
     bad_template = any(_is_bad_template(str(e.get("body") or "")) for e in emails)
     return repeated_subjects or repeated_prefixes or bad_template
 
@@ -1322,7 +1326,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
 
     if _is_bad_template(body):
-        raise ValueError("Sortie IA rejetée : template générique ou répétitif détecté.")
+        # Filtre soft : on nettoie sans bloquer une génération IA exploitable.
+        body = _sanitize_body(body)
 
     return {
         "day": day,

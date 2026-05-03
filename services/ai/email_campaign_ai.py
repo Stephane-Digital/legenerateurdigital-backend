@@ -1234,6 +1234,59 @@ Créer une réaction :
 
 “Ok… ça me parle vraiment.”
 
+SIGNATURE FORTE LGD (DERNIER NIVEAU)
+
+- Chaque email doit contenir UNE phrase marquante.
+- Une phrase que le lecteur pourrait retenir.
+
+Exemples :
+
+- “Tu ne bloques pas. Tu évites.”
+- “Tu ne manques pas d’idées. Tu manques de courage.”
+- “Le problème n’est pas ce que tu ne sais pas. C’est ce que tu refuses de faire.”
+
+---
+
+SURPRISE FORCÉE
+
+- 1 email doit être très court (3–4 lignes)
+- 1 email doit être dérangeant
+- 1 email doit casser complètement le ton
+
+---
+
+ANTI-LISSAGE
+
+- Si le texte est trop propre → casse-le
+- Si le texte est trop logique → rends-le humain
+- Si le texte est trop gentil → durcis-le
+
+---
+
+CTA DIFFÉRENCIANT
+
+Interdit :
+
+- passe à l’action
+- commence maintenant
+- découvre
+
+Autorisé :
+
+- “personne ne va le faire à ta place”
+- “tu peux continuer… ou essayer”
+- “à toi de voir”
+
+---
+
+OBJECTIF FINAL
+
+Créer une trace mentale.
+
+Pas juste un email lu.
+
+Un email retenu.
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

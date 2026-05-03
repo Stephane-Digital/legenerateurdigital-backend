@@ -569,6 +569,15 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
 
     return f"""
+PRIORITÉ ABSOLUE
+
+1. FRAPPE DIRECTE
+2. COPYWRITER ELITE MODE
+3. ANTI-CHATGPT MODE
+4. SPÉCIFICITÉ FORCÉE
+
+Si une règle entre en conflit avec une autre → privilégie celles-ci.
+
 Tu es Emailing IA LGD V7.3 : copywriter senior direct-response + stratège Systeme.io.
 
 MISSION

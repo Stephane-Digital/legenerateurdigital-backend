@@ -1097,6 +1097,57 @@ RÉSULTAT
 
 Chaque email doit être imprévisible.
 
+ANTI-PATTERN FINAL
+
+- Interdit de répéter :
+  “Le problème, ce n’est pas X. C’est Y.”
+- Interdit de répéter :
+  “Tu bloques / tu attends / tu hésites”
+- Interdit d’utiliser :
+  “Imagine un instant”
+  “Et si…”
+  “Tu sais quoi…”
+
+---
+
+SURPRISE
+
+- Au moins 2 emails doivent surprendre totalement.
+- Exemple :
+  - très court
+  - presque silencieux
+  - contradictoire
+
+---
+
+EMAIL RADICAL
+
+Un email peut être :
+
+“Ne fais rien aujourd’hui.
+
+Juste regarde combien de fois tu évites.”
+
+---
+
+CTA NON-MARKETING
+
+- Le CTA doit ressembler à une pensée, pas à un bouton.
+
+Exemples :
+
+- “si tu veux tester, fais-le maintenant”
+- “personne ne va le faire à ta place”
+- “tu peux continuer… ou essayer”
+
+---
+
+OBJECTIF FINAL
+
+Créer un moment :
+
+“Je ne m’attendais pas à ça.”
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

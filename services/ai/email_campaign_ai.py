@@ -1178,6 +1178,62 @@ Créer une trace mentale.
 Si tous les emails se ressemblent → échec.
 Si un email reste en tête → succès.
 
+ANTI-PRÉVISIBILITÉ (CRITIQUE)
+
+- Interdit de répéter :
+  “Le problème, ce n’est pas X. C’est Y.”
+- Interdit :
+  “Imagine un instant”
+- Interdit :
+  structure logique répétée
+
+---
+
+RUPTURE FORCÉE
+
+- 1 email doit être très court (3–4 lignes max)
+- 1 email doit être dérangeant
+- 1 email doit ralentir (dire de ne rien faire)
+- 1 email doit être contradictoire
+
+---
+
+FRAPPE ÉMOTIONNELLE
+
+- Tu peux dire une vérité inconfortable
+
+Exemples :
+
+- “Tu n’es pas bloqué. Tu évites.”
+- “Tu dis que tu veux réussir. Mais tu ne fais rien.”
+- “Le problème, c’est ton comportement.”
+
+---
+
+CTA NON-MARKETING
+
+- Le CTA doit ressembler à une pensée
+
+Interdit :
+
+- passe à l’action
+- commence maintenant
+- découvre
+
+Exemples :
+
+- “personne ne va le faire à ta place”
+- “tu peux continuer… ou tester”
+- “à toi de voir”
+
+---
+
+OBJECTIF
+
+Créer une réaction :
+
+“Ok… ça me parle vraiment.”
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

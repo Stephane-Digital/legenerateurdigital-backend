@@ -932,6 +932,53 @@ Créer un email qui fait dire :
 
 “Ok… là il parle de moi.”
 
+FRAPPE DIRECTE (CRITIQUE)
+
+- Tu peux confronter le lecteur.
+- Tu peux le mettre face à ses contradictions.
+- Tu peux pointer un comportement qu’il évite de voir.
+
+Exemples :
+
+- “Tu dis que tu veux réussir. Mais tu ne fais rien.”
+- “Le problème n’est pas le business. C’est toi.”
+- “Tu sais déjà quoi faire. Tu refuses juste de le faire.”
+
+---
+
+INTENSITÉ ÉMOTIONNELLE
+
+- Chaque email doit avoir un moment de tension fort.
+- Tu dois créer un mini choc.
+- Tu dois casser le confort du lecteur.
+
+---
+
+VARIATION RADICALE
+
+- Un email peut être très court (3 lignes)
+- Un email peut être brut, presque agressif
+- Un email peut être introspectif
+- Un email peut être concret / action pure
+
+---
+
+ANTI-LISSAGE
+
+- Si le texte est trop fluide → casse-le
+- Si le texte est trop gentil → durcis-le
+- Si le texte est trop logique → rends-le humain
+
+---
+
+OBJECTIF FINAL
+
+Créer une réaction :
+
+- “Ça me saoule… mais il a raison.”
+ou
+- “Ok… là il m’a touché.”
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

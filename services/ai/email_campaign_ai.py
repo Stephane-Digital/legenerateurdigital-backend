@@ -400,7 +400,7 @@ def _fallback_email(
     clean_audience = _clean_text(target_audience, "les personnes qui veulent avancer")
     clean_promise = _clean_text(main_promise, "obtenir un résultat concret")
     clean_objective = _clean_text(main_objective, "passer à l’action")
-    clean_cta = _cta_variant(primary_cta, day)
+    clean_cta = _clean_text(primary_cta, "")
 
     if day == 1:
         body = f"""Bonjour {{{prenom}}},

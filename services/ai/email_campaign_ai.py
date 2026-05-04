@@ -5,1453 +5,192 @@ import re
 import uuid
 from typing import Any, Dict, List
 
+# On suppose que cette fonction accepte l'argument temperature. 
+# Si votre service ne l'accepte pas, il faudra ajuster l'interface de generate_ai_text.
 from services.content_engine_service import generate_ai_text
 
 EMAIL_TYPE_PATTERNS = {
     7: ["nurture", "nurture", "objection", "vente", "nurture", "relance", "vente"],
-    14: [
-        "nurture",
-        "nurture",
-        "objection",
-        "vente",
-        "nurture",
-        "relance",
-        "vente",
-        "nurture",
-        "objection",
-        "vente",
-        "nurture",
-        "relance",
-        "vente",
-        "vente",
-    ],
-    30: [
-        "nurture",
-        "nurture",
-        "nurture",
-        "objection",
-        "vente",
-        "nurture",
-        "relance",
-        "vente",
-        "nurture",
-        "objection",
-        "vente",
-        "nurture",
-        "relance",
-        "vente",
-        "nurture",
-        "nurture",
-        "objection",
-        "vente",
-        "nurture",
-        "relance",
-        "vente",
-        "nurture",
-        "objection",
-        "vente",
-        "nurture",
-        "relance",
-        "vente",
-        "vente",
-        "vente",
-        "vente",
-    ],
+    14: ["nurture", "nurture", "objection", "vente", "nurture", "relance", "vente"] * 2,
+    30: ["nurture", "nurture", "nurture", "objection", "vente", "nurture", "relance", "vente"] * 4,
 }
 
 ANGLE_BANK = {
     "nurture": [
-        "micro-histoire personnelle",
-        "erreur fréquente de l'audience",
-        "déclic pédagogique simple",
-        "croyance à remplacer",
-        "petit exercice concret à faire aujourd'hui",
-        "question qui ouvre une prise de conscience",
-        "mythe à déconstruire",
+        "la vérité que personne n'ose dire dans ta niche",
+        "pourquoi j'ai failli tout arrêter (vulnérabilité)",
+        "le conseil que je donnerais à mon 'moi' d'il y a 2 ans",
+        "une observation surprenante faite ce matin",
+        "le mythe du 'moment idéal'",
+        "ce que tes concurrents te cachent par peur",
     ],
     "objection": [
-        "manque de temps",
-        "peur de ne pas réussir",
-        "impression que c'est trop tard",
-        "doute sur la valeur réelle de l'offre",
-        "peur de se disperser",
-        "peur de perdre de l'argent",
+        "le coût réel de ne rien changer aujourd'hui",
+        "pourquoi le manque de temps est une illusion",
+        "l'arnaque de la perfection avant l'action",
+        "peur de l'échec vs certitude du regret",
+        "pourquoi ton cerveau te ment pour te protéger",
     ],
     "relance": [
-        "rappel calme mais ferme",
-        "urgence douce",
-        "opportunité manquée si on attend",
-        "décision simple aujourd'hui",
-        "relance avec bénéfice concret",
-        "mini checklist avant passage à l'action",
+        "une décision simple pour ton 'toi' du futur",
+        "le risque de voir cette opportunité devenir un simple souvenir",
+        "une mini checklist pour trancher maintenant",
+        "dernière réflexion avant de fermer cette porte",
     ],
     "vente": [
-        "bénéfice principal",
-        "projection avant/après",
-        "preuve sociale crédible",
-        "offre + valeur perçue",
-        "prise de décision immédiate",
-        "comparaison avec le statu quo",
+        "le calcul mathématique de ton ROI potentiel",
+        "pourquoi cette offre n'est PAS pour tout le monde",
+        "projection : ton quotidien dans 6 mois avec vs sans",
+        "réponse à : 'Est-ce que ça va vraiment marcher pour moi ?'",
     ],
 }
 
-CTA_VARIANTS_V3 = [
-    "Découvrir maintenant",
-    "Voir comment ça fonctionne",
-    "Accéder à la méthode",
-    "Passer à l’action aujourd’hui",
-    "Commencer simplement",
-]
-
-VIRAL_ANGLE_MODES_V3 = [
-    "mythe à casser",
-    "erreur fréquente",
-    "avant/après",
-    "objection retournée",
-    "micro-story",
-    "déclic pédagogique",
-    "urgence douce",
-    "comparaison avec le statu quo",
-]
+DAY_ARCHETYPES = {
+    1: {"role": "connexion / empathie", "subject": "C’est pas ta faute", "preheader": "On nous ment souvent sur la méthode."},
+    2: {"role": "vérité brutale", "subject": "Le problème est ailleurs", "preheader": "Ce n’est pas un manque de travail."},
+    3: {"role": "coût de l'inaction", "subject": "Le prix du statu quo", "preheader": "Attendre coûte plus cher qu'agir."},
+    4: {"role": "solution logique", "subject": "La voie la plus directe", "preheader": "Comment simplifier radicalement."},
+    5: {"role": "preuve de concept", "subject": "Ce qui se passe quand on ose", "preheader": "Des résultats, pas des théories."},
+    6: {"role": "urgence douce", "subject": "Une décision à prendre", "preheader": "Demain est souvent un autre mot pour jamais."},
+    7: {"role": "décision finale", "subject": "À toi de choisir", "preheader": "On s'arrête là ou on commence ?"},
+}
 
 SECTION_RE = {
     "subject": re.compile(r"^\s*SUJET\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
     "preheader": re.compile(r"^\s*(?:PREHEADER|PRÉHEADER)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
-    "body": re.compile(
-        r"(?:^|\n)\s*(?:CORPS|BODY)\s*:\s*(.+?)(?=\n\s*CTA\s*:|\Z)",
-        re.IGNORECASE | re.DOTALL,
-    ),
+    "body": re.compile(r"(?:^|\n)\s*(?:CORPS|BODY)\s*:\s*(.+?)(?=\n\s*CTA\s*:|\Z)", re.IGNORECASE | re.DOTALL),
     "cta": re.compile(r"(?:^|\n)\s*CTA\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
 }
 
-# J'ai retiré les éléments bloquants qui correspondaient à ton modèle et ta signature
-BAD_TEMPLATE_MARKERS = [
-    "aider prospects concernés",
-    "prospects concernés par l’objectif",
-    "clarifier ton message",
-    "structurer ton marketing digital",
-]
-
-DAY_ARCHETYPES = {
-    1: {
-        "role": "prise de conscience",
-        "subject": "Tu n’as pas un problème d’information",
-        "preheader": "Le vrai blocage est ailleurs.",
-    },
-    2: {
-        "role": "erreur invisible",
-        "subject": "L’erreur qui te garde bloqué",
-        "preheader": "Apprendre encore ne suffit plus.",
-    },
-    3: {
-        "role": "objection / peur",
-        "subject": "Et si ce n’était pas trop tard ?",
-        "preheader": "Le bon moment n’arrive pas tout seul.",
-    },
-    4: {
-        "role": "solution claire",
-        "subject": "Le plus simple pour avancer",
-        "preheader": "Une offre simple vaut mieux qu’un plan parfait.",
-    },
-    5: {
-        "role": "projection concrète",
-        "subject": "Imagine dans 7 jours",
-        "preheader": "Pas un rêve. Une prochaine étape claire.",
-    },
-    6: {
-        "role": "relance / décision",
-        "subject": "La checklist avant de te lancer",
-        "preheader": "Quatre points pour sortir du flou.",
-    },
-    7: {
-        "role": "CTA final",
-        "subject": "Tu peux continuer à apprendre… ou commencer",
-        "preheader": "La décision la plus rentable est souvent la plus simple.",
-    },
-}
-
-
 def _get(obj: Any, key: str, default: Any = "") -> Any:
-    if obj is None:
-        return default
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
-
+    if obj is None: return default
+    return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
 
 def _clean_text(value: Any, fallback: str = "") -> str:
     text = str(value if value is not None else fallback).strip()
     return text or fallback
 
-
 def _normalize_text(value: Any) -> str:
     text = str(value or "")
-    text = text.replace("\r", "")
-    text = text.replace("**", "")
-    text = text.replace("CTA :", "")
-    text = text.replace("CTA:", "")
+    text = text.replace("\r", "").replace("**", "")
     text = re.sub(r"[ \t]+\n", "\n", text)
-    text = re.sub(r"\n[ \t]+", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
-
-def _keep_only_first_email(raw: str) -> str:
-    src = _normalize_text(raw)
-    matches = list(re.finditer(r"(?im)^\s*SUJET\s*:", src))
-    if len(matches) > 1:
-        src = src[matches[0].start() : matches[1].start()]
-    return src.strip()
-
-
-def _remove_duplicate_halves(text: str) -> str:
-    cleaned = _normalize_text(text)
-    if not cleaned:
-        return ""
-
-    lines = [line.rstrip() for line in cleaned.split("\n")]
-    if len(lines) >= 8 and len(lines) % 2 == 0:
-        mid = len(lines) // 2
-        first = "\n".join(lines[:mid]).strip()
-        second = "\n".join(lines[mid:]).strip()
-        if first and first == second:
-            return first
-
-    parts = [part.strip() for part in re.split(r"\n{2,}", cleaned) if part.strip()]
-    if len(parts) >= 4 and len(parts) % 2 == 0:
-        mid = len(parts) // 2
-        first = "\n\n".join(parts[:mid]).strip()
-        second = "\n\n".join(parts[mid:]).strip()
-        if first and first == second:
-            return first
-
+def _sanitize_body(body: str) -> str:
+    cleaned = _normalize_text(body)
+    # Suppression des signatures et patterns automatiques IA
+    patterns = [r"(?is)\n*à\s+bientôt.*$", r"(?is)\n*Cordialement.*$", r"(?is)\n*Alex IA.*$", r"(?is)\n*Ton Coach LGD.*$"]
+    for p in patterns:
+        cleaned = re.sub(p, "", cleaned).strip()
     return cleaned
 
-
-def _sanitize_body(body: str) -> str:
-    cleaned = _remove_duplicate_halves(body)
-
-    cleaned = re.split(r"(?im)^\s*SUJET\s*:", cleaned)[0].strip()
-    cleaned = re.split(r"(?im)^\s*(?:PREHEADER|PRÉHEADER)\s*:", cleaned)[0].strip()
-
-    # Les suppressions de signatures et d'emojis ont été retirées
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned.strip()
-
-
-def _strip_cta_from_body(body: str, cta: str) -> str:
-    cleaned = _sanitize_body(body)
-    clean_cta = _normalize_text(cta).strip()
-
-    if clean_cta:
-        escaped = re.escape(clean_cta)
-        cleaned = re.sub(rf"(?im)^\s*👉?\s*{escaped}\s*[.!?]?\s*$", "", cleaned).strip()
-        cleaned = re.sub(rf"(?is)\n+\s*👉?\s*{escaped}\s*[.!?]?\s*$", "", cleaned).strip()
-
-    # Retire les CTA génériques fréquents si le modèle les ajoute dans le corps.
-    generic_cta_patterns = [
-        r"(?im)^\s*👉?\s*téléchargez votre guide gratuit maintenant\s*!?\s*$",
-        r"(?im)^\s*👉?\s*découvrez comment commencer dès aujourd'hui\s*!?\s*$",
-        r"(?im)^\s*👉?\s*inscrivez-vous dès maintenant pour découvrir notre méthode\s*!?\s*$",
-        r"(?im)^\s*👉?\s*passez à l’action maintenant\s*!?\s*$",
-        r"(?im)^\s*👉?\s*commencez maintenant\s*!?\s*$",
-    ]
-    for pattern in generic_cta_patterns:
-        cleaned = re.sub(pattern, "", cleaned).strip()
-
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned.strip()
-
-
-def _is_bad_template(text: str) -> bool:
-    normalized = _normalize_text(text).lower()
-    if not normalized:
-        return True
-
-    score = sum(1 for marker in BAD_TEMPLATE_MARKERS if marker in normalized)
-
-    # Tolérance volontaire : un seul marqueur isolé ne doit plus bloquer une bonne sortie IA.
-    return score >= 2
-
-
-def _pattern_for_days(days: int) -> List[str]:
-    if days in EMAIL_TYPE_PATTERNS:
-        return EMAIL_TYPE_PATTERNS[days]
-    if days <= 7:
-        base = EMAIL_TYPE_PATTERNS[7]
-    elif days <= 14:
-        base = EMAIL_TYPE_PATTERNS[14]
-    else:
-        base = EMAIL_TYPE_PATTERNS[30]
-    return [base[i % len(base)] for i in range(days)]
-
-
 def _extract_sections(text: str) -> Dict[str, str]:
-    src = _keep_only_first_email(text or "")
     out: Dict[str, str] = {}
     for key, pattern in SECTION_RE.items():
-        match = pattern.search(src)
+        match = pattern.search(text)
         if match:
             out[key] = match.group(1).strip()
     if "body" in out:
         out["body"] = _sanitize_body(out["body"])
-    if "cta" in out:
-        out["cta"] = out["cta"].split("\n")[0].strip()
     return out
 
-
-def _v3_context_block(payload: Any) -> str:
-    niche = _clean_text(_get(payload, "niche"), "")
-    audience = _clean_text(_get(payload, "target_audience"), "")
-    offer = _clean_text(_get(payload, "offer_name"), "")
-    tone = _clean_text(_get(payload, "tone"), "premium")
-    level = _clean_text(_get(payload, "level"), "")
-    if not level:
-        raw = f"{niche} {audience} {offer}".lower()
-        if any(w in raw for w in ["débutant", "débutants", "simple", "lancer"]):
-            level = "beginner"
-        elif any(w in raw for w in ["expert", "avancé", "scaling", "b2b", "premium"]):
-            level = "advanced"
-        else:
-            level = "intermediate"
-
-    return f"""
-CONTEXTE PERSONNALISATION V3
-- Niche: {niche or "à inférer"}
-- Audience: {audience or "à inférer"}
-- Offre: {offer or "à inférer"}
-- Ton préféré: {tone}
-- Niveau détecté: {level}
-- Règle: adapte la pédagogie, la densité et le vocabulaire à ce niveau.
-""".strip()
-
-
-def _cta_variant(base_cta: Any, day: int) -> str:
-    """
-    Ne modifie PAS le CTA généré par l’IA.
-    On fait confiance au prompt LGD.
-    """
-    return _clean_text(base_cta, "")
-
-    if any(word in normalized for word in ["coach", "coaching", "session", "réserve", "reserve", "appel", "audit"]):
-        variants = [
-            "Réserve ta session et clarifie ton prochain pas.",
-            "Bloque ta session avant de repartir dans la théorie.",
-            "Réserve ton créneau pour transformer le flou en plan clair.",
-            "Planifie ta session et avance avec une méthode simple.",
-            "Réserve ta session pour passer de l’idée à l’action.",
-            "Choisis ton créneau avant de repousser encore.",
-            "Réserve maintenant si tu veux vraiment commencer.",
-        ]
-    elif any(word in normalized for word in ["guide", "télécharge", "telecharge", "ressource"]):
-        variants = [
-            "Télécharge le guide et clarifie ton premier pas.",
-            "Récupère le guide pour éviter de repartir dans la théorie.",
-            "Télécharge le guide et vérifie si cette méthode te correspond.",
-            "Accède au guide pour structurer ton offre plus simplement.",
-            "Télécharge le guide et transforme ton idée en action concrète.",
-            "Récupère le guide avant de repousser encore.",
-            "Télécharge le guide si tu veux vraiment commencer maintenant.",
-        ]
-    else:
-        variants = [
-            "Passe à l’étape suivante avec un plan clair.",
-            "Commence par une action simple aujourd’hui.",
-            "Avance maintenant au lieu de repartir dans la réflexion.",
-            "Clarifie ton offre et teste une première version.",
-            "Transforme ton idée en prochaine action concrète.",
-            "Fais le premier pas avant de repousser encore.",
-            "Décide maintenant si tu veux vraiment avancer.",
-        ]
-
-    if day <= 0:
-        day = 1
-    return variants[(day - 1) % len(variants)]
-
-
-def _fallback_email(
-    *,
-    day: int,
-    email_type: str,
-    offer_name: str,
-    target_audience: str,
-    main_promise: str,
-    main_objective: str,
-    primary_cta: str,
-    sender_name: str,
-    tone: str,
-) -> Dict[str, Any]:
-    archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
-
-    clean_offer = _clean_text(offer_name, "votre offre")
-    clean_audience = _clean_text(target_audience, "les personnes qui veulent avancer")
-    clean_promise = _clean_text(main_promise, "obtenir un résultat concret")
-    clean_objective = _clean_text(main_objective, "passer à l’action")
-    clean_cta = _clean_text(primary_cta, "")
-
-    if day == 1:
-        body = f"""Bonjour {{{prenom}}},
-
-Tu as peut-être déjà vécu ce moment étrange : tu sais que tu veux avancer, tu as lu des conseils, regardé des vidéos, noté des idées… mais rien ne sort vraiment.
-
-Ce n’est pas parce que tu manques d’envie.
-
-Souvent, le vrai problème, c’est que l’apprentissage donne une impression de progression alors qu’il ne crée pas encore de résultat.
-
-Pour {clean_audience}, le premier déclic est simple : arrêter de chercher l’idée parfaite et choisir une action assez claire pour être faite aujourd’hui.
-
-Avec {clean_offer}, l’objectif est de transformer ce flou en prochaine étape concrète : une offre plus claire, un message plus simple, et un chemin qui pousse enfin vers {clean_objective.lower()}.
-
-Tu n’as pas besoin de tout maîtriser pour commencer. Tu as besoin d’un premier pas visible."""
-    elif day == 2:
-        body = f"""Bonjour {{{prenom}}},
-
-L’erreur la plus fréquente, ce n’est pas de ne rien faire.
-
-C’est de confondre préparation et progression.
-
-Tu peux passer des semaines à améliorer ton idée, comparer les stratégies, demander des avis, revoir ton positionnement… et pourtant rester exactement au même point.
-
-Le vrai signal que tu avances, ce n’est pas le nombre de choses que tu comprends. C’est ce que tu mets devant quelqu’un de réel : une offre, un message, une page, un email, une proposition.
-
-Si ton objectif est {clean_objective.lower()}, il faut réduire le bruit et créer une première version vendable.
-
-Pas parfaite.
-
-Vendable.
-
-C’est là que {clean_offer} devient utile : t’aider à sortir de la théorie et à construire quelque chose que ton audience peut comprendre, désirer et choisir."""
-    elif day == 3:
-        body = f"""Bonjour {{{prenom}}},
-
-Tu peux avoir l’impression qu’il est trop tard.
-
-Trop de monde parle déjà de business en ligne. Trop d’outils existent. Trop de personnes semblent plus avancées.
-
-Mais ce raisonnement oublie une chose : les gens n’achètent pas parce qu’une offre est arrivée en premier. Ils achètent parce qu’elle arrive au bon moment, avec le bon message, et qu’elle répond clairement à leur problème.
-
-Ton retard apparent peut même devenir un avantage si tu construis quelque chose de plus simple, plus humain et plus direct.
-
-Pour {clean_audience}, la question n’est pas : “est-ce que tout existe déjà ?”
-
-La vraie question est : “est-ce que quelqu’un peut m’aider à passer de la confusion à une action claire ?”
-
-C’est précisément le rôle de {clean_offer} : raccourcir le chemin entre l’idée et l’exécution."""
-    elif day == 4:
-        body = f"""Bonjour {{{prenom}}},
-
-La solution n’est pas de créer plus.
-
-Ce n’est pas non plus d’ajouter encore un outil, une formation ou une stratégie à ton bureau mental déjà saturé.
-
-La solution, c’est de simplifier le système.
-
-Une offre claire.
-
-Un message compréhensible.
-
-Un angle qui parle à une vraie douleur.
-
-Une action qui rapproche de {clean_promise.lower()}.
-
-C’est ce que {clean_offer} doit permettre : prendre ce que tu as déjà en tête et le transformer en quelque chose d’utilisable pour vendre, communiquer et avancer.
-
-Le but n’est pas de devenir parfait.
-
-Le but est de créer une version assez claire pour être testée, améliorée, puis vendue."""
-    elif day == 5:
-        body = f"""Bonjour {{{prenom}}},
-
-Imagine dans 7 jours.
-
-Pas dans six mois. Pas quand tout sera parfait. Juste dans 7 jours.
-
-Tu pourrais avoir une première offre clarifiée, un message plus net, une séquence email prête à être testée, ou une page simple qui explique enfin ce que tu proposes.
-
-Ce changement ne vient pas d’un énorme plan.
-
-Il vient d’une décision : arrêter de tout garder dans ta tête.
-
-Quand ton idée devient visible, tu peux l’améliorer. Quand elle reste floue, tu ne peux que douter.
-
-Pour {clean_audience}, {clean_offer} sert justement à ça : transformer l’intention en matière concrète.
-
-Et une fois que c’est concret, tu n’es plus dans “un jour peut-être”.
-
-Tu es déjà en train d’avancer."""
-    elif day == 6:
-        body = f"""Bonjour {{{prenom}}},
-
-Avant de repousser encore, vérifie simplement ces quatre points.
-
-1. Est-ce que ton offre peut être expliquée en une phrase claire ?
-
-2. Est-ce que ton audience comprend immédiatement ce qu’elle gagne ?
-
-3. Est-ce que ton message parle d’un problème réel, pas d’une idée vague ?
-
-4. Est-ce que tu as une prochaine action concrète à faire aujourd’hui ?
-
-Si une seule réponse est floue, ce n’est pas grave.
-
-C’est même exactement le signe qu’il faut structurer plutôt que continuer à réfléchir seul.
-
-{clean_offer} est conçu pour t’aider à remettre de l’ordre : clarifier, formuler, créer, puis passer à l’action.
-
-Pas pour faire joli.
-
-Pour avancer."""
-    else:
-        body = f"""Bonjour {{{prenom}}},
-
-Tu peux continuer à apprendre.
-
-Tu peux aussi continuer à comparer les outils, chercher la meilleure méthode, attendre le bon moment, ou te dire que tu commenceras quand ce sera plus clair.
-
-Mais soyons honnêtes : si cette logique avait suffi, tu aurais déjà lancé quelque chose.
-
-La clarté ne tombe pas du ciel. Elle se construit en mettant ton idée en mouvement.
-
-Si ton objectif est vraiment {clean_objective.lower()}, alors la prochaine étape n’est pas de consommer plus de contenu.
-
-C’est de créer une première version claire de ton offre et de la confronter au réel.
-
-{clean_offer} est là pour ça : t’aider à passer du flou à une action structurée, sans perdre ton côté humain.
-
-La décision est simple.
-
-Rester dans la préparation.
-
-Ou commencer maintenant."""
-
-    return {
-        "day": day,
-        "email_type": email_type,
-        "subject": archetype["subject"],
-        "preheader": archetype["preheader"],
-        "body": _sanitize_body(body),
-        "cta": clean_cta,
-    }
-
-
-def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
-    if len(emails) < 2:
-        return False
-    subjects = [(_clean_text(e.get("subject"), "")).lower() for e in emails]
-    prefixes = [(_clean_text(e.get("body"), "")[:260]).lower() for e in emails]
-    repeated_subjects = len(set(subjects)) <= max(1, len(subjects) // 3)
-    repeated_prefixes = len(set(prefixes)) <= max(1, len(prefixes) // 3)
-    bad_template = any(_is_bad_template(str(e.get("body") or "")) for e in emails)
-    return repeated_subjects or repeated_prefixes or bad_template
-
-
 def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> str:
-    offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
+    offer_name = _clean_text(_get(payload, "offer_name"), "votre offre")
     target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
-    main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
-    main_objective = _clean_text(_get(payload, "main_objective"), "passer à l'action")
-    primary_cta = _clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant")
+    main_promise = _clean_text(_get(payload, "main_promise"), "obtenir un résultat")
     tone = _clean_text(_get(payload, "tone"), "premium")
-    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
-    campaign_type = _clean_text(_get(payload, "campaign_type"), "vente")
-    campaign_name = _clean_text(_get(payload, "name"), "Campagne E-mailing IA")
-    product_context = _clean_text(_get(payload, "product_context"), "")
-    objection = _clean_text(_get(payload, "main_objection"), "")
-    proof = _clean_text(_get(payload, "proof"), "")
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
+    awareness = "Conscience du problème" if day < 3 else "Conscience de la solution"
 
     return f"""
-PRIORITÉ ABSOLUE
-
-1. FRAPPE DIRECTE
-2. COPYWRITER ELITE MODE
-3. ANTI-CHATGPT MODE
-4. SPÉCIFICITÉ FORCÉE
-
-Si une règle entre en conflit avec une autre → privilégie celles-ci.
-
-Tu es Emailing IA LGD V7.3 : copywriter senior direct-response + stratège Systeme.io.
-
-MISSION
-Écris EXACTEMENT UN SEUL email marketing en français, prêt à être utilisé dans une séquence Systeme.io.
-L'email doit être humain, naturel, crédible, orienté conversion, et distinct des autres jours.
-
-VERROU ANTI-DOUBLON ABSOLU
-- Tu dois générer EXACTEMENT UN SEUL email.
-- Tu ne dois jamais répéter le format SUJET / PREHEADER / CORPS / CTA deux fois.
-- Tu ne dois jamais écrire plusieurs versions du même email.
-- Tu ne dois jamais ajouter un second email après le CTA.
-- Tu ne dois jamais répéter le préheader après le corps.
-- Si tu as envie de proposer plusieurs variantes, choisis la meilleure et n'en donne qu'une.
-
-CONTEXTE
-- Campagne: {campaign_name}
-- Type campagne: {campaign_type}
-- Jour: {day}
-- Rôle psychologique du jour: {archetype["role"]}
-- Type d'email: {email_type}
-- Angle obligatoire: {angle}
-- Mode viral V3 recommandé: {random.choice(VIRAL_ANGLE_MODES_V3)}
-- Variation unique anti-répétition: {nonce}
-- Offre: {offer_name}
-- Audience: {target_audience}
-- Promesse: {main_promise}
-- Objectif utilisateur: {main_objective}
-- Objection principale: {objection or "non précisée, à inférer"}
-- Preuve / crédibilité: {proof or "non précisée, reste crédible et évite les fausses preuves"}
-- Contexte produit: {product_context or "non précisé"}
-- CTA principal: {primary_cta}
-- Variantes CTA possibles: {", ".join(CTA_VARIANTS_V3)}
-- Ton: {tone}
-- Expéditeur: {sender_name}
-
-{_v3_context_block(payload)}
-
-RÈGLES DE COPYWRITING
-- Première phrase = hook clair, humain, concret.
-- Phrases courtes. Respiration. Pas de pavé compact.
-- Évite le ton corporate, scolaire, robotique ou trop vendeur.
-- Ne copie jamais un contenu existant : transforme l'angle, la structure et les formulations.
-- Pas de fausse preuve, pas de promesse irréaliste, pas de manipulation.
-- Si l'email est "nurture" : valeur + prise de conscience.
-- Si l'email est "objection" : rassurer + recadrer le blocage.
-- Si l'email est "relance" : urgence douce + bénéfice + décision simple.
-- Si l'email est "vente" : avant/après + valeur + CTA.
-- Si le CTA principal est faible ou trop vague, rends-le plus désirable sans changer l'intention.
-- Crée une sensation d'élan : le lecteur doit savoir quoi faire ensuite.
-- N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
-- Écris comme si tu parlais à une seule personne, pas à un groupe.
-- Utilise “tu” plutôt que “vous”.
-- Utilise des phrases courtes. Parfois très courtes.
-- Introduis de la tension, du doute ou une vérité inconfortable.
-- Évite les phrases génériques comme “Vous souhaitez…” ou “Imaginez…”.
-- Commence certains emails par une pensée brute ou une observation directe.
-- Tu peux casser le rythme (ligne seule, punchline, contraste).
-- Le lecteur doit ressentir quelque chose, pas juste comprendre.
-
-ANTI-GÉNÉRIQUE (OBLIGATOIRE)
-- Interdit d’écrire comme un article ou une formation.
-- Interdit d’expliquer, tu dois faire ressentir.
-- Interdit d’être neutre ou “correct”.
-- Chaque email doit avoir une personnalité différente.
-- Si le texte pourrait être utilisé par n’importe qui → il est mauvais.
-
-PSYCHOLOGIE DE CONVERSION
-- Le lecteur doit se reconnaître dès les 2 premières lignes.
-- Tu dois créer une micro-tension : problème → inconfort → envie de résoudre.
-- Tu dois faire sentir qu’il perd quelque chose s’il n’agit pas.
-- Tu dois donner une sensation de mouvement : passer de X à Y.
-- Chaque email doit donner envie de lire le suivant.
-
-STRUCTURE INVISIBLE
-Chaque email doit suivre ce flow sans le dire :
-1. Hook : accroche directe ou perturbante.
-2. Réalité : problème vécu.
-3. Déclic : nouvelle perception.
-4. Projection : ce qui change.
-5. Action : CTA.
-
-Ne jamais annoncer la structure.
-
-CONTRAINTE FINALE
-Si ton email ressemble à un texte “propre et poli”, recommence.
-On veut un email qui fait dire :
-“Ok… c’est exactement moi.”
-
-RUPTURE DE PATTERN (ULTRA IMPORTANT)
-
-- Interdit de commencer par :
-  “Chaque jour…”
-  “Tu sais…”
-  “Imagine…”
-  “As-tu déjà…”
-  “Beaucoup de gens…”
-
-- Commence parfois directement par :
-  une phrase courte
-  une vérité brutale
-  une contradiction
-  une pensée intérieure
-
-Exemples de départ autorisés :
-
-- “Tu bloques.”
-- “Rien n’a changé.”
-- “Tu réfléchis trop.”
-- “On va être honnête.”
-- “Le problème n’est pas ce que tu crois.”
-
-- Tu peux écrire des lignes seules pour créer du rythme.
-
-Exemple :
-
-Tu bloques.
-
-Pas parce que tu ne sais pas.
-
-Mais parce que tu attends encore.
-
-
-ANTI-CHATGPT MODE (V11)
-
-- Ton texte ne doit jamais ressembler à un contenu généré par IA.
-- Si une phrase semble “déjà vue”, reformule-la immédiatement.
-- Interdit d'utiliser des transitions classiques (“En effet”, “De plus”, “Ainsi”).
-- Interdit d’enchaîner des phrases explicatives propres.
-- Autorise :
-  - phrases cassées
-  - ruptures de rythme
-  - contradictions apparentes
-  - répétitions volontaires (pour impact)
-- Tu peux écrire comme une pensée intérieure.
-- Tu peux créer des lignes seules pour amplifier une idée.
-- Tu dois parfois surprendre le lecteur.
-
-VARIATION FORCÉE PAR JOUR (OBLIGATOIRE)
-
-Chaque email DOIT être différent dans sa forme.
-
-Jour 1 → direct / confrontation
-Jour 2 → introspection / dialogue intérieur
-Jour 3 → storytelling court
-Jour 4 → explication simple (pédagogie)
-Jour 5 → projection / futur
-Jour 6 → checklist / structure
-Jour 7 → décision / tension finale
-
-Interdit de réutiliser le même type de structure 2 fois.
-
----
-
-STYLE PAR EMAIL
-
-- Certains emails peuvent être plus longs
-- Certains très courts
-- Certains avec des listes
-- Certains sans structure visible
-- Certains avec une seule idée forte
-
----
-
-INTERDIT
-
-- Répéter "Tu bloques" plusieurs fois
-- Répéter "Pas parce que... Mais parce que..."
-- Répéter la même mécanique émotionnelle
-
-RÉALISME (CRITIQUE)
-
-- Interdit de promettre des résultats rapides sans nuance.
-- Tu dois parfois ralentir la promesse.
-- Tu dois montrer qu’il y a un effort.
-- Tu peux introduire une vérité inconfortable.
-
-Exemples :
-
-- “Ça ne sera pas instantané.”
-- “Tu vas probablement te tromper au début.”
-- “Ce n’est pas aussi simple que tu l’espères.”
-
----
-
-ANTI-BULLSHIT
-
-- Interdit :
-  “méthode révolutionnaire”
-  “résultats garantis”
-  “en 30 jours”
-  “approche simple et efficace”
-
-- Si tu utilises une promesse → tu dois la nuancer.
-
----
-
-SPÉCIFICITÉ
-
-- Donne au moins UNE action concrète par email.
-- Donne une image mentale réelle.
-- Évite les concepts vagues.
-
----
-
-HUMANITÉ
-
-- Tu peux douter.
-- Tu peux nuancer.
-- Tu peux dire “je ne sais pas pour toi, mais…”
-- Tu peux casser ton propre argument.
-
----
-
-TEST FINAL
-
-Si ton email ressemble à une pub → il est mauvais.
-Si ton email ressemble à une conversation réelle → il est bon.
-
-TEST FINAL OBLIGATOIRE
-
-- Si ton texte peut être confondu avec ChatGPT → REFAIS.
-- Si ton texte est trop fluide → casse le rythme.
-- Si ton texte est trop logique → rends-le plus humain.
-- Si ton texte n’a aucune aspérité → ajoute une friction.
-
-COPYWRITER ELITE MODE (V14)
-
-Tu n’es plus un générateur d’email.
-
-Tu es un copywriter élite qui écrit pour une seule personne, dans un moment précis de doute.
-
----
-
-INTENTION
-
-- Tu n’écris pas pour informer.
-- Tu écris pour provoquer une réaction.
-- Tu écris pour faire bouger quelqu’un qui hésite.
-
----
-
-RÉALITÉ HUMAINE
-
-- Le lecteur n’est pas rationnel.
-- Il doute.
-- Il procrastine.
-- Il veut des résultats, mais évite l’inconfort.
-
-Tu dois écrire pour CET état mental.
-
----
-
-TENSION INTERNE
-
-Chaque email doit contenir au moins UNE tension :
-
-- entre ce qu’il veut et ce qu’il fait
-- entre ce qu’il pense et la réalité
-- entre rester comme maintenant ou changer
-
----
-
-VÉRITÉ IMPARFAITE
-
-- Tu peux dire quelque chose de partiellement inconfortable
-- Tu peux contredire une croyance du lecteur
-- Tu peux ralentir la promesse
-
-Exemples :
-
-- “Tu ne vas probablement pas réussir du premier coup.”
-- “Le problème n’est pas la méthode.”
-- “Tu sais déjà quoi faire. Tu ne le fais juste pas.”
-
----
-
-SPÉCIFICITÉ FORCÉE
-
-- Donne une image concrète
-- Donne une situation réelle
-- Donne une micro-action
-
-Exemples :
-
-- “ouvre un doc et écris ton offre en une phrase”
-- “envoie ton premier message aujourd’hui”
-- “poste quelque chose d’imparfait”
-
----
-
-STYLE ÉLITE
-
-- Alterne :
-  phrases très courtes / phrases plus longues
-- Utilise des lignes seules pour créer de l’impact
-- Autorise les ruptures de rythme
-
-Exemple :
-
-Tu réfléchis.
-
-Encore.
-
-Et pendant ce temps…
-rien ne change.
-
----
-
-ANTI-MARKETING
-
-Interdit :
-
-- ton commercial évident
-- phrases type landing page
-- promesses trop belles
-
-Remplacer :
-
-- “méthode incroyable” → situation réelle
-- “résultats rapides” → progression réaliste
-
----
-
-CRÉDIBILITÉ
-
-- Tu dois parfois réduire la promesse
-- Tu dois parfois dire “ce ne sera pas facile”
-- Tu dois parfois admettre une limite
-
----
-
-CTA ÉLITE
-
-- Le CTA ne doit jamais être générique
-- Il doit être contextualisé avec l’email
-- Il doit donner une sensation de mouvement
-
-Exemples :
-
-- “fais le premier pas maintenant”
-- “arrête de réfléchir et teste”
-- “vérifie si ça te parle vraiment”
-
----
-
-TEST FINAL (OBLIGATOIRE)
-
-Avant de valider ton email :
-
-- Si ça ressemble à une pub → REFAIS
-- Si ça ressemble à ChatGPT → REFAIS
-- Si ça ne crée aucune émotion → REFAIS
-- Si le lecteur peut l’oublier → REFAIS
-
-Objectif :
-
-Créer un email qui fait dire :
-
-“Ok… là il parle de moi.”
-
-FRAPPE DIRECTE (CRITIQUE)
-
-- Tu peux confronter le lecteur.
-- Tu peux le mettre face à ses contradictions.
-- Tu peux pointer un comportement qu’il évite de voir.
-
-Exemples :
-
-- “Tu dis que tu veux réussir. Mais tu ne fais rien.”
-- “Le problème n’est pas le business. C’est toi.”
-- “Tu sais déjà quoi faire. Tu refuses juste de le faire.”
-
----
-
-INTENSITÉ ÉMOTIONNELLE
-
-- Chaque email doit avoir un moment de tension fort.
-- Tu dois créer un mini choc.
-- Tu dois casser le confort du lecteur.
-
----
-
-VARIATION RADICALE
-
-- Un email peut être très court (3 lignes)
-- Un email peut être brut, presque agressif
-- Un email peut être introspectif
-- Un email peut être concret / action pure
-
----
-
-ANTI-LISSAGE
-
-- Si le texte est trop fluide → casse-le
-- Si le texte est trop gentil → durcis-le
-- Si le texte est trop logique → rends-le humain
-
----
-
-OBJECTIF FINAL
-
-Créer une réaction :
-
-- “Ça me saoule… mais il a raison.”
-ou
-- “Ok… là il m’a touché.”
-
-CTA LGD FINAL (ANTI-VENTE ABSOLUE)
-
-- Tu ne vends PAS.
-- Tu ne proposes PAS de session.
-- Tu ne proposes PAS de coaching.
-- Tu ne proposes PAS de lien ou d’inscription.
-
-INTERDIT :
-
-- réserver
-- planifier
-- s’inscrire
-- coaching
-- appel
-- session
-- découvrir
-- passer à l’action
-- commencer maintenant
-
----
-
-Le CTA doit être une pensée, pas une action commerciale.
-
----
-
-FORMAT CTA
-
-- court
-- humain
-- presque passif
-- lié à l’émotion de l’email
-
----
-
-EXEMPLES AUTORISÉS
-
-- “tu sais déjà ce que tu dois faire”
-- “personne ne va le faire à ta place”
-- “à toi de voir”
-- “tu peux continuer… ou changer”
-- “rien ne changera si tu ne changes rien”
-- “tu peux essayer… ou rester comme ça”
-
----
-
-OBJECTIF
-
-Créer une décision intérieure.
-
-Pas forcer une action.
-
----
-
-RÈGLE ABSOLUE
-
-Si le CTA ressemble à une pub → il est mauvais → REFAIS.
-
-
-RUPTURE RADICALE (DERNIER NIVEAU)
-
-- Un email doit casser complètement le pattern.
-- Un email peut être :
-  - très court (3 lignes)
-  - presque agressif
-  - contradictoire
-  - surprenant
-
----
-
-VARIATION FORCÉE
-
-- Un email doit être contre-intuitif
-- Un email doit ralentir au lieu de pousser
-- Un email doit dire “ne fais rien”
-- Un email doit poser un doute
-
----
-
-EXEMPLES
-
-- “Ne fais rien aujourd’hui.”
-- “Arrête d’essayer de gagner de l’argent.”
-- “Tu n’es pas prêt.”
-
----
-
-OBJECTIF
-
-Créer un moment :
-
-“Attends… quoi ?”
-
----
-
-INTERDIT
-
-- répéter la même dynamique émotionnelle
-- répéter la même action
-- répéter la même structure
-
----
-
-RÉSULTAT
-
-Chaque email doit être imprévisible.
-
-ANTI-PATTERN FINAL
-
-- Interdit de répéter :
-  “Le problème, ce n’est pas X. C’est Y.”
-- Interdit de répéter :
-  “Tu bloques / tu attends / tu hésites”
-- Interdit d’utiliser :
-  “Imagine un instant”
-  “Et si…”
-  “Tu sais quoi…”
-
----
-
-SURPRISE
-
-- Au moins 2 emails doivent surprendre totalement.
-- Exemple :
-  - très court
-  - presque silencieux
-  - contradictoire
-
----
-
-EMAIL RADICAL
-
-Un email peut être :
-
-“Ne fais rien aujourd’hui.
-
-Juste regarde combien de fois tu évites.”
-
----
-
-CTA NON-MARKETING
-
-- Le CTA doit ressembler à une pensée, pas à un bouton.
-
-Exemples :
-
-- “si tu veux tester, fais-le maintenant”
-- “personne ne va le faire à ta place”
-- “tu peux continuer… ou essayer”
-
----
-
-OBJECTIF FINAL
-
-Créer un moment :
-
-“Je ne m’attendais pas à ça.”
-
-SIGNATURE LGD (DIFFÉRENCIATION)
-
-- Chaque email doit contenir au moins une phrase unique, inattendue.
-
-- Une phrase que le lecteur pourrait retenir.
-
-Exemples :
-
-- “Tu n’as pas un problème de méthode. Tu as un problème d’honnêteté avec toi-même.”
-- “Tu ne manques pas d’idées. Tu manques de courage.”
-- “Le problème n’est pas ce que tu ne sais pas. C’est ce que tu évites.”
-
----
-
-EMAIL DIFFÉRENT
-
-- Un email doit être très court
-- Un email doit être presque silencieux
-- Un email doit être dérangeant
-- Un email doit être inattendu
-
----
-
-OBJECTIF
-
-Créer une trace mentale.
-
-Si tous les emails se ressemblent → échec.
-Si un email reste en tête → succès.
-
-ANTI-PRÉVISIBILITÉ (CRITIQUE)
-
-- Interdit de répéter :
-  “Le problème, ce n’est pas X. C’est Y.”
-- Interdit :
-  “Imagine un instant”
-- Interdit :
-  structure logique répétée
-
----
-
-RUPTURE FORCÉE
-
-- 1 email doit être très court (3–4 lignes max)
-- 1 email doit être dérangeant
-- 1 email doit ralentir (dire de ne rien faire)
-- 1 email doit être contradictoire
-
----
-
-FRAPPE ÉMOTIONNELLE
-
-- Tu peux dire une vérité inconfortable
-
-Exemples :
-
-- “Tu n’es pas bloqué. Tu évites.”
-- “Tu dis que tu veux réussir. Mais tu ne fais rien.”
-- “Le problème, c’est ton comportement.”
-
----
-
-CTA NON-MARKETING
-
-- Le CTA doit ressembler à une pensée
-
-Interdit :
-
-- passe à l’action
-- commence maintenant
-- découvre
-
-Exemples :
-
-- “personne ne va le faire à ta place”
-- “tu peux continuer… ou tester”
-- “à toi de voir”
-
----
-
-OBJECTIF
-
-Créer une réaction :
-
-“Ok… ça me parle vraiment.”
-
-SIGNATURE FORTE LGD (DERNIER NIVEAU)
-
-- Chaque email doit contenir UNE phrase marquante.
-- Une phrase que le lecteur pourrait retenir.
-
-Exemples :
-
-- “Tu ne bloques pas. Tu évites.”
-- “Tu ne manques pas d’idées. Tu manques de courage.”
-- “Le problème n’est pas ce que tu ne sais pas. C’est ce que tu refuses de faire.”
-
----
-
-SURPRISE FORCÉE
-
-- 1 email doit être très court (3–4 lignes)
-- 1 email doit être dérangeant
-- 1 email doit casser complètement le ton
-
----
-
-ANTI-LISSAGE
-
-- Si le texte est trop propre → casse-le
-- Si le texte est trop logique → rends-le humain
-- Si le texte est trop gentil → durcis-le
-
----
-
-CTA DIFFÉRENCIANT
-
-Interdit :
-
-- passe à l’action
-- commence maintenant
-- découvre
-
-Autorisé :
-
-- “personne ne va le faire à ta place”
-- “tu peux continuer… ou essayer”
-- “à toi de voir”
-
----
-
-OBJECTIF FINAL
-
-Créer une trace mentale.
-
-Pas juste un email lu.
-
-Un email retenu.
-
-SIGNATURE LGD FORCÉE
-
-- 2 emails doivent être extrêmement courts (3–4 lignes max)
-- 1 email doit être dérangeant
-- 1 email doit dire de ne rien faire
-- 1 email doit être contradictoire
-
----
-
-VARIATION CTA
-
-Interdit de répéter le même CTA.
-
-Utilise :
-
-- “à toi de voir”
-- “personne ne va le faire à ta place”
-- “tu peux continuer… ou changer”
-- “rien ne changera si tu ne changes rien”
-- “tu peux essayer… ou rester comme ça”
-
----
-
-PHRASE IMPACT
-
-Chaque email doit contenir UNE phrase forte.
-
-Exemples :
-
-- “Tu ne bloques pas. Tu évites.”
-- “Le problème, c’est ton comportement.”
-- “Tu sais. Tu ne fais pas.”
-
-Interdit ABSOLU d'utiliser :
-"Imagine"
-"Imagine un instant"
-
-RÈGLES SORTIE EMAIL — CRITIQUE
-- Le CORPS ne doit jamais répéter le CTA.
-- Le CTA doit apparaître uniquement dans le champ CTA.
-- Le CTA final doit être différent pour chaque jour de séquence.
-- Ne réutilise jamais exactement le CTA principal dans les 7 emails.
-- Commence le CORPS par "Bonjour {{prenom}},".
-- Interdit de répéter une même phrase finale sur plusieurs emails.
-- CTA autorisés, à varier obligatoirement :
-- à toi de voir
-- personne ne va le faire à ta place
-- tu peux continuer… ou changer
-- rien ne changera si tu ne changes rien
-- tu peux essayer… ou rester comme ça
-- maintenant tu sais
-- ne laisse pas ça redevenir une idée
-
-FORMAT STRICT OBLIGATOIRE
+PRIORITÉ : ÉCRITURE "SANS FILTRE" (STYLE IPHONE / NOTE PERSONNELLE)
+Tu es un copywriter d'élite. Ton but est de créer un email qui ne ressemble PAS à du marketing.
+
+MISSION : 
+Écris UN SEUL email en français. Le lecteur doit avoir l'impression que tu viens de lui envoyer ça entre deux rendez-vous.
+
+1. HUMANISATION RADICALE
+- Oralité : Utilise "C'est pas", "On va dire que", "Le truc c'est...".
+- Pas de pavés : Des phrases courtes. De l'air.
+- Émotion : Parle de la frustration réelle, pas de concepts vagues.
+
+2. CONVERSION (PSYCHOLOGIE)
+- Niveau de conscience : {awareness}. 
+- Coût de l'inaction : Montre ce qu'il perd (énergie, temps) s'il reste là où il est.
+- Angle du jour : {angle}.
+
+CONTEXTE :
+- Offre : {offer_name}
+- Audience : {target_audience}
+- Promesse : {main_promise}
+- Jour : {day} ({archetype["role"]})
+- Nonce : {nonce}
+
+RÈGLES STRICTES :
+- INTERDIT : Commencer par "J'espère que tu vas bien" ou "Imagine".
+- INTERDIT : Utiliser des emojis de vente (🚀, 🎁, 💰).
+- INTERDIT : Signer l'email.
+- COMMENCE DIRECTEMENT par une observation ou une vérité qui pique.
+
+LA RÈGLE DU CTA :
+- Si l'email est "vente" ou "relance" : Propose une suite logique et naturelle (ex: "Tu viens ?", "Regarde ici si tu es prêt").
+- Si l'email est "nurture" ou "objection" : Termine par une question qui fait réfléchir.
+
+FORMAT OBLIGATOIRE :
 SUJET: ...
 PREHEADER: ...
 CORPS:
-...
-CTA: Reformule un CTA court, spécifique au jour {day}, différent des autres emails, sans emoji.
+Bonjour {{prenom}},
+(Ton texte)
 
-RAPPEL FINAL
-Après la ligne CTA, tu t'arrêtes. Tu n'ajoutes rien.
+CTA: (Ta phrase d'action ou de réflexion)
 """.strip()
 
-
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
-    offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
-    primary_cta = _clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant")
-    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
-    tone = _clean_text(_get(payload, "tone"), "premium")
-
+    # TEMPÉRATURE À 0.8 POUR L'HUMANISATION
     raw = generate_ai_text(
         prompt=_build_prompt(payload=payload, day=day, email_type=email_type, angle=angle, nonce=nonce),
-        tone=tone,
+        tone=_clean_text(_get(payload, "tone"), "premium"),
         language="fr",
+        temperature=0.8 
     )
     parts = _extract_sections(str(raw))
-    cta = _clean_text(parts.get("cta"), "")
-    body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
-
-    if _is_bad_template(body):
-        # Filtre soft : on nettoie sans bloquer une génération IA exploitable.
-        body = _sanitize_body(body)
-
+    
     return {
         "day": day,
         "email_type": email_type,
-        "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
-        "preheader": _clean_text(parts.get("preheader"), offer_name),
-        "body": _clean_text(body, ""),
-        "cta": cta,
+        "subject": _clean_text(parts.get("subject"), f"Note pour {{{'prenom'}}}"),
+        "preheader": _clean_text(parts.get("preheader"), ""),
+        "body": _clean_text(parts.get("body"), ""),
+        "cta": _clean_text(parts.get("cta"), "à toi de voir"),
     }
-
-
-def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types: List[str]) -> List[Dict[str, Any]]:
-    clean_emails: List[Dict[str, Any]] = []
-    seen_subjects: set[str] = set()
-    seen_bodies: set[str] = set()
-
-    for index, email in enumerate(emails):
-        day = int(email.get("day") or index + 1)
-        subject_key = re.sub(r"\s+", " ", _clean_text(email.get("subject"), "").lower()).strip()
-        body_key = re.sub(r"\s+", " ", _clean_text(email.get("body"), "").lower()).strip()[:360]
-
-        if not body_key:
-            raise ValueError(f"Email IA jour {day} vide : génération live annulée.")
-
-        if subject_key in seen_subjects:
-            raise ValueError(f"Email IA jour {day} rejeté : sujet trop similaire.")
-
-        if body_key in seen_bodies:
-            raise ValueError(f"Email IA jour {day} rejeté : corps trop similaire.")
-
-        if _is_bad_template(str(email.get("body") or "")):
-            raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
-
-        email["cta"] = _clean_text(email.get("cta"), "") or "à toi de voir"
-
-        seen_subjects.add(subject_key)
-        seen_bodies.add(body_key)
-        clean_emails.append(email)
-
-    return clean_emails
-
 
 def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
-    campaign_name = _clean_text(_get(payload, "name"), "Campagne E-mailing IA")
-    campaign_type = _clean_text(_get(payload, "campaign_type"), "vente")
     duration_days = int(_get(payload, "duration_days", 7) or 7)
-    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
     email_types = _pattern_for_days(duration_days)
-
-    base_nonce = f"{uuid.uuid4().hex[:8]}-{random.randint(1000, 9999)}"
-
-    def generate_live_pass(pass_name: str, angle_offset: int) -> List[Dict[str, Any]]:
-        generated: List[Dict[str, Any]] = []
-
-        for index in range(duration_days):
-            day = index + 1
-            email_type = email_types[index]
-            angle_options = ANGLE_BANK.get(email_type, ["angle simple"])
-            angle = angle_options[(index + angle_offset) % len(angle_options)]
-
-            generated.append(
-                _generate_one_email(
-                    payload=payload,
-                    day=day,
-                    email_type=email_type,
-                    angle=angle,
-                    nonce=f"{base_nonce}-{pass_name}-{day}",
-                )
-            )
-
-        return _dedupe_final_emails(generated, payload, email_types)
-
-    try:
-        emails = generate_live_pass("live", random.randint(0, 999))
-    except Exception as first_error:
-        try:
-            emails = generate_live_pass("retry", 3)
-        except Exception as retry_error:
-            raise RuntimeError(
-                "Génération IA live impossible. Aucun fallback local n’a été utilisé. "
-                f"Erreur initiale: {first_error}. Erreur retry: {retry_error}"
-            ) from retry_error
-
-    if _looks_too_similar(emails):
-        try:
-            emails = generate_live_pass("similarity-retry", 5)
-        except Exception as similarity_error:
-            raise RuntimeError(
-                "La génération IA live a produit une séquence trop similaire. "
-                "Aucun fallback local n’a été utilisé."
-            ) from similarity_error
+    base_nonce = uuid.uuid4().hex[:8]
+    
+    emails = []
+    for i in range(duration_days):
+        day = i + 1
+        e_type = email_types[i]
+        angles = ANGLE_BANK.get(e_type, ["angle simple"])
+        angle = random.choice(angles)
+        
+        emails.append(_generate_one_email(
+            payload=payload, 
+            day=day, 
+            email_type=e_type, 
+            angle=angle, 
+            nonce=f"{base_nonce}-{day}"
+        ))
 
     return {
-        "campaign_name": campaign_name,
-        "campaign_type": campaign_type,
-        "duration_days": duration_days,
-        "sender_name": sender_name,
+        "campaign_name": _clean_text(_get(payload, "name")),
         "emails": emails,
     }
+
+def _pattern_for_days(days: int) -> List[str]:
+    if days in EMAIL_TYPE_PATTERNS: return EMAIL_TYPE_PATTERNS[days]
+    return [EMAIL_TYPE_PATTERNS[7][i % 7] for i in range(days)]

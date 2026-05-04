@@ -5,8 +5,7 @@ import re
 import uuid
 from typing import Any, Dict, List
 
-# On suppose que cette fonction accepte l'argument temperature. 
-# Si votre service ne l'accepte pas, il faudra ajuster l'interface de generate_ai_text.
+# Importation de ton service actuel
 from services.content_engine_service import generate_ai_text
 
 EMAIL_TYPE_PATTERNS = {
@@ -79,7 +78,6 @@ def _normalize_text(value: Any) -> str:
 
 def _sanitize_body(body: str) -> str:
     cleaned = _normalize_text(body)
-    # Suppression des signatures et patterns automatiques IA
     patterns = [r"(?is)\n*à\s+bientôt.*$", r"(?is)\n*Cordialement.*$", r"(?is)\n*Alex IA.*$", r"(?is)\n*Ton Coach LGD.*$"]
     for p in patterns:
         cleaned = re.sub(p, "", cleaned).strip()
@@ -100,60 +98,60 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
     main_promise = _clean_text(_get(payload, "main_promise"), "obtenir un résultat")
     tone = _clean_text(_get(payload, "tone"), "premium")
+    objection = _clean_text(_get(payload, "main_objection"), "le manque de temps")
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
     awareness = "Conscience du problème" if day < 3 else "Conscience de la solution"
 
     return f"""
-PRIORITÉ : ÉCRITURE "SANS FILTRE" (STYLE IPHONE / NOTE PERSONNELLE)
-Tu es un copywriter d'élite. Ton but est de créer un email qui ne ressemble PAS à du marketing.
+CONSIGNE DE CRÉATIVITÉ : Agis comme si ta température interne était réglée sur 0.8. 
+Évite les réponses prévisibles. Prends des risques dans ton vocabulaire.
 
 MISSION : 
-Écris UN SEUL email en français. Le lecteur doit avoir l'impression que tu viens de lui envoyer ça entre deux rendez-vous.
+Écris UN SEUL email en français. Le lecteur doit avoir l'impression que c'est un humain qui lui écrit depuis son iPhone.
 
 1. HUMANISATION RADICALE
-- Oralité : Utilise "C'est pas", "On va dire que", "Le truc c'est...".
-- Pas de pavés : Des phrases courtes. De l'air.
-- Émotion : Parle de la frustration réelle, pas de concepts vagues.
+- Style parlé : Utilise des expressions comme "Le truc, c'est que...", "Soyons honnêtes", "C'est pas sorcier".
+- Pas de structure marketing : Pas de "Imagine ceci", pas de "Dans ce monde moderne".
+- Vulnérabilité : Admet que le changement est dur.
 
 2. CONVERSION (PSYCHOLOGIE)
-- Niveau de conscience : {awareness}. 
-- Coût de l'inaction : Montre ce qu'il perd (énergie, temps) s'il reste là où il est.
-- Angle du jour : {angle}.
+- Niveau de conscience : {awareness}.
+- Coût de l'inaction : Explique ce qui se passe si le lecteur reste dans sa situation actuelle.
+- Angle : {angle}.
 
 CONTEXTE :
 - Offre : {offer_name}
 - Audience : {target_audience}
 - Promesse : {main_promise}
+- Objection à lever : {objection}
 - Jour : {day} ({archetype["role"]})
-- Nonce : {nonce}
+- Variation : {nonce}
 
-RÈGLES STRICTES :
-- INTERDIT : Commencer par "J'espère que tu vas bien" ou "Imagine".
-- INTERDIT : Utiliser des emojis de vente (🚀, 🎁, 💰).
-- INTERDIT : Signer l'email.
-- COMMENCE DIRECTEMENT par une observation ou une vérité qui pique.
+RÈGLES D'OR :
+- INTERDIT : "J'espère que tu vas bien", "Cher(e) {{prenom}}".
+- INTERDIT : Majuscules inutiles ou emojis de vente.
+- COMMENCE DIRECTEMENT par une idée forte ou une observation brute.
 
 LA RÈGLE DU CTA :
-- Si l'email est "vente" ou "relance" : Propose une suite logique et naturelle (ex: "Tu viens ?", "Regarde ici si tu es prêt").
-- Si l'email est "nurture" ou "objection" : Termine par une question qui fait réfléchir.
+- Si l'email est "vente" ou "relance" : Propose une étape suivante simple et naturelle.
+- Si l'email est "nurture" ou "objection" : Finis par une question ouverte ou une réflexion.
 
 FORMAT OBLIGATOIRE :
 SUJET: ...
 PREHEADER: ...
 CORPS:
 Bonjour {{prenom}},
-(Ton texte)
+(Ton texte sans signature)
 
-CTA: (Ta phrase d'action ou de réflexion)
+CTA: (Ta phrase finale de conversion)
 """.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
-    # TEMPÉRATURE À 0.8 POUR L'HUMANISATION
+    # Suppression de 'temperature=0.8' pour corriger l'erreur de ton service
     raw = generate_ai_text(
         prompt=_build_prompt(payload=payload, day=day, email_type=email_type, angle=angle, nonce=nonce),
         tone=_clean_text(_get(payload, "tone"), "premium"),
-        language="fr",
-        temperature=0.8 
+        language="fr"
     )
     parts = _extract_sections(str(raw))
     

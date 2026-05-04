@@ -586,6 +586,67 @@ CONTEXTE
 
 {_v3_context_block(payload)}
 
+UTILISATION STRICTE DU CMO (CRITIQUE)
+
+Tu dois IMPÉRATIVEMENT utiliser ces éléments dans chaque email :
+
+OFFRE :
+{offer_name}
+
+PROMESSE :
+{main_promise}
+
+OBJECTIF :
+{main_objective}
+
+OBJECTION PRINCIPALE :
+{objection}
+
+CIBLE :
+{target_audience}
+
+---
+
+RÈGLES OBLIGATOIRES
+
+- Chaque email doit parler DIRECTEMENT de l’offre
+- Chaque email doit être IMPOSSIBLE à utiliser pour un autre produit
+- Chaque email doit faire référence à la transformation proposée
+
+---
+
+INTERDIT
+
+- parler uniquement de motivation
+- écrire un email générique
+- écrire un email applicable à n’importe quel business
+- ignorer l’objection
+
+---
+
+ALIGNEMENT
+
+Tu écris pour vendre :
+
+{offer_name}
+
+Tu écris pour une personne qui :
+
+{target_audience}
+
+Tu dois intégrer le blocage :
+
+{objection}
+
+Tu dois vendre la transformation :
+
+{main_promise}
+
+ANTI-GÉNÉRIQUE PRODUIT
+
+Si l’offre n’est pas mentionnée clairement dans le corps →
+l’email est mauvais → recommence.
+
 RÈGLES DE COPYWRITING
 - Première phrase = hook clair, humain, concret.
 - Phrases courtes. Respiration. Pas de pavé compact.

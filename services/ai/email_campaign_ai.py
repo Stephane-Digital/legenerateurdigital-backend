@@ -136,6 +136,44 @@ LA RÈGLE DU CTA :
 - Si l'email est "vente" ou "relance" : Propose une étape suivante simple et naturelle.
 - Si l'email est "nurture" ou "objection" : Finis par une question ouverte ou une réflexion.
 
+ANTI-PATTERN HUMAIN
+
+Interdit d’utiliser plus de 2 fois dans la séquence :
+
+- "Le truc, c’est que"
+- "Soyons honnêtes"
+- "C’est pas sorcier"
+
+---
+
+FORMAT IMPACT
+
+- maximum 3 lignes par bloc
+- lignes courtes obligatoires
+- respiration visuelle
+
+---
+
+CTA LGD FINAL
+
+Interdit :
+
+- répondre
+- cliquer
+- découvrir
+- réserver
+- s’inscrire
+
+Autorisé :
+
+- pensée uniquement
+
+Exemples :
+- tu sais déjà
+- personne ne va le faire à ta place
+- à toi de voir
+- tu peux continuer… ou changer
+
 FORMAT OBLIGATOIRE :
 SUJET: ...
 PREHEADER: ...

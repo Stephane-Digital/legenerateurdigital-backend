@@ -111,7 +111,7 @@ MISSION :
 
 1. HUMANISATION RADICALE
 - Style parlé : Utilise des expressions comme "Le truc, c'est que...", "Soyons honnêtes", "C'est pas sorcier".
-- Pas de structure marketing : Pas de "Imagine ceci", pas de "Dans ce monde moderne".
+- Pas de structure marketing traditionnelle.
 - Vulnérabilité : Admet que le changement est dur.
 
 2. CONVERSION (PSYCHOLOGIE)
@@ -147,7 +147,6 @@ CTA: (Ta phrase finale de conversion)
 """.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
-    # Suppression de 'temperature=0.8' pour corriger l'erreur de ton service
     raw = generate_ai_text(
         prompt=_build_prompt(payload=payload, day=day, email_type=email_type, angle=angle, nonce=nonce),
         tone=_clean_text(_get(payload, "tone"), "premium"),
@@ -166,6 +165,9 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
 
 def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
     duration_days = int(_get(payload, "duration_days", 7) or 7)
+    campaign_type = _clean_text(_get(payload, "campaign_type"), "Vente")
+    sender_name = _clean_text(_get(payload, "sender_name"), "lgd")
+    
     email_types = _pattern_for_days(duration_days)
     base_nonce = uuid.uuid4().hex[:8]
     
@@ -184,8 +186,12 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
             nonce=f"{base_nonce}-{day}"
         ))
 
+    # Retour avec TOUS les champs requis par ton modèle Pydantic
     return {
-        "campaign_name": _clean_text(_get(payload, "name")),
+        "campaign_name": _clean_text(_get(payload, "name"), "Campagne sans nom"),
+        "campaign_type": campaign_type,
+        "duration_days": duration_days,
+        "sender_name": sender_name,
         "emails": emails,
     }
 

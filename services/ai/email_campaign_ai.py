@@ -1290,6 +1290,12 @@ Interdit ABSOLU d'utiliser :
 "Imagine"
 "Imagine un instant"
 
+Interdit d’utiliser plus de 2 fois :
+- "tu attends"
+- "tu sais"
+- "rien ne change"
+- "à toi de voir"
+
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
 - Le CORPS ne doit jamais contenir une ligne commençant par 👉.

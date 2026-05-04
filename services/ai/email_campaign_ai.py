@@ -124,10 +124,14 @@ SECTION_RE = {
     "cta": re.compile(r"(?:^|\n)\s*CTA\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
 }
 
-# J'ai retiré les éléments bloquants qui correspondaient à ton modèle et ta signature
 BAD_TEMPLATE_MARKERS = [
+    "🎁 ce que je te propose",
+    "💡 ce qui change vraiment",
+    "alex ia",
+    "ton coach lgd",
     "aider prospects concernés",
     "prospects concernés par l’objectif",
+    "laisser l’ia faire le plus gros du travail",
     "clarifier ton message",
     "structurer ton marketing digital",
 ]
@@ -234,7 +238,15 @@ def _sanitize_body(body: str) -> str:
     cleaned = re.split(r"(?im)^\s*SUJET\s*:", cleaned)[0].strip()
     cleaned = re.split(r"(?im)^\s*(?:PREHEADER|PRÉHEADER)\s*:", cleaned)[0].strip()
 
-    # Les suppressions de signatures et d'emojis ont été retirées
+    # Supprime les signatures faibles ou automatiques qui cassent la tension de vente.
+    cleaned = re.sub(r"(?is)\n*à\s+bientôt(?:\s+peut-être)?[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*à\s+très\s+vite[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*Alex IA\s*🤖[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*Ton Coach LGD[\s\S]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*Le Générateur Digital\s*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?is)\n*LGD\s*$", "", cleaned).strip()
+
+    cleaned = re.sub(r"(?im)^\s*👉.*$", "", cleaned).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -259,6 +271,7 @@ def _strip_cta_from_body(body: str, cta: str) -> str:
     for pattern in generic_cta_patterns:
         cleaned = re.sub(pattern, "", cleaned).strip()
 
+    cleaned = re.sub(r"(?im)^\s*👉.*$", "", cleaned).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -574,7 +587,7 @@ Tu es Emailing IA LGD V7.3 : copywriter senior direct-response + stratège Syste
 
 MISSION
 Écris EXACTEMENT UN SEUL email marketing en français, prêt à être utilisé dans une séquence Systeme.io.
-L'email doit être humain, naturel, crédible, orienté conversion, et distinct des autres jours.
+L'email doit être humain comme si tu l'écrivais depuis un Iphone, naturel, crédible, orienté conversion, et distinct des autres jours.
 
 VERROU ANTI-DOUBLON ABSOLU
 - Tu dois générer EXACTEMENT UN SEUL email.
@@ -582,6 +595,8 @@ VERROU ANTI-DOUBLON ABSOLU
 - Tu ne dois jamais écrire plusieurs versions du même email.
 - Tu ne dois jamais ajouter un second email après le CTA.
 - Tu ne dois jamais répéter le préheader après le corps.
+- Tu ne dois jamais signer l'email : la signature est gérée ailleurs.
+- Tu ne dois jamais utiliser ces blocs : "🎁 Ce que je te propose", "💡 Ce qui change vraiment", "Alex IA", "Ton Coach LGD".
 - Si tu as envie de proposer plusieurs variantes, choisis la meilleure et n'en donne qu'une.
 
 CONTEXTE
@@ -617,6 +632,7 @@ RÈGLES DE COPYWRITING
 - Si l'email est "objection" : rassurer + recadrer le blocage.
 - Si l'email est "relance" : urgence douce + bénéfice + décision simple.
 - Si l'email est "vente" : avant/après + valeur + CTA.
+- Ne signe pas l'email dans le CORPS. Le frontend ajoute la signature.
 - Si le CTA principal est faible ou trop vague, rends-le plus désirable sans changer l'intention.
 - Crée une sensation d'élan : le lecteur doit savoir quoi faire ensuite.
 - N'écris jamais "angle du jour", "variation", "A/B", "structure", "analyse".
@@ -1312,9 +1328,11 @@ Interdit ABSOLU d'utiliser :
 
 RÈGLES SORTIE EMAIL — CRITIQUE
 - Le CORPS ne doit jamais répéter le CTA.
+- Le CORPS ne doit jamais contenir une ligne commençant par 👉.
 - Le CTA doit apparaître uniquement dans le champ CTA.
 - Le CTA final doit être différent pour chaque jour de séquence.
 - Ne réutilise jamais exactement le CTA principal dans les 7 emails.
+- N'écris jamais "À bientôt peut-être", "À bientôt", "À très vite", "LGD" ou une signature dans le CORPS.
 - Commence le CORPS par "Bonjour {{prenom}},".
 - Interdit de répéter une même phrase finale sur plusieurs emails.
 - CTA autorisés, à varier obligatoirement :

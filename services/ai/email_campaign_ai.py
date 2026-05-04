@@ -1291,6 +1291,39 @@ Pas juste un email lu.
 
 Un email retenu.
 
+SIGNATURE LGD FORCÉE
+
+- 2 emails doivent être extrêmement courts (3–4 lignes max)
+- 1 email doit être dérangeant
+- 1 email doit dire de ne rien faire
+- 1 email doit être contradictoire
+
+---
+
+VARIATION CTA
+
+Interdit de répéter le même CTA.
+
+Utilise :
+
+- “à toi de voir”
+- “personne ne va le faire à ta place”
+- “tu peux continuer… ou changer”
+- “rien ne changera si tu ne changes rien”
+- “tu peux essayer… ou rester comme ça”
+
+---
+
+PHRASE IMPACT
+
+Chaque email doit contenir UNE phrase forte.
+
+Exemples :
+
+- “Tu ne bloques pas. Tu évites.”
+- “Le problème, c’est ton comportement.”
+- “Tu sais. Tu ne fais pas.”
+
 Interdit ABSOLU d'utiliser :
 "Imagine"
 "Imagine un instant"

@@ -5,239 +5,732 @@ import re
 import uuid
 from typing import Any, Dict, List
 
-# Importation de ton service actuel
 from services.content_engine_service import generate_ai_text
 
 EMAIL_TYPE_PATTERNS = {
     7: ["nurture", "nurture", "objection", "vente", "nurture", "relance", "vente"],
-    14: ["nurture", "nurture", "objection", "vente", "nurture", "relance", "vente"] * 2,
-    30: ["nurture", "nurture", "nurture", "objection", "vente", "nurture", "relance", "vente"] * 4,
+    14: [
+        "nurture",
+        "nurture",
+        "objection",
+        "vente",
+        "nurture",
+        "relance",
+        "vente",
+        "nurture",
+        "objection",
+        "vente",
+        "nurture",
+        "relance",
+        "vente",
+        "vente",
+    ],
+    30: [
+        "nurture",
+        "nurture",
+        "nurture",
+        "objection",
+        "vente",
+        "nurture",
+        "relance",
+        "vente",
+        "nurture",
+        "objection",
+        "vente",
+        "nurture",
+        "relance",
+        "vente",
+        "nurture",
+        "nurture",
+        "objection",
+        "vente",
+        "nurture",
+        "relance",
+        "vente",
+        "nurture",
+        "objection",
+        "vente",
+        "nurture",
+        "relance",
+        "vente",
+        "vente",
+        "vente",
+        "vente",
+    ],
 }
 
 ANGLE_BANK = {
     "nurture": [
-        "la vérité que personne n'ose dire dans ta niche",
-        "pourquoi j'ai failli tout arrêter (vulnérabilité)",
-        "le conseil que je donnerais à mon 'moi' d'il y a 2 ans",
-        "une observation surprenante faite ce matin",
-        "le mythe du 'moment idéal'",
-        "ce que tes concurrents te cachent par peur",
+        "micro-histoire personnelle",
+        "erreur fréquente de l'audience",
+        "déclic pédagogique simple",
+        "croyance à remplacer",
+        "petit exercice concret à faire aujourd'hui",
+        "question qui ouvre une prise de conscience",
+        "mythe à déconstruire",
     ],
     "objection": [
-        "le coût réel de ne rien changer aujourd'hui",
-        "pourquoi le manque de temps est une illusion",
-        "l'arnaque de la perfection avant l'action",
-        "peur de l'échec vs certitude du regret",
-        "pourquoi ton cerveau te ment pour te protéger",
+        "manque de temps",
+        "peur de ne pas réussir",
+        "impression que c'est trop tard",
+        "doute sur la valeur réelle de l'offre",
+        "peur de se disperser",
+        "peur de perdre de l'argent",
     ],
     "relance": [
-        "une décision simple pour ton 'toi' du futur",
-        "le risque de voir cette opportunité devenir un simple souvenir",
-        "une mini checklist pour trancher maintenant",
-        "dernière réflexion avant de fermer cette porte",
+        "rappel calme mais ferme",
+        "urgence douce",
+        "opportunité manquée si on attend",
+        "décision simple aujourd'hui",
+        "relance avec bénéfice concret",
+        "mini checklist avant passage à l'action",
     ],
     "vente": [
-        "le calcul mathématique de ton ROI potentiel",
-        "pourquoi cette offre n'est PAS pour tout le monde",
-        "projection : ton quotidien dans 6 mois avec vs sans",
-        "réponse à : 'Est-ce que ça va vraiment marcher pour moi ?'",
+        "bénéfice principal",
+        "projection avant/après",
+        "preuve sociale crédible",
+        "offre + valeur perçue",
+        "prise de décision immédiate",
+        "comparaison avec le statu quo",
     ],
 }
 
-DAY_ARCHETYPES = {
-    1: {"role": "connexion / empathie", "subject": "C’est pas ta faute", "preheader": "On nous ment souvent sur la méthode."},
-    2: {"role": "vérité brutale", "subject": "Le problème est ailleurs", "preheader": "Ce n’est pas un manque de travail."},
-    3: {"role": "coût de l'inaction", "subject": "Le prix du statu quo", "preheader": "Attendre coûte plus cher qu'agir."},
-    4: {"role": "solution logique", "subject": "La voie la plus directe", "preheader": "Comment simplifier radicalement."},
-    5: {"role": "preuve de concept", "subject": "Ce qui se passe quand on ose", "preheader": "Des résultats, pas des théories."},
-    6: {"role": "urgence douce", "subject": "Une décision à prendre", "preheader": "Demain est souvent un autre mot pour jamais."},
-    7: {"role": "décision finale", "subject": "À toi de choisir", "preheader": "On s'arrête là ou on commence ?"},
-}
+CTA_VARIANTS_V3 = [
+    "Découvrir maintenant",
+    "Voir comment ça fonctionne",
+    "Accéder à la méthode",
+    "Passer à l’action aujourd’hui",
+    "Commencer simplement",
+]
+
+VIRAL_ANGLE_MODES_V3 = [
+    "mythe à casser",
+    "erreur fréquente",
+    "avant/après",
+    "objection retournée",
+    "micro-story",
+    "déclic pédagogique",
+    "urgence douce",
+    "comparaison avec le statu quo",
+]
 
 SECTION_RE = {
     "subject": re.compile(r"^\s*SUJET\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
     "preheader": re.compile(r"^\s*(?:PREHEADER|PRÉHEADER)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
-    "body": re.compile(r"(?:^|\n)\s*(?:CORPS|BODY)\s*:\s*(.+?)(?=\n\s*CTA\s*:|\Z)", re.IGNORECASE | re.DOTALL),
+    "body": re.compile(
+        r"(?:^|\n)\s*(?:CORPS|BODY)\s*:\s*(.+?)(?=\n\s*CTA\s*:|\Z)",
+        re.IGNORECASE | re.DOTALL,
+    ),
     "cta": re.compile(r"(?:^|\n)\s*CTA\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE),
 }
 
+# J'ai retiré les éléments bloquants qui correspondaient à ton modèle
+BAD_TEMPLATE_MARKERS = [
+    "clarifier ton message",
+    "structurer ton marketing digital",
+]
+
+DAY_ARCHETYPES = {
+    1: {
+        "role": "prise de conscience",
+        "subject": "Tu n’as pas un problème d’information",
+        "preheader": "Le vrai blocage est ailleurs.",
+    },
+    2: {
+        "role": "erreur invisible",
+        "subject": "L’erreur qui te garde bloqué",
+        "preheader": "Apprendre encore ne suffit plus.",
+    },
+    3: {
+        "role": "objection / peur",
+        "subject": "Et si ce n’était pas trop tard ?",
+        "preheader": "Le bon moment n’arrive pas tout seul.",
+    },
+    4: {
+        "role": "solution claire",
+        "subject": "Le plus simple pour avancer",
+        "preheader": "Une offre simple vaut mieux qu’un plan parfait.",
+    },
+    5: {
+        "role": "projection concrète",
+        "subject": "Imagine dans 7 jours",
+        "preheader": "Pas un rêve. Une prochaine étape claire.",
+    },
+    6: {
+        "role": "relance / décision",
+        "subject": "La checklist avant de te lancer",
+        "preheader": "Quatre points pour sortir du flou.",
+    },
+    7: {
+        "role": "CTA final",
+        "subject": "Tu peux continuer à apprendre… ou commencer",
+        "preheader": "La décision la plus rentable est souvent la plus simple.",
+    },
+}
+
+
 def _get(obj: Any, key: str, default: Any = "") -> Any:
-    if obj is None: return default
-    return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
 
 def _clean_text(value: Any, fallback: str = "") -> str:
     text = str(value if value is not None else fallback).strip()
     return text or fallback
 
+
 def _normalize_text(value: Any) -> str:
     text = str(value or "")
-    text = text.replace("\r", "").replace("**", "")
+    text = text.replace("\r", "")
+    text = text.replace("**", "")
+    text = text.replace("CTA :", "")
+    text = text.replace("CTA:", "")
     text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n[ \t]+", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
-def _sanitize_body(body: str) -> str:
-    cleaned = _normalize_text(body)
-    patterns = [r"(?is)\n*à\s+bientôt.*$", r"(?is)\n*Cordialement.*$", r"(?is)\n*Alex IA.*$", r"(?is)\n*Ton Coach LGD.*$"]
-    for p in patterns:
-        cleaned = re.sub(p, "", cleaned).strip()
+
+def _keep_only_first_email(raw: str) -> str:
+    src = _normalize_text(raw)
+    matches = list(re.finditer(r"(?im)^\s*SUJET\s*:", src))
+    if len(matches) > 1:
+        src = src[matches[0].start() : matches[1].start()]
+    return src.strip()
+
+
+def _remove_duplicate_halves(text: str) -> str:
+    cleaned = _normalize_text(text)
+    if not cleaned:
+        return ""
+
+    lines = [line.rstrip() for line in cleaned.split("\n")]
+    if len(lines) >= 8 and len(lines) % 2 == 0:
+        mid = len(lines) // 2
+        first = "\n".join(lines[:mid]).strip()
+        second = "\n".join(lines[mid:]).strip()
+        if first and first == second:
+            return first
+
+    parts = [part.strip() for part in re.split(r"\n{2,}", cleaned) if part.strip()]
+    if len(parts) >= 4 and len(parts) % 2 == 0:
+        mid = len(parts) // 2
+        first = "\n\n".join(parts[:mid]).strip()
+        second = "\n\n".join(parts[mid:]).strip()
+        if first and first == second:
+            return first
+
     return cleaned
 
+
+def _sanitize_body(body: str) -> str:
+    cleaned = _remove_duplicate_halves(body)
+
+    cleaned = re.split(r"(?im)^\s*SUJET\s*:", cleaned)[0].strip()
+    cleaned = re.split(r"(?im)^\s*(?:PREHEADER|PRÉHEADER)\s*:", cleaned)[0].strip()
+
+    # Les suppressions de signatures et d'emojis qui cassaient ton template ont été retirées ici
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _strip_cta_from_body(body: str, cta: str) -> str:
+    cleaned = _sanitize_body(body)
+    clean_cta = _normalize_text(cta).strip()
+
+    if clean_cta:
+        escaped = re.escape(clean_cta)
+        cleaned = re.sub(rf"(?im)^\s*👉?\s*{escaped}\s*[.!?]?\s*$", "", cleaned).strip()
+        cleaned = re.sub(rf"(?is)\n+\s*👉?\s*{escaped}\s*[.!?]?\s*$", "", cleaned).strip()
+
+    # Retire les CTA génériques fréquents si le modèle les ajoute dans le corps.
+    generic_cta_patterns = [
+        r"(?im)^\s*👉?\s*téléchargez votre guide gratuit maintenant\s*!?\s*$",
+        r"(?im)^\s*👉?\s*découvrez comment commencer dès aujourd'hui\s*!?\s*$",
+        r"(?im)^\s*👉?\s*inscrivez-vous dès maintenant pour découvrir notre méthode\s*!?\s*$",
+        r"(?im)^\s*👉?\s*passez à l’action maintenant\s*!?\s*$",
+        r"(?im)^\s*👉?\s*commencez maintenant\s*!?\s*$",
+    ]
+    for pattern in generic_cta_patterns:
+        cleaned = re.sub(pattern, "", cleaned).strip()
+
+    # La ligne supprimant tous les pointeurs 👉 a été retirée pour préserver ta mise en forme
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _is_bad_template(text: str) -> bool:
+    normalized = _normalize_text(text).lower()
+    if not normalized:
+        return True
+
+    score = sum(1 for marker in BAD_TEMPLATE_MARKERS if marker in normalized)
+
+    # Tolérance volontaire : un seul marqueur isolé ne doit plus bloquer une bonne sortie IA.
+    return score >= 2
+
+
+def _pattern_for_days(days: int) -> List[str]:
+    if days in EMAIL_TYPE_PATTERNS:
+        return EMAIL_TYPE_PATTERNS[days]
+    if days <= 7:
+        base = EMAIL_TYPE_PATTERNS[7]
+    elif days <= 14:
+        base = EMAIL_TYPE_PATTERNS[14]
+    else:
+        base = EMAIL_TYPE_PATTERNS[30]
+    return [base[i % len(base)] for i in range(days)]
+
+
 def _extract_sections(text: str) -> Dict[str, str]:
+    src = _keep_only_first_email(text or "")
     out: Dict[str, str] = {}
     for key, pattern in SECTION_RE.items():
-        match = pattern.search(text)
+        match = pattern.search(src)
         if match:
             out[key] = match.group(1).strip()
     if "body" in out:
         out["body"] = _sanitize_body(out["body"])
+    if "cta" in out:
+        out["cta"] = out["cta"].split("\n")[0].strip()
     return out
 
-def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> str:
-    offer_name = _clean_text(_get(payload, "offer_name"), "votre offre")
-    target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
-    main_promise = _clean_text(_get(payload, "main_promise"), "obtenir un résultat")
+
+def _v3_context_block(payload: Any) -> str:
+    niche = _clean_text(_get(payload, "niche"), "")
+    audience = _clean_text(_get(payload, "target_audience"), "")
+    offer = _clean_text(_get(payload, "offer_name"), "")
     tone = _clean_text(_get(payload, "tone"), "premium")
-    objection = _clean_text(_get(payload, "main_objection"), "le manque de temps")
-    archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
-    awareness = "Conscience du problème" if day < 3 else "Conscience de la solution"
+    level = _clean_text(_get(payload, "level"), "")
+    if not level:
+        raw = f"{niche} {audience} {offer}".lower()
+        if any(w in raw for w in ["débutant", "débutants", "simple", "lancer"]):
+            level = "beginner"
+        elif any(w in raw for w in ["expert", "avancé", "scaling", "b2b", "premium"]):
+            level = "advanced"
+        else:
+            level = "intermediate"
 
     return f"""
-CONSIGNE DE CRÉATIVITÉ : Agis comme si ta température interne était réglée sur 0.8. 
-Évite les réponses prévisibles. Prends des risques dans ton vocabulaire.
+CONTEXTE PERSONNALISATION V3
+- Niche: {niche or "à inférer"}
+- Audience: {audience or "à inférer"}
+- Offre: {offer or "à inférer"}
+- Ton préféré: {tone}
+- Niveau détecté: {level}
+- Règle: adapte la pédagogie, la densité et le vocabulaire à ce niveau.
+""".strip()
 
-MISSION : 
-Tu écris un email unique pour CE JOUR de la séquence.
 
-Ne fais JAMAIS référence aux autres emails.
-Chaque appel correspond à un email différent.
-Ne répète jamais le contenu d’un autre jour.
-Le lecteur doit avoir l'impression que c'est un humain qui lui écrit depuis son iPhone.
+def _cta_variant(base_cta: Any, day: int) -> str:
+    """
+    Ne modifie PAS le CTA généré par l’IA.
+    On fait confiance au prompt LGD.
+    """
+    return _clean_text(base_cta, "")
 
-1. HUMANISATION RADICALE
-- Style parlé : Utilise des expressions comme "Le truc, c'est que...", "Soyons honnêtes", "C'est pas sorcier".
-- Pas de structure marketing traditionnelle.
-- Vulnérabilité : Admet que le changement est dur.
+    if any(word in normalized for word in ["coach", "coaching", "session", "réserve", "reserve", "appel", "audit"]):
+        variants = [
+            "Réserve ta session et clarifie ton prochain pas.",
+            "Bloque ta session avant de repartir dans la théorie.",
+            "Réserve ton créneau pour transformer le flou en plan clair.",
+            "Planifie ta session et avance avec une méthode simple.",
+            "Réserve ta session pour passer de l’idée à l’action.",
+            "Choisis ton créneau avant de repousser encore.",
+            "Réserve maintenant si tu veux vraiment commencer.",
+        ]
+    elif any(word in normalized for word in ["guide", "télécharge", "telecharge", "ressource"]):
+        variants = [
+            "Télécharge le guide et clarifie ton premier pas.",
+            "Récupère le guide pour éviter de repartir dans la théorie.",
+            "Télécharge le guide et vérifie si cette méthode te correspond.",
+            "Accède au guide pour structurer ton offre plus simplement.",
+            "Télécharge le guide et transforme ton idée en action concrète.",
+            "Récupère le guide avant de repousser encore.",
+            "Télécharge le guide si tu veux vraiment commencer maintenant.",
+        ]
+    else:
+        variants = [
+            "Passe à l’étape suivante avec un plan clair.",
+            "Commence par une action simple aujourd’hui.",
+            "Avance maintenant au lieu de repartir dans la réflexion.",
+            "Clarifie ton offre et teste une première version.",
+            "Transforme ton idée en prochaine action concrète.",
+            "Fais le premier pas avant de repousser encore.",
+            "Décide maintenant si tu veux vraiment avancer.",
+        ]
 
-2. CONVERSION (PSYCHOLOGIE)
-- Niveau de conscience : {awareness}.
-- Coût de l'inaction : Explique ce qui se passe si le lecteur reste dans sa situation actuelle.
-- Angle : {angle}.
+    if day <= 0:
+        day = 1
+    return variants[(day - 1) % len(variants)]
 
-CONTEXTE :
-- Offre : {offer_name}
-- Audience : {target_audience}
-- Promesse : {main_promise}
-- Objection à lever : {objection}
-- Jour : {day} ({archetype["role"]})
-- Variation : {nonce}
 
-RÈGLES D'OR :
-- INTERDIT : "J'espère que tu vas bien", "Cher(e) {{prenom}}".
-- INTERDIT : Majuscules inutiles ou emojis de vente.
-- COMMENCE DIRECTEMENT par une idée forte ou une observation brute.
+def _fallback_email(
+    *,
+    day: int,
+    email_type: str,
+    offer_name: str,
+    target_audience: str,
+    main_promise: str,
+    main_objective: str,
+    primary_cta: str,
+    sender_name: str,
+    tone: str,
+) -> Dict[str, Any]:
+    archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
 
-LA RÈGLE DU CTA :
-- Si l'email est "vente" ou "relance" : Propose une étape suivante simple et naturelle.
-- Si l'email est "nurture" ou "objection" : Finis par une question ouverte ou une réflexion.
+    clean_offer = _clean_text(offer_name, "votre offre")
+    clean_audience = _clean_text(target_audience, "les personnes qui veulent avancer")
+    clean_promise = _clean_text(main_promise, "obtenir un résultat concret")
+    clean_objective = _clean_text(main_objective, "passer à l’action")
+    clean_cta = _clean_text(primary_cta, "")
 
-ANTI-PATTERN HUMAIN
+    if day == 1:
+        body = f"""Bonjour {{{prenom}}},
 
-Interdit d’utiliser plus de 2 fois dans la séquence :
+Tu as peut-être déjà vécu ce moment étrange : tu sais que tu veux avancer, tu as lu des conseils, regardé des vidéos, noté des idées… mais rien ne sort vraiment.
 
-- "Le truc, c’est que"
-- "Soyons honnêtes"
-- "C’est pas sorcier"
+Ce n’est pas parce que tu manques d’envie.
 
----
+Souvent, le vrai problème, c’est que l’apprentissage donne une impression de progression alors qu’il ne crée pas encore de résultat.
 
-FORMAT IMPACT
+Pour {clean_audience}, le premier déclic est simple : arrêter de chercher l’idée parfaite et choisir une action assez claire pour être faite aujourd’hui.
 
-- maximum 3 lignes par bloc
-- lignes courtes obligatoires
-- respiration visuelle
+Avec {clean_offer}, l’objectif est de transformer ce flou en prochaine étape concrète : une offre plus claire, un message plus simple, et un chemin qui pousse enfin vers {clean_objective.lower()}.
 
----
+Tu n’as pas besoin de tout maîtriser pour commencer. Tu as besoin d’un premier pas visible."""
+    elif day == 2:
+        body = f"""Bonjour {{{prenom}}},
 
-CTA LGD FINAL
+L’erreur la plus fréquente, ce n’est pas de ne rien faire.
 
-Interdit :
+C’est de confondre préparation et progression.
 
-- répondre
-- cliquer
-- découvrir
-- réserver
-- s’inscrire
+Tu peux passer des semaines à améliorer ton idée, comparer les stratégies, demander des avis, revoir ton positionnement… et pourtant rester exactement au même point.
 
-Autorisé :
+Le vrai signal que tu avances, ce n’est pas le nombre de choses que tu comprends. C’est ce que tu mets devant quelqu’un de réel : une offre, un message, une page, un email, une proposition.
 
-- pensée uniquement
+Si ton objectif est {clean_objective.lower()}, il faut réduire le bruit et créer une première version vendable.
+
+Pas parfaite.
+
+Vendable.
+
+C’est là que {clean_offer} devient utile : t’aider à sortir de la théorie et à construire quelque chose que ton audience peut comprendre, désirer et choisir."""
+    elif day == 3:
+        body = f"""Bonjour {{{prenom}}},
+
+Tu peux avoir l’impression qu’il est trop tard.
+
+Trop de monde parle déjà de business en ligne. Trop d’outils existent. Trop de personnes semblent plus avancées.
+
+Mais ce raisonnement oublie une chose : les gens n’achètent pas parce qu’une offre est arrivée en premier. Ils achètent parce qu’elle arrive au bon moment, avec le bon message, et qu’elle répond clairement à leur problème.
+
+Ton retard apparent peut même devenir un avantage si tu construis quelque chose de plus simple, plus humain et plus direct.
+
+Pour {clean_audience}, la question n’est pas : “est-ce que tout existe déjà ?”
+
+La vraie question est : “est-ce que quelqu’un peut m’aider à passer de la confusion à une action claire ?”
+
+C’est précisément le rôle de {clean_offer} : raccourcir le chemin entre l’idée et l’exécution."""
+    elif day == 4:
+        body = f"""Bonjour {{{prenom}}},
+
+La solution n’est pas de créer plus.
+
+Ce n’est pas non plus d’ajouter encore un outil, une formation ou une stratégie à ton bureau mental déjà saturé.
+
+La solution, c’est de simplifier le système.
+
+Une offre claire.
+
+Un message compréhensible.
+
+Un angle qui parle à une vraie douleur.
+
+Une action qui rapproche de {clean_promise.lower()}.
+
+C’est ce que {clean_offer} doit permettre : prendre ce que tu as déjà en tête et le transformer en quelque chose d’utilisable pour vendre, communiquer et avancer.
+
+Le but n’est pas de devenir parfait.
+
+Le but est de créer une version assez claire pour être testée, améliorée, puis vendue."""
+    elif day == 5:
+        body = f"""Bonjour {{{prenom}}},
+
+Imagine dans 7 jours.
+
+Pas dans six mois. Pas quand tout sera parfait. Juste dans 7 jours.
+
+Tu pourrais avoir une première offre clarifiée, un message plus net, une séquence email prête à être testée, ou une page simple qui explique enfin ce que tu proposes.
+
+Ce changement ne vient pas d’un énorme plan.
+
+Il vient d’une décision : arrêter de tout garder dans ta tête.
+
+Quand ton idée devient visible, tu peux l’améliorer. Quand elle reste floue, tu ne peux que douter.
+
+Pour {clean_audience}, {clean_offer} sert justement à ça : transformer l’intention en matière concrète.
+
+Et une fois que c’est concret, tu n’es plus dans “un jour peut-être”.
+
+Tu es déjà en train d’avancer."""
+    elif day == 6:
+        body = f"""Bonjour {{{prenom}}},
+
+Avant de repousser encore, vérifie simplement ces quatre points.
+
+1. Est-ce que ton offre peut être expliquée en une phrase claire ?
+
+2. Est-ce que ton audience comprend immédiatement ce qu’elle gagne ?
+
+3. Est-ce que ton message parle d’un problème réel, pas d’une idée vague ?
+
+4. Est-ce que tu as une prochaine action concrète à faire aujourd’hui ?
+
+Si une seule réponse est floue, ce n’est pas grave.
+
+C’est même exactement le signe qu’il faut structurer plutôt que continuer à réfléchir seul.
+
+{clean_offer} est conçu pour t’aider à remettre de l’ordre : clarifier, formuler, créer, puis passer à l’action.
+
+Pas pour faire joli.
+
+Pour avancer."""
+    else:
+        body = f"""Bonjour {{{prenom}}},
+
+Tu peux continuer à apprendre.
+
+Tu peux aussi continuer à comparer les outils, chercher la meilleure méthode, attendre le bon moment, ou te dire que tu commenceras quand ce sera plus clair.
+
+Mais soyons honnêtes : si cette logique avait suffi, tu aurais déjà lancé quelque chose.
+
+La clarté ne tombe pas du ciel. Elle se construit en mettant ton idée en mouvement.
+
+Si ton objectif est vraiment {clean_objective.lower()}, alors la prochaine étape n’est pas de consommer plus de contenu.
+
+C’est de créer une première version claire de ton offre et de la confronter au réel.
+
+{clean_offer} est là pour ça : t’aider à passer du flou à une action structurée, sans perdre ton côté humain.
+
+La décision est simple.
+
+Rester dans la préparation.
+
+Ou commencer maintenant."""
+
+    return {
+        "day": day,
+        "email_type": email_type,
+        "subject": archetype["subject"],
+        "preheader": archetype["preheader"],
+        "body": _sanitize_body(body),
+        "cta": clean_cta,
+    }
+
+
+def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
+    if len(emails) < 2:
+        return False
+    subjects = [(_clean_text(e.get("subject"), "")).lower() for e in emails]
+    prefixes = [(_clean_text(e.get("body"), "")[:260]).lower() for e in emails]
+    repeated_subjects = len(set(subjects)) <= max(1, len(subjects) // 3)
+    repeated_prefixes = len(set(prefixes)) <= max(1, len(prefixes) // 3)
+    bad_template = any(_is_bad_template(str(e.get("body") or "")) for e in emails)
+    return repeated_subjects or repeated_prefixes or bad_template
+
+
+def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> str:
+    offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
+    target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
+    main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
+    main_objective = _clean_text(_get(payload, "main_objective"), "passer à l'action")
+    primary_cta = _clean_text(_get(payload, "primary_cta"), "")
+    tone = _clean_text(_get(payload, "tone"), "humain")
+
+    return f"""
+Tu es Emailing IA LGD.
+
+Tu écris des emails qui font réagir, pas des emails propres.
+
+MISSION
+Écris EXACTEMENT UN email marketing.
+
+OBJECTIF
+Le lecteur doit se dire :
+“Ok… là il parle de moi.”
+
+CONTEXTE
+- Offre: {offer_name}
+- Audience: {target_audience}
+- Promesse: {main_promise}
+- Objectif: {main_objective}
+- Jour: {day}
+- Type: {email_type}
+
+STYLE
+- phrases courtes
+- ton humain
+- pas marketing
+- pas générique
+- pas "imagine", "tu sais", "chaque jour"
+
+VARIATION
+Chaque email doit être différent :
+- un court
+- un dérangeant
+- un simple
+- un concret
+- un introspectif
+
+IMPACT
+Chaque email doit contenir UNE phrase forte.
 
 Exemples :
-- tu sais déjà
-- personne ne va le faire à ta place
-- à toi de voir
-- tu peux continuer… ou changer
+- "Tu ne bloques pas. Tu évites."
+- "Tu sais. Tu ne fais pas."
+- "Le problème, c’est ton comportement."
 
-FORMAT OBLIGATOIRE :
+CTA
+- pas marketing
+- pas d’action commerciale
+- une pensée
+
+Exemples :
+- "à toi de voir"
+- "personne ne va le faire à ta place"
+- "tu peux continuer… ou changer"
+
+FORMAT
+
 SUJET: ...
 PREHEADER: ...
 CORPS:
 Bonjour {{prenom}},
-(Ton texte sans signature)
 
-CTA: (Ta phrase finale de conversion)
-""".strip()
+...
+CTA: ...
+"""
+
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
+    offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
+    primary_cta = _clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant")
+    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
+    tone = _clean_text(_get(payload, "tone"), "premium")
+
     raw = generate_ai_text(
         prompt=_build_prompt(payload=payload, day=day, email_type=email_type, angle=angle, nonce=nonce),
-        tone=_clean_text(_get(payload, "tone"), "premium"),
-        language="fr"
+        tone=tone,
+        language="fr",
     )
     parts = _extract_sections(str(raw))
-    
+    cta = _clean_text(parts.get("cta"), "")
+    body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
+
+    if _is_bad_template(body):
+        # Filtre soft : on nettoie sans bloquer une génération IA exploitable.
+        body = _sanitize_body(body)
+
     return {
         "day": day,
         "email_type": email_type,
-        "subject": _clean_text(parts.get("subject"), f"Note pour {{{'prenom'}}}"),
-        "preheader": _clean_text(parts.get("preheader"), ""),
-        "body": _clean_text(parts.get("body"), ""),
-        "cta": _clean_text(parts.get("cta"), "à toi de voir"),
+        "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
+        "preheader": _clean_text(parts.get("preheader"), offer_name),
+        "body": _clean_text(body, ""),
+        "cta": cta,
     }
 
-def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
-    duration_days = int(_get(payload, "duration_days", 7) or 7)
-    campaign_type = _clean_text(_get(payload, "campaign_type"), "Vente")
-    sender_name = _clean_text(_get(payload, "sender_name"), "lgd")
-    
-    email_types = _pattern_for_days(duration_days)
-    base_nonce = uuid.uuid4().hex[:8]
-    
-    emails = []
-    for i in range(duration_days):
-        day = i + 1
-        e_type = email_types[i]
-        angles = ANGLE_BANK.get(e_type, ["angle simple"])
-        angle = random.choice(angles)
-        
-        emails.append(_generate_one_email(
-            payload=payload, 
-            day=day, 
-            email_type=e_type, 
-            angle=angle, 
-            nonce=f"{base_nonce}-{day}"
-        ))
 
-    # Retour avec TOUS les champs requis par ton modèle Pydantic
+def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types: List[str]) -> List[Dict[str, Any]]:
+    clean_emails: List[Dict[str, Any]] = []
+    seen_subjects: set[str] = set()
+    seen_bodies: set[str] = set()
+
+    for index, email in enumerate(emails):
+        day = int(email.get("day") or index + 1)
+        subject_key = re.sub(r"\s+", " ", _clean_text(email.get("subject"), "").lower()).strip()
+        body_key = re.sub(r"\s+", " ", _clean_text(email.get("body"), "").lower()).strip()[:360]
+
+        if not body_key:
+            raise ValueError(f"Email IA jour {day} vide : génération live annulée.")
+
+        if subject_key in seen_subjects:
+            raise ValueError(f"Email IA jour {day} rejeté : sujet trop similaire.")
+
+        if body_key in seen_bodies:
+            raise ValueError(f"Email IA jour {day} rejeté : corps trop similaire.")
+
+        if _is_bad_template(str(email.get("body") or "")):
+            raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
+
+        email["cta"] = _clean_text(email.get("cta"), "") or "à toi de voir"
+
+        seen_subjects.add(subject_key)
+        seen_bodies.add(body_key)
+        clean_emails.append(email)
+
+    return clean_emails
+
+
+def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
+    campaign_name = _clean_text(_get(payload, "name"), "Campagne E-mailing IA")
+    campaign_type = _clean_text(_get(payload, "campaign_type"), "vente")
+    duration_days = int(_get(payload, "duration_days", 7) or 7)
+    sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
+    email_types = _pattern_for_days(duration_days)
+
+    base_nonce = f"{uuid.uuid4().hex[:8]}-{random.randint(1000, 9999)}"
+
+    def generate_live_pass(pass_name: str, angle_offset: int) -> List[Dict[str, Any]]:
+        generated: List[Dict[str, Any]] = []
+
+        for index in range(duration_days):
+            day = index + 1
+            email_type = email_types[index]
+            angle_options = ANGLE_BANK.get(email_type, ["angle simple"])
+            angle = angle_options[(index + angle_offset) % len(angle_options)]
+
+            generated.append(
+                _generate_one_email(
+                    payload=payload,
+                    day=day,
+                    email_type=email_type,
+                    angle=angle,
+                    nonce=f"{base_nonce}-{pass_name}-{day}",
+                )
+            )
+
+        return _dedupe_final_emails(generated, payload, email_types)
+
+    try:
+        emails = generate_live_pass("live", random.randint(0, 999))
+    except Exception as first_error:
+        try:
+            emails = generate_live_pass("retry", 3)
+        except Exception as retry_error:
+            raise RuntimeError(
+                "Génération IA live impossible. Aucun fallback local n’a été utilisé. "
+                f"Erreur initiale: {first_error}. Erreur retry: {retry_error}"
+            ) from retry_error
+
+    if _looks_too_similar(emails):
+        try:
+            emails = generate_live_pass("similarity-retry", 5)
+        except Exception as similarity_error:
+            raise RuntimeError(
+                "La génération IA live a produit une séquence trop similaire. "
+                "Aucun fallback local n’a été utilisé."
+            ) from similarity_error
+
     return {
-        "campaign_name": _clean_text(_get(payload, "name"), "Campagne sans nom"),
+        "campaign_name": campaign_name,
         "campaign_type": campaign_type,
         "duration_days": duration_days,
         "sender_name": sender_name,
         "emails": emails,
     }
-
-def _pattern_for_days(days: int) -> List[str]:
-    if days in EMAIL_TYPE_PATTERNS: return EMAIL_TYPE_PATTERNS[days]
-    return [EMAIL_TYPE_PATTERNS[7][i % 7] for i in range(days)]

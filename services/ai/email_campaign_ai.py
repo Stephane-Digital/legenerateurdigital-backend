@@ -345,8 +345,6 @@ def _cta_variant(base_cta: Any, day: int) -> str:
     On fait confiance au prompt LGD.
     """
     return _clean_text(base_cta, "")
-    # dead code removed
-    normalized = base.lower()
 
     if any(word in normalized for word in ["coach", "coaching", "session", "réserve", "reserve", "appel", "audit"]):
         variants = [

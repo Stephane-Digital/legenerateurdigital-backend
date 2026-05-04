@@ -246,6 +246,7 @@ def _sanitize_body(body: str) -> str:
     cleaned = re.sub(r"(?is)\n*Le Générateur Digital\s*$", "", cleaned).strip()
     cleaned = re.sub(r"(?is)\n*LGD\s*$", "", cleaned).strip()
 
+    cleaned = re.sub(r"(?im)^\s*👉.*$", "", cleaned).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -270,6 +271,7 @@ def _strip_cta_from_body(body: str, cta: str) -> str:
     for pattern in generic_cta_patterns:
         cleaned = re.sub(pattern, "", cleaned).strip()
 
+    cleaned = re.sub(r"(?im)^\s*👉.*$", "", cleaned).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -343,7 +345,7 @@ def _cta_variant(base_cta: Any, day: int) -> str:
     On fait confiance au prompt LGD.
     """
     return _clean_text(base_cta, "")
-    base = _clean_text(base_cta, "Passer à l’action maintenant")
+    # dead code removed
     normalized = base.lower()
 
     if any(word in normalized for word in ["coach", "coaching", "session", "réserve", "reserve", "appel", "audit"]):
@@ -1366,7 +1368,7 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
         if _is_bad_template(str(email.get("body") or "")):
             raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
 
-        email["cta"] = _clean_text(email.get("cta"), "")
+        email["cta"] = _clean_text(email.get("cta"), "") or "à toi de voir"
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

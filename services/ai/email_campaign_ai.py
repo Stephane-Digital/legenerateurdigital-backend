@@ -1337,6 +1337,14 @@ RÈGLES SORTIE EMAIL — CRITIQUE
 - N'écris jamais "À bientôt peut-être", "À bientôt", "À très vite", "LGD" ou une signature dans le CORPS.
 - Commence le CORPS par "Bonjour {{prenom}},".
 - Interdit de répéter une même phrase finale sur plusieurs emails.
+- CTA autorisés, à varier obligatoirement :
+- à toi de voir
+- personne ne va le faire à ta place
+- tu peux continuer… ou changer
+- rien ne changera si tu ne changes rien
+- tu peux essayer… ou rester comme ça
+- maintenant tu sais
+- ne laisse pas ça redevenir une idée
 
 FORMAT STRICT OBLIGATOIRE
 SUJET: ...

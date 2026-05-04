@@ -346,42 +346,6 @@ def _cta_variant(base_cta: Any, day: int) -> str:
     """
     return _clean_text(base_cta, "")
 
-    if any(word in normalized for word in ["coach", "coaching", "session", "réserve", "reserve", "appel", "audit"]):
-        variants = [
-            "Réserve ta session et clarifie ton prochain pas.",
-            "Bloque ta session avant de repartir dans la théorie.",
-            "Réserve ton créneau pour transformer le flou en plan clair.",
-            "Planifie ta session et avance avec une méthode simple.",
-            "Réserve ta session pour passer de l’idée à l’action.",
-            "Choisis ton créneau avant de repousser encore.",
-            "Réserve maintenant si tu veux vraiment commencer.",
-        ]
-    elif any(word in normalized for word in ["guide", "télécharge", "telecharge", "ressource"]):
-        variants = [
-            "Télécharge le guide et clarifie ton premier pas.",
-            "Récupère le guide pour éviter de repartir dans la théorie.",
-            "Télécharge le guide et vérifie si cette méthode te correspond.",
-            "Accède au guide pour structurer ton offre plus simplement.",
-            "Télécharge le guide et transforme ton idée en action concrète.",
-            "Récupère le guide avant de repousser encore.",
-            "Télécharge le guide si tu veux vraiment commencer maintenant.",
-        ]
-    else:
-        variants = [
-            "Passe à l’étape suivante avec un plan clair.",
-            "Commence par une action simple aujourd’hui.",
-            "Avance maintenant au lieu de repartir dans la réflexion.",
-            "Clarifie ton offre et teste une première version.",
-            "Transforme ton idée en prochaine action concrète.",
-            "Fais le premier pas avant de repousser encore.",
-            "Décide maintenant si tu veux vraiment avancer.",
-        ]
-
-    if day <= 0:
-        day = 1
-    return variants[(day - 1) % len(variants)]
-
-
 def _fallback_email(
     *,
     day: int,
@@ -587,7 +551,7 @@ Tu es Emailing IA LGD V7.3 : copywriter senior direct-response + stratège Syste
 
 MISSION
 Écris EXACTEMENT UN SEUL email marketing en français, prêt à être utilisé dans une séquence Systeme.io.
-L'email doit être humain comme si tu l'écrivais depuis un Iphone, naturel, crédible, orienté conversion, et distinct des autres jours.
+L'email doit être humain, naturel, crédible, orienté conversion, et distinct des autres jours.
 
 VERROU ANTI-DOUBLON ABSOLU
 - Tu dois générer EXACTEMENT UN SEUL email.
@@ -1407,7 +1371,16 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
         if _is_bad_template(str(email.get("body") or "")):
             raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
 
-        email["cta"] = _clean_text(email.get("cta"), "") or "à toi de voir"
+        fallback_cta_pool = [
+            "personne ne va le faire à ta place",
+            "tu peux continuer… ou changer",
+            "rien ne changera si tu ne changes rien",
+            "tu sais déjà ce que tu dois faire",
+            "ne laisse pas ça redevenir une idée",
+            "maintenant tu sais",
+        ]
+
+        email["cta"] = _clean_text(email.get("cta"), "") or fallback_cta_pool[(day - 1) % len(fallback_cta_pool)]
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

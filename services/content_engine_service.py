@@ -71,28 +71,50 @@ def _extract_text(resp) -> str:
 # ============================================================
 # 🧠 GENERATE AI TEXT
 # ============================================================
-def generate_ai_text(prompt: str, tone: str = "default", language: str = "fr") -> str:
+def generate_ai_text(
+    prompt: str,
+    tone: str = "default",
+    language: str = "fr",
+    temperature: float | None = None,
+    top_p: float | None = None,
+    frequency_penalty: float | None = None,
+    presence_penalty: float | None = None,
+    max_tokens: int | None = None,
+) -> str:
     """
     Génère un texte avec l'IA en fonction du prompt.
     Compatible openai>=1.0.0
+
+    ✅ LGD FIX:
+    - accepte temperature / top_p / frequency_penalty / presence_penalty sans casser les anciens appels
+    - prompt système plus strict pour respecter les prompts spécialisés des modules
     """
 
     system_prompt = (
-        "Tu es l'IA premium de Le Générateur Digital (LGD), spécialisée en marketing digital, "
-        "copywriting direct response, storytelling, conversion et pédagogie business. "
+        "Tu es l'IA premium de Le Générateur Digital (LGD). "
+        "Tu es spécialisée en marketing digital, copywriting direct response, storytelling, conversion et pédagogie business. "
         f"Tu écris toujours en langue : {language}. "
         f"Ton demandé : {tone}. "
-        "Avant d'écrire, tu raisonnes silencieusement comme un stratège : cible, douleur, désir, objection, promesse, preuve, CTA. "
-        "Tu ajoutes une couche V3 : niveau utilisateur, angle viral intelligent, différenciation, non-répétition. "
-        "Tu ne montres jamais cette analyse sauf si l'utilisateur la demande. "
-        "Tu produis ensuite un contenu final humain, clair, concret, crédible, premium et orienté action. "
-        "Évite les formulations génériques, le ton robotique, les promesses irréalistes et la copie mot à mot. "
-        "Réécris toujours de façon originale : inspiré par les mécaniques de conversion, jamais par duplication."
+        "Tu dois respecter strictement le prompt utilisateur, son format, ses contraintes et ses interdictions. "
+        "Si le prompt utilisateur impose un format de sortie, tu ne dois rien ajouter hors de ce format. "
+        "Si le prompt utilisateur impose un pronom, tu dois garder ce pronom partout sans mélanger TU et VOUS. "
+        "Avant d'écrire, tu analyses silencieusement : offre, cible, douleur, désir, objection, promesse, preuve, CTA et contexte utilisateur. "
+        "Tu ne montres jamais cette analyse. "
+        "Tu produis uniquement le contenu final demandé. "
+        "Évite le ton robotique, les formules génériques, les phrases toutes faites, les promesses irréalistes et les transitions scolaires. "
+        "Tu écris de manière naturelle, crédible, concrète, premium et orientée conversion. "
+        "Tu privilégies la cohérence avec l'offre et la situation utilisateur plutôt que le contenu motivationnel vague."
     )
 
-    # Modèle configurable sans toucher au code
     model = os.getenv("OPENAI_MODEL", "").strip() or os.getenv("OPENAI_MODEL_TEXT", "").strip() or "gpt-4o-mini"
     model = _get_model(model)
+
+    # Réglages par défaut optimisés pour le copywriting LGD.
+    temp = 0.82 if temperature is None else float(temperature)
+    nucleus = 0.9 if top_p is None else float(top_p)
+    freq = 0.4 if frequency_penalty is None else float(frequency_penalty)
+    presence = 0.3 if presence_penalty is None else float(presence_penalty)
+    tokens = 900 if max_tokens is None else int(max_tokens)
 
     try:
         client = _client()
@@ -102,8 +124,11 @@ def generate_ai_text(prompt: str, tone: str = "default", language: str = "fr") -
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.72,
-            max_tokens=750,
+            temperature=temp,
+            top_p=nucleus,
+            frequency_penalty=freq,
+            presence_penalty=presence,
+            max_tokens=tokens,
         )
 
         out = _extract_text(response)
@@ -348,4 +373,3 @@ def generate_social_caption(
 
     except Exception as e:
         raise Exception(f"Erreur Caption IA: {str(e)}")
-

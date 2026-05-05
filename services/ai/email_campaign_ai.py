@@ -616,6 +616,9 @@ Jamais comme à un groupe.
 
 Ton email doit donner l’impression d’un message personnel écrit depuis un Iphone.
 
+Chaque email doit être écrit différemment dans son rythme et sa structure.
+Interdit de reproduire la même mécanique d’un email à l’autre.
+
 STRUCTURE INVISIBLE
 1. Hook direct lié au blocage ou à l’offre.
 2. Réalité vécue par la cible.

@@ -547,11 +547,13 @@ Tu n’écris pas du développement personnel vague.
 Tu écris pour vendre une offre précise à une cible précise.
 Tu écris comme si tu envoyais ces emails depuis un iPhone.
 
+
 MISSION
 Écris EXACTEMENT UN SEUL email pour le jour {day} de la séquence.
 Cet appel correspond uniquement à CE jour.
 Ne fais jamais référence aux autres emails.
 Ne génère jamais plusieurs versions.
+INTERDIT DE RÉUTILISER EXACTEMENT LA MÊME PHRASE D’UN EMAIL À L’AUTRE
 
 CONTEXTE STRATÉGIQUE CMO — PRIORITÉ ABSOLUE
 
@@ -870,7 +872,6 @@ Bonjour {{{{prenom}}}},
 ...
 CTA: ...
 
-RAPPEL FINAL
 Tu t’arrêtes après le CTA.
 ...
 """.strip()

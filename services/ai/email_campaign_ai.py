@@ -778,6 +778,88 @@ Exemples :
 “personne ne va le faire à ta place”
 “tu sais déjà ce que tu dois faire”
 
+BLOC RYTHME IPHONE (OBLIGATOIRE)
+
+Tu dois écrire comme un message envoyé rapidement.
+
+Donc :
+
+* phrases très courtes
+* lignes coupées
+* parfois 1 seule phrase par ligne
+* parfois 1 mot seul
+
+Exemple :
+
+Tu ouvres une formation.
+
+Tu prends des notes.
+
+Tu fermes.
+
+Rien.
+
+---
+
+BLOC COUPURE (OBLIGATOIRE)
+
+Tu dois casser le flux.
+
+Exemples :
+
+* “Stop.”
+* “Regarde.”
+* “Honnêtement.”
+* “La vérité ?”
+
+---
+
+BLOC SILENCE (OBLIGATOIRE)
+
+Tu peux laisser des lignes vides pour créer de la tension.
+
+---
+
+BLOC CTA INVISIBLE (OBLIGATOIRE)
+
+Tu ne dois PLUS écrire :
+
+* “Commence ton essai”
+* “Teste maintenant”
+
+Le CTA doit être intégré dans le texte.
+
+Exemple :
+
+“Tu peux tester 7 jours. Sans carte. Juste pour voir.”
+
+Puis finir avec une pensée :
+
+“tu sais déjà ce que tu dois faire”
+
+---
+
+BLOC FIN FORTE (OBLIGATOIRE)
+
+La dernière phrase AVANT CTA doit faire réfléchir.
+
+Exemples :
+
+* “tu continues comme ça… ou tu changes quelque chose”
+* “le temps passe… même si tu ne fais rien”
+
+---
+
+BLOC ANTI-EXPLICATION
+
+Interdit de dire :
+
+* “le problème c’est”
+* “avec LGD tu vas”
+
+Tu dois montrer, pas expliquer.
+
+
 FORMAT STRICT
 
 SUJET: ...

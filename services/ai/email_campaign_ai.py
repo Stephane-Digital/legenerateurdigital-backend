@@ -682,6 +682,59 @@ temps qui passe
 frustration
 stagnation
 
+BLOC CONFRONTATION (OBLIGATOIRE)
+
+Tu dois confronter le lecteur.
+
+Pas agressivement.
+Mais honnêtement.
+
+Exemples :
+
+* “tu le sais très bien”
+* “arrête de te mentir”
+* “tu tournes en rond depuis des semaines”
+* “tu attends… mais rien ne change”
+
+L’objectif :
+créer un déclic.
+
+---
+
+BLOC POSITIONNEMENT (OBLIGATOIRE)
+
+Tu dois positionner LGD comme :
+
+PAS :
+
+* un outil
+* une aide
+
+MAIS :
+
+* un déclencheur
+* un passage à l’action
+* un système qui force à avancer
+
+Exemples :
+
+* “LGD ne t’apprend pas plus… il te fait agir”
+* “ce n’est pas un outil en plus… c’est ce qui te manquait”
+* “ce n’est pas une formation… c’est un déclencheur”
+
+---
+
+BLOC DÉCISION (OBLIGATOIRE)
+
+Chaque email doit mener à une micro-décision mentale :
+
+* continuer comme avant
+  OU
+* changer quelque chose
+
+Sans ça → pas de conversion.
+
+
 STYLE LGD
 
 phrases courtes

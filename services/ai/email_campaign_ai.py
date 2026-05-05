@@ -686,10 +686,22 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     tone = _clean_text(_get(payload, "tone"), "premium")
 
     raw = generate_ai_text(
-        prompt=_build_prompt(payload=payload, day=day, email_type=email_type, angle=angle, nonce=nonce),
-        tone=tone,
-        language="fr",
-    )
+    prompt=_build_prompt(
+        payload=payload,
+        day=day,
+        email_type=email_type,
+        angle=angle,
+        nonce=nonce
+    ),
+    tone=tone,
+    language="fr",
+
+    # 🔥 COPYWRITER ELITE SETTINGS
+    temperature=0.82,
+    top_p=0.9,
+    frequency_penalty=0.4,
+    presence_penalty=0.3
+)
     parts = _extract_sections(str(raw))
     cta = _clean_text(parts.get("cta"), "")
     body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)

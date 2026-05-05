@@ -601,15 +601,20 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
 
     ---
 
-    BLOC ADAPTATION RÉELLE
+  BLOC ADAPTATION RÉELLE (STABILISÉ)
 
-    Tu adaptes :
-    - mots
-    - scènes
-    - exemples
+Tu adaptes :
+- mots
+- scènes
+- exemples
 
-    L’email doit donner l’impression :
-    “ça a été écrit pour moi”
+MAIS :
+
+Tu rends le problème précis, concret, vécu.
+
+Tu ne restes jamais vague.
+
+Si le texte peut fonctionner pour plusieurs cibles → il est mauvais → tu réécris.
 
     ---
 
@@ -759,7 +764,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
-    primary_cta = _clean_text(_get(payload, "primary_cta"), "Passez à l'action maintenant")
+    primary_cta = _clean_text(_get(payload, "primary_cta"), "")
     sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
     tone = _clean_text(_get(payload, "tone"), "premium")
 

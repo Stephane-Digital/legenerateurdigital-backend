@@ -790,8 +790,9 @@ Bonjour {{{{prenom}}}},
 CTA: ...
 
 Tu t’arrêtes après le CTA.
-
-""".strip()
+...
+"""
+prompt.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")

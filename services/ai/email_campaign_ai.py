@@ -740,6 +740,37 @@ Interdit :
 
 Tu montres. Tu ne racontes pas.
 
+BLOC PRONOM STRICT ABSOLU
+
+Par défaut : TU.
+
+Tout l’email est en TU.
+Le CTA est en TU.
+Interdit de mélanger TU et VOUS.
+
+Si une phrase est en VOUS → tu la réécris en TU.
+
+---
+
+BLOC CTA FINAL STRICT
+
+Le CTA est une pensée courte.
+Pas un ordre.
+
+Interdit :
+
+* réserve
+* inscris-toi
+* télécharge
+* clique
+
+Exemples :
+
+* tu peux continuer comme ça… ou changer
+* juste pour voir si ça change quelque chose
+* tu sais déjà ce que tu dois faire
+
+
 ---
 
 FORMAT STRICT

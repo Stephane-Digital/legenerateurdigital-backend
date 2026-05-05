@@ -538,7 +538,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     niche = _clean_text(_get(payload, "niche"), "")
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
 
-    prompt = f"""
+prompt = f"""
     Tu es Emailing IA LGD.
 
     Tu écris des emails de vente humains, directs et alignés avec une stratégie CMO.
@@ -601,15 +601,20 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
 
     ---
 
-    BLOC ADAPTATION RÉELLE
+    BLOC ADAPTATION RÉELLE (CORRIGÉ)
 
     Tu adaptes :
     - mots
     - scènes
     - exemples
 
-    L’email doit donner l’impression :
-    “ça a été écrit pour moi”
+    MAIS tu dois aller plus loin :
+
+    Tu rends le problème concret, vécu, précis.
+
+    Tu ne restes jamais vague.
+
+    Si le texte peut fonctionner pour plusieurs cibles → il est mauvais.
 
     ---
 
@@ -788,8 +793,8 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     CTA: ...
 
     Tu t’arrêtes après le CTA.
-    """.strip()
-    return prompt.strip()
+""".strip()
+return prompt.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")

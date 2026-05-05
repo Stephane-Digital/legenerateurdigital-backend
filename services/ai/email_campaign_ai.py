@@ -367,7 +367,7 @@ def _fallback_email(
     clean_cta = _clean_text(primary_cta, "")
 
     if day == 1:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 Tu as peut-être déjà vécu ce moment étrange : tu sais que tu veux avancer, tu as lu des conseils, regardé des vidéos, noté des idées… mais rien ne sort vraiment.
 
@@ -381,7 +381,7 @@ Avec {clean_offer}, l’objectif est de transformer ce flou en prochaine étape 
 
 Tu n’as pas besoin de tout maîtriser pour commencer. Tu as besoin d’un premier pas visible."""
     elif day == 2:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 L’erreur la plus fréquente, ce n’est pas de ne rien faire.
 
@@ -399,7 +399,7 @@ Vendable.
 
 C’est là que {clean_offer} devient utile : t’aider à sortir de la théorie et à construire quelque chose que ton audience peut comprendre, désirer et choisir."""
     elif day == 3:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 Tu peux avoir l’impression qu’il est trop tard.
 
@@ -415,7 +415,7 @@ La vraie question est : “est-ce que quelqu’un peut m’aider à passer de la
 
 C’est précisément le rôle de {clean_offer} : raccourcir le chemin entre l’idée et l’exécution."""
     elif day == 4:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 La solution n’est pas de créer plus.
 
@@ -437,7 +437,7 @@ Le but n’est pas de devenir parfait.
 
 Le but est de créer une version assez claire pour être testée, améliorée, puis vendue."""
     elif day == 5:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 Imagine dans 7 jours.
 
@@ -457,7 +457,7 @@ Et une fois que c’est concret, tu n’es plus dans “un jour peut-être”.
 
 Tu es déjà en train d’avancer."""
     elif day == 6:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 Avant de repousser encore, vérifie simplement ces quatre points.
 
@@ -479,7 +479,7 @@ Pas pour faire joli.
 
 Pour avancer."""
     else:
-        body = f"""Bonjour {{{{prenom}}}},
+        body = f"""Bonjour {{{prenom}}},
 
 Tu peux continuer à apprendre.
 
@@ -538,7 +538,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     niche = _clean_text(_get(payload, "niche"), "")
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
 
-prompt = f"""
+    prompt = f"""
 Tu es Emailing IA LGD.
 
 Tu écris des emails de vente humains, directs et alignés avec une stratégie CMO.
@@ -742,8 +742,6 @@ Interdit :
 
 Tu montres. Tu ne racontes pas.
 
----
-
 BLOC PRONOM STRICT ABSOLU
 
 Par défaut : TU.
@@ -790,9 +788,9 @@ Bonjour {{{{prenom}}}},
 CTA: ...
 
 Tu t’arrêtes après le CTA.
-...
 """
-prompt.strip()
+    return prompt.strip()
+
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")

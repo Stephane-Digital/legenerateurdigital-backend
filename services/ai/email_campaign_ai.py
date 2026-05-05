@@ -638,6 +638,52 @@ Exemples d’esprit :
 
 Sans rupture → email trop faible.
 
+BLOC VARIATION FORCÉE (OBLIGATOIRE)
+
+Chaque email doit être différent.
+
+Interdit de répéter :
+
+* le même problème
+* la même explication
+* la même mécanique
+
+Variation attendue :
+
+Jour 1 : choc / prise de conscience brutale
+Jour 2 : erreur précise que la cible fait
+Jour 3 : peur réelle / objection forte
+Jour 4 : démonstration concrète de LGD
+Jour 5 : projection détaillée (scène réelle)
+Jour 6 : simplification extrême (décision facile)
+Jour 7 : tension + urgence douce
+
+Si 2 emails se ressemblent → la séquence est mauvaise.
+
+BLOC RÉALITÉ (OBLIGATOIRE)
+
+Tu dois montrer des situations réelles :
+
+* ouvrir une formation et ne rien appliquer
+* prendre des notes sans jamais agir
+* changer de stratégie toutes les semaines
+* passer des heures à réfléchir sans publier
+* commencer sans finir
+
+Sans ça → email trop générique.
+
+BLOC IMPACT (OBLIGATOIRE)
+
+Chaque email doit contenir au moins une phrase forte.
+
+Exemples d’esprit :
+
+* “tu ne manques pas d’envie, tu manques de direction”
+* “tu apprends plus que tu n’agis”
+* “tu sais déjà trop de choses… mais tu ne fais rien”
+
+Sans phrase forte → email oubliable.
+
 STYLE LGD
 
 * Phrases courtes.
@@ -685,16 +731,6 @@ STRUCTURE INVISIBLE (RENFORCÉE)
 
 Ne nomme jamais cette structure.
 
-DIFFÉRENCIATION PAR JOUR
-
-* Jour 1 : prise de conscience directe.
-* Jour 2 : erreur invisible ou croyance à casser.
-* Jour 3 : objection / peur.
-* Jour 4 : solution claire.
-* Jour 5 : projection réaliste.
-* Jour 6 : décision simple.
-* Jour 7 : tension finale.
-
 INTERDIT
 
 * “Imagine”
@@ -718,7 +754,6 @@ CTA
 Le CTA doit être une pensée courte, pas un bouton de vente.
 Il doit être différent selon le jour.
 Il doit rester cohérent avec l’email.
-
 Il doit donner une sensation de décision personnelle.
 
 FORMAT STRICT
@@ -734,6 +769,7 @@ RAPPEL FINAL
 Après la ligne CTA, tu t’arrêtes.
 Tu n’ajoutes rien.
 """.strip()
+
 
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:

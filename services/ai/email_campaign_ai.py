@@ -538,7 +538,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     niche = _clean_text(_get(payload, "niche"), "")
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
 
-    prompt = f"""
+prompt = f"""
 Tu es Emailing IA LGD.
 
 Tu écris des emails de vente humains, directs et alignés avec une stratégie CMO.
@@ -647,7 +647,9 @@ BLOC MICRO-RÉALITÉ
 Tu écris UNE scène réelle.
 
 Courte.
-Visuelle.
+Directe.
+Sans narration.
+Sans “imagine”.
 
 ---
 
@@ -740,6 +742,8 @@ Interdit :
 
 Tu montres. Tu ne racontes pas.
 
+---
+
 BLOC PRONOM STRICT ABSOLU
 
 Par défaut : TU.
@@ -749,6 +753,8 @@ Le CTA est en TU.
 Interdit de mélanger TU et VOUS.
 
 Si une phrase est en VOUS → tu la réécris en TU.
+
+Si le CTA fourni ou généré est en VOUS → tu le réécris automatiquement en TU.
 
 ---
 
@@ -770,7 +776,6 @@ Exemples :
 * juste pour voir si ça change quelque chose
 * tu sais déjà ce que tu dois faire
 
-
 ---
 
 FORMAT STRICT
@@ -786,7 +791,7 @@ CTA: ...
 
 Tu t’arrêtes après le CTA.
 """
-    return prompt.strip()
+return prompt.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")

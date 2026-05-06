@@ -70,7 +70,13 @@ async def force_cors_on_error(request, call_next):
             content={"detail": str(e)}
         )
 
-    response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
+    origin = request.headers.get("origin")
+    if origin in allow_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
+
+    response.headers["Vary"] = "Origin"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Headers"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "*"
@@ -128,9 +134,7 @@ print("================================")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://legenerateurdigital-front.vercel.app"
-    ],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

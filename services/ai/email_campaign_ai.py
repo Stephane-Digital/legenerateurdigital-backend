@@ -394,6 +394,227 @@ PERSONALITY_MODES = {
     "human": "voix proche, intime, réaliste, sans lyrisme",
 }
 
+
+# ============================================================
+# LGD HUMAN CHAOS ENGINE V1.4
+# Objectif : casser le rendu trop propre en ajoutant contradictions,
+# micro-habitudes, pensées honteuses et ruptures de rythme contrôlées.
+# ============================================================
+HUMAN_CHAOS_BANK = {
+    "business": {
+        "contradictions": [
+            "veut vendre, mais évite précisément les conversations qui peuvent vendre",
+            "dit chercher des clients, puis passe une heure à changer sa bannière",
+            "veut être pris au sérieux, mais garde son offre dans un brouillon",
+            "parle de lancement, mais ne montre rien à personne",
+            "veut des preuves, mais refuse de provoquer le premier vrai signal",
+        ],
+        "micro_habits": [
+            "ouvre ChatGPT pour reformuler au lieu d’envoyer",
+            "change trois mots sur sa page puis appelle ça avancer",
+            "relit un vieux témoignage au lieu de relancer le prospect",
+            "scrolle LinkedIn en disant que c’est de la veille",
+            "rafraîchit sa boîte mail avant même d’avoir écrit à quelqu’un",
+        ],
+        "shame_thoughts": [
+            "a peur que quelqu’un voie que son activité ne décolle pas vraiment",
+            "n’ose pas dire depuis combien de temps il prépare ce lancement",
+            "sent qu’il commence à se mentir quand il dit que ça avance",
+            "évite les questions simples parce que les réponses seraient trop visibles",
+        ],
+        "ruptures": [
+            "Le pire ? Tu sais déjà quoi envoyer.",
+            "Ce n’est pas compliqué. C’est exposant.",
+            "Une idée ne vend rien tant qu’elle reste propre dans un dossier.",
+            "Tu n’as pas besoin d’un meilleur angle. Tu as besoin d’un vrai contact avec le marché.",
+        ],
+    },
+    "saas_tech": {
+        "contradictions": [
+            "veut augmenter le MRR, mais ajoute encore une option que personne n’a demandée",
+            "dit écouter les utilisateurs, puis évite l’appel avec celui qui a churné",
+            "cherche la conversion, mais optimise une interface que les essais gratuits ne comprennent pas",
+            "veut scaler, mais ne sait pas pourquoi les trois derniers inscrits ont disparu",
+            "parle activation, mais repousse le moment de regarder une session utilisateur jusqu’au bout",
+        ],
+        "micro_habits": [
+            "déplace une carte Linear pour sentir que le produit avance",
+            "lit les tickets support faciles avant d’ouvrir le vrai problème",
+            "ouvre Stripe, ferme Stripe, puis retourne dans le code",
+            "réécrit le changelog alors que personne n’a atteint la valeur",
+            "corrige un détail de wording au lieu d’appeler un utilisateur bloqué",
+        ],
+        "shame_thoughts": [
+            "a peur que le produit soit utile en théorie mais pas assez clair pour être payé",
+            "redoute que les utilisateurs ne voient pas la valeur aussi vite que lui",
+            "n’ose pas admettre que la roadmap sert parfois à éviter les conversations difficiles",
+            "se demande si le MRR stagne à cause du produit, pas du marché",
+        ],
+        "ruptures": [
+            "Une feature peut cacher le problème. Elle ne le résout pas toujours.",
+            "Le churn ne ment pas. Il part juste sans faire de bruit.",
+            "Ton produit n’a pas besoin d’être plus grand. Il doit devenir plus évident.",
+            "Si l’utilisateur abandonne avant la valeur, la roadmap arrive trop tard.",
+        ],
+    },
+    "confidence": {
+        "contradictions": [
+            "veut être respecté, mais retire la phrase qui le rend clair",
+            "veut vendre, mais écrit comme s’il demandait pardon",
+            "veut prendre sa place, puis laisse encore quelqu’un décider",
+            "veut être visible, mais efface le message juste avant l’envoi",
+        ],
+        "micro_habits": [
+            "réécrit la première phrase jusqu’à ne plus savoir ce qu’il voulait dire",
+            "verrouille son téléphone après avoir ouvert la conversation",
+            "sourit en réunion puis rumine dans la voiture",
+            "prépare une phrase ferme et l’adoucit au dernier moment",
+        ],
+        "shame_thoughts": [
+            "a peur d’être perçu comme trop insistant",
+            "n’ose pas demander clairement parce qu’il imagine déjà le refus",
+            "se sent ridicule avant même d’avoir essayé",
+            "préférerait qu’on devine son besoin plutôt que de le formuler",
+        ],
+        "ruptures": [
+            "Le silence protège sur le moment. Il coûte après.",
+            "Tu ne manques pas toujours d’arguments. Parfois tu retires juste ta voix.",
+            "La phrase que tu évites est souvent celle qui change la relation.",
+            "Ce n’est pas trop direct. C’est enfin clair.",
+        ],
+    },
+    "productivity": {
+        "contradictions": [
+            "veut gagner du temps, mais reconstruit encore son système",
+            "veut terminer, mais commence par renommer les dossiers",
+            "veut avancer, mais choisit la tâche qui ne l’expose pas",
+            "veut moins de charge mentale, mais ajoute une nouvelle méthode",
+        ],
+        "micro_habits": [
+            "ouvre Notion pour se donner l’impression de reprendre le contrôle",
+            "déplace une tâche au lendemain avec une justification très raisonnable",
+            "répond à une notification facile pour éviter le vrai fichier",
+            "range son bureau numérique avant de produire quoi que ce soit",
+        ],
+        "shame_thoughts": [
+            "sait que la journée a été pleine mais pas utile",
+            "redoute qu’on demande ce qui a vraiment été livré",
+            "se sent occupé pour ne pas se sentir bloqué",
+            "voit très bien quelle tâche compte et l’évite quand même",
+        ],
+        "ruptures": [
+            "Être occupé peut devenir une cachette très confortable.",
+            "Le système parfait ne livrera pas à ta place.",
+            "La tâche qui compte est souvent celle que tu contournes le mieux.",
+            "Tu n’as pas besoin d’une nouvelle organisation. Tu as besoin d’une fin visible.",
+        ],
+    },
+    "fitness": {
+        "contradictions": [
+            "veut reprendre le contrôle, mais négocie avec lui-même dès que la fatigue arrive",
+            "veut changer, puis transforme un écart en abandon complet",
+            "cherche un plan parfait, mais fuit le prochain repas simple",
+            "veut des résultats, mais laisse une mauvaise soirée décider de la semaine",
+        ],
+        "micro_habits": [
+            "ouvre l’application de sport puis referme avant l’échauffement",
+            "regarde le frigo comme si la réponse allait changer",
+            "se promet de compenser demain",
+            "cache la balance puis y pense toute la matinée",
+        ],
+        "shame_thoughts": [
+            "se sent nul pour un choix qu’il n’aurait même pas remarqué chez quelqu’un d’autre",
+            "évite le miroir parce qu’il sait déjà ce qu’il va se dire",
+            "a peur que les autres voient le manque de discipline",
+            "confond un craquage avec une preuve qu’il n’y arrivera pas",
+        ],
+        "ruptures": [
+            "Un écart n’est pas une identité.",
+            "La fatigue adore négocier à ta place.",
+            "Le prochain choix compte plus que la dernière erreur.",
+            "Tu n’as pas besoin de te punir. Tu as besoin de reprendre une règle simple.",
+        ],
+    },
+    "crypto": {
+        "contradictions": [
+            "veut suivre un plan, mais obéit à la dernière bougie rouge",
+            "parle gestion du risque, puis déplace son stop en silence",
+            "veut trader froidement, mais regarde Telegram avant sa propre règle",
+            "cherche la liberté, mais laisse le marché décider de son humeur",
+        ],
+        "micro_habits": [
+            "rafraîchit le graphique comme si le mouvement allait s’expliquer",
+            "ouvre l’exchange sans intention claire",
+            "relit un message Telegram pour justifier une entrée trop tardive",
+            "calcule ce qu’il aurait gagné au lieu de protéger ce qui reste",
+        ],
+        "shame_thoughts": [
+            "n’ose pas regarder la perte en face",
+            "se raconte qu’il va se refaire pour éviter d’admettre l’erreur",
+            "cache la position parce qu’elle ne respecte déjà plus son plan",
+            "sait que ce trade est émotionnel mais veut quand même y croire",
+        ],
+        "ruptures": [
+            "Le marché ne te doit pas une réparation.",
+            "Un plan ignoré devient juste une décoration.",
+            "La panique ressemble souvent à une opportunité quand tu veux te refaire.",
+            "Le prochain bon trade commence parfois par ne rien faire.",
+        ],
+    },
+    "coaching_life": {
+        "contradictions": [
+            "veut changer de vie, mais répond encore oui à ce qui l’épuise",
+            "cherche du sens, puis remet la décision à un lundi plus calme",
+            "veut respirer, mais protège l’image de quelqu’un qui tient le coup",
+            "parle de nouveau départ, mais garde la première action dans un carnet fermé",
+        ],
+        "micro_habits": [
+            "ouvre une offre d’emploi puis ferme l’onglet avant de lire jusqu’au bout",
+            "écoute un podcast pour sentir que quelque chose bouge",
+            "écrit deux lignes dans un carnet puis retourne à l’urgence des autres",
+            "dit que ça va avec une voix qui dit l’inverse",
+        ],
+        "shame_thoughts": [
+            "a honte d’être fatigué alors que tout semble fonctionner de l’extérieur",
+            "redoute de décevoir en disant enfin non",
+            "se demande combien de temps il peut encore faire semblant",
+            "n’ose pas avouer que la stabilité commence à ressembler à une cage",
+        ],
+        "ruptures": [
+            "Tenir bon n’est pas toujours une victoire.",
+            "Parfois, le courage commence par une limite très simple.",
+            "Tu peux réussir extérieurement et disparaître intérieurement.",
+            "Le déclic ne remplace pas une décision visible.",
+        ],
+    },
+    "real_estate": {
+        "contradictions": [
+            "veut investir, mais repousse encore le dossier bancaire",
+            "cherche le bien parfait, mais n’a pas encore sécurisé sa capacité d’achat",
+            "veut être rapide, puis hésite jusqu’à voir le bien partir",
+            "compare les quartiers au lieu d’appeler le courtier",
+        ],
+        "micro_habits": [
+            "ouvre SeLoger dès l’alerte puis attend trop longtemps",
+            "recalcule le même Excel en espérant une autre réponse",
+            "relit l’annonce déjà vendue comme si elle allait revenir",
+            "garde le dossier de prêt ouvert sans envoyer les pièces",
+        ],
+        "shame_thoughts": [
+            "a peur que la banque dise non et confirme ses doutes",
+            "n’ose pas faire une offre parce qu’il imagine déjà s’être trompé",
+            "se sent en retard quand les autres parlent patrimoine",
+            "redoute de passer pour un amateur devant l’agent",
+        ],
+        "ruptures": [
+            "Le bien parfait attend rarement un dossier incomplet.",
+            "L’hésitation coûte parfois plus cher qu’une négociation ratée.",
+            "Un simulateur ne remplace pas une capacité validée.",
+            "La bonne affaire commence souvent avant l’alerte.",
+        ],
+    },
+}
+
 FORBIDDEN_CLICHE_SCORES = {
     "imagine": 2,
     "et si": 2,
@@ -406,6 +627,10 @@ FORBIDDEN_CLICHE_SCORES = {
     "outil puissant": 4,
     "opportunité unique": 3,
     "ne laisse pas passer": 3,
+    "il est temps d’agir": 4,
+    "fais le premier pas": 4,
+    "commence à avancer": 4,
+    "transforme ces pensées en actions concrètes": 4,
     "c’est le moment": 2,
     "tu peux continuer": 2,
     "personne ne va le faire à ta place": 4,
@@ -648,6 +873,17 @@ def _select_human_material(payload: Any, day: int, nonce: str) -> Dict[str, Any]
     personality_keys = list(PERSONALITY_MODES.keys())
     personality_key = personality_keys[(day + seed) % len(personality_keys)]
 
+    chaos = HUMAN_CHAOS_BANK.get(market_key, HUMAN_CHAOS_BANK["business"])
+    contradictions = chaos.get("contradictions", [])
+    micro_habits = chaos.get("micro_habits", [])
+    shame_thoughts = chaos.get("shame_thoughts", [])
+    ruptures = chaos.get("ruptures", [])
+
+    selected_contradiction = _cycle_pick(contradictions, day, seed % max(1, len(contradictions)))
+    selected_micro_habit = _cycle_pick(micro_habits, day, (seed // 5) % max(1, len(micro_habits)))
+    selected_shame_thought = _cycle_pick(shame_thoughts, day, (seed // 11) % max(1, len(shame_thoughts)))
+    selected_rupture = _cycle_pick(ruptures, day, (seed // 13) % max(1, len(ruptures)))
+
     return {
         "market_key": market_key,
         "pains": selected_pains,
@@ -655,6 +891,10 @@ def _select_human_material(payload: Any, day: int, nonce: str) -> Dict[str, Any]
         "natural_cta": selected_cta,
         "personality_key": personality_key,
         "personality_instruction": PERSONALITY_MODES[personality_key],
+        "contradiction": selected_contradiction,
+        "micro_habit": selected_micro_habit,
+        "shame_thought": selected_shame_thought,
+        "rupture": selected_rupture,
     }
 
 
@@ -940,6 +1180,36 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     Moment de vie / décor imposé :
     - {human_material["life_context"]}
 
+    HUMAN CHAOS ENGINE V1.4 — À UTILISER OBLIGATOIREMENT
+
+    Contradiction humaine :
+    - {human_material["contradiction"]}
+
+    Micro-habitude révélatrice :
+    - {human_material["micro_habit"]}
+
+    Pensée honteuse / vérité non dite :
+    - {human_material["shame_thought"]}
+
+    Rupture de rythme recommandée :
+    - {human_material["rupture"]}
+
+    RÈGLE HUMAN CHAOS
+
+    Tu dois intégrer au moins DEUX éléments du Human Chaos Engine.
+    Tu ne dois pas les recopier mécaniquement.
+    Tu les transformes en scène ou en phrase qui ressemble à une pensée réelle.
+
+    L’email doit contenir au moins une rupture courte du type :
+    - Le pire ?
+    - Tu le sais déjà.
+    - Comme hier.
+    - Et c’est ça qui fatigue.
+    - Pas plus compliqué que ça.
+
+    Tu ne dois pas tout expliquer.
+    Tu dois montrer le comportement, puis laisser la gêne faire le travail.
+
     RÈGLE FONDAMENTALE
 
     L’email doit donner l’impression que LGD comprend la scène exacte vécue par la cible.
@@ -957,14 +1227,19 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
 
     3. Fais monter la tension commerciale.
        Ce qui coûte : temps, ventes, confiance, énergie, crédibilité.
+       Mais ne nomme pas toujours l’émotion. Montre-la par un geste.
 
-    4. Introduis LGD comme déclencheur concret.
+    4. Ajoute une contradiction ou une micro-habitude.
+       Exemple : vouloir vendre mais éviter le message, vouloir scaler mais fuir l’appel utilisateur, vouloir être clair mais adoucir la phrase importante.
+
+    5. Introduis LGD comme déclencheur concret.
        Pas comme "outil puissant".
        Pas comme "solution complète".
        LGD aide à créer / envoyer / tester quelque chose de visible.
 
-    5. Termine par une phrase de décision naturelle.
+    6. Termine par une phrase de décision naturelle.
        Le CTA doit être une continuation de la scène, pas un bouton marketing.
+       Si le CTA ressemble à une injonction marketing, il est mauvais.
 
     INTERDIT ABSOLU
 
@@ -981,6 +1256,10 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     - Rien ne changera si tu ne changes rien
     - Tu peux continuer… ou changer
     - Ne laisse pas ça redevenir une idée
+    - Il est temps d’agir
+    - Fais le premier pas
+    - Commence à avancer
+    - Transforme ces pensées en actions concrètes
 
     VARIATION OBLIGATOIRE
 

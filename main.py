@@ -58,31 +58,6 @@ from routes.cmo_scenarios import router as cmo_scenarios_router
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
 
-from fastapi.responses import JSONResponse
-
-@app.middleware("http")
-async def force_cors_on_error(request, call_next):
-    try:
-        response = await call_next(request)
-    except Exception as e:
-        response = JSONResponse(
-            status_code=500,
-            content={"detail": str(e)}
-        )
-
-    origin = request.headers.get("origin")
-    if origin in allow_origins:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
-
-    response.headers["Vary"] = "Origin"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-
-    return response
-
 def normalize_origins(value):
     if not value:
         return []

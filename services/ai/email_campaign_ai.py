@@ -675,6 +675,14 @@ EXPLANATORY_PHRASE_SCORES = {
 }
 
 FORBIDDEN_CLICHE_SCORES = {
+    "qu’attendez-vous": 3,
+    "qu’attends-tu": 3,
+    "cesse d’attendre": 4,
+    "c’est maintenant ou jamais": 4,
+    "prends cette décision maintenant": 4,
+    "pas plus compliqué que ça": 2,
+    "et c’est ça qui fatigue": 3,
+    "le pire ?": 2,
     "imagine": 2,
     "et si": 2,
     "passe à l’action": 3,
@@ -701,6 +709,152 @@ FORBIDDEN_CLICHE_SCORES = {
     "rien ne changera si tu ne changes rien": 4,
     "ne laisse pas ça redevenir une idée": 4,
 }
+
+
+
+
+# ============================================================
+# LGD HUMAN SUBTEXT ENGINE V1.6
+# Objectif : réduire le rendu trop explicatif et casser les schémas IA
+# sans supprimer les moteurs V1.3, V1.4 et V1.5.
+# ============================================================
+SUBTEXT_OPENERS = [
+    "Le canal Slack est vide.",
+    "Tu regardes encore le dashboard.",
+    "Tu repousses encore ce message.",
+    "Le produit est ouvert. Pas les conversations.",
+    "Tu modifies encore un détail.",
+    "Stripe est ouvert depuis vingt minutes.",
+    "Tu sais déjà quelle tâche tu évites.",
+    "L’essai gratuit expire demain.",
+]
+
+SUBTEXT_ENDINGS = [
+    "Tu connais déjà la conversation que tu repousses.",
+    "Le problème n’est probablement plus dans le produit.",
+    "La roadmap ne répondra pas à ta place.",
+    "Tu n’as pas besoin d’une autre feature aujourd’hui.",
+    "Le silence finit toujours par coûter plus cher.",
+    "Tu sais déjà quoi faire après avoir fermé cet email.",
+]
+
+SUBTEXT_EXPLANATION_PATTERNS = [
+    r"(?i)cette micro-habitude révèle[^.?!]*[.?!]",
+    r"(?i)cela révèle[^.?!]*[.?!]",
+    r"(?i)la vérité est simple\s*:?\s*",
+    r"(?i)c['’]est là que[^.?!]*[.?!]",
+    r"(?i)ce faux travail[^.?!]*[.?!]",
+    r"(?i)il est temps d['’]agir[^.?!]*[.?!]?",
+    r"(?i)fais le premier pas[^.?!]*[.?!]?",
+    r"(?i)prends cette décision maintenant[^.?!]*[.?!]?",
+    r"(?i)c['’]est maintenant ou jamais[^.?!]*[.?!]?",
+]
+
+SUBTEXT_TEMPLATE_PHRASES = [
+    "Le pire ?",
+    "Et c’est ça qui fatigue.",
+    "Pas plus compliqué que ça.",
+    "Pendant ce temps,",
+    "Pendant ce temps",
+]
+
+
+def _subtext_cleanup(text_value: str) -> str:
+    cleaned = _clean_text(text_value, "")
+
+    for pattern in SUBTEXT_EXPLANATION_PATTERNS:
+        cleaned = re.sub(pattern, "", cleaned).strip()
+
+    for phrase in SUBTEXT_TEMPLATE_PHRASES:
+        cleaned = cleaned.replace(phrase, "").strip()
+
+    cleaned = re.sub(r"(?im)^\s*(alors,?\s*)?prêt à voir[^\n]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?im)^\s*regardez par vous-même[^\n]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?im)^\s*découvre(?:z)?[^\n]*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?im)^\s*clique(?:z)?[^\n]*$", "", cleaned).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    return cleaned.strip()
+
+
+def _subtext_score(text_value: str) -> int:
+    normalized = _normalize_text(text_value).lower()
+    score = 0
+
+    for phrase in SUBTEXT_TEMPLATE_PHRASES:
+        if phrase.lower() in normalized:
+            score += 1
+
+    for pattern in SUBTEXT_EXPLANATION_PATTERNS:
+        if re.search(pattern, normalized, flags=re.IGNORECASE):
+            score += 2
+
+    return score
+
+
+
+# ============================================================
+# LGD VARIATION ENGINE V1.7
+# ============================================================
+EMOTIONAL_CURVES_V17 = {
+    "early": ["prise de conscience", "friction invisible", "fatigue mentale"],
+    "middle": ["contradiction", "micro-échec", "réalité terrain", "preuve silencieuse"],
+    "late": ["décision", "projection réaliste", "perte du statu quo", "mouvement concret"],
+}
+
+SOFT_CLICHE_REPLACEMENTS_V17 = {
+    r"\b[Ii]magine\b": "Pense à",
+    r"\b[Ii]maginez\b": "Pensez à",
+    r"\b[Pp]asse à l’action\b": "avance vraiment",
+    r"\b[Pp]asser à l’action\b": "avancer réellement",
+    r"\b[Ss]olution complète\b": "système concret",
+}
+
+def _campaign_pick_without_replacement(items, seed, count):
+    if not items:
+        return []
+    pool = list(dict.fromkeys(items))
+    while len(pool) < count:
+        pool.extend(items)
+    rng = random.Random(seed)
+    rng.shuffle(pool)
+    return pool[:count]
+
+def _soft_cliche_cleanup_v17(text_value):
+    cleaned = _clean_text(text_value, "")
+    for pattern, replacement in SOFT_CLICHE_REPLACEMENTS_V17.items():
+        cleaned = re.sub(pattern, replacement, cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+def _cross_email_repetition_score_v17(emails):
+    openings = []
+    endings = []
+    score = 0
+
+    for email in emails:
+        body = _normalize_text(email.get("body", ""))
+        paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+
+        if paragraphs:
+            openings.append(paragraphs[0][:140].lower())
+            endings.append(paragraphs[-1][-140:].lower())
+
+    if len(openings) != len(set(openings)):
+        score += 3
+
+    if len(endings) != len(set(endings)):
+        score += 2
+
+    return score
+
+def _emotional_stage_v17(day, total_days):
+    ratio = day / max(total_days, 1)
+    if ratio <= 0.33:
+        return random.choice(EMOTIONAL_CURVES_V17["early"])
+    if ratio <= 0.66:
+        return random.choice(EMOTIONAL_CURVES_V17["middle"])
+    return random.choice(EMOTIONAL_CURVES_V17["late"])
 
 REPETITIVE_MOTIF_PATTERNS = [
     r"\bstripe\b",
@@ -988,12 +1142,23 @@ def _select_human_material(payload: Any, day: int, nonce: str, campaign_voice: D
     context_offset = (seed // 3) % max(1, len(contexts))
     cta_offset = (seed // 7) % max(1, len(ctas))
 
-    selected_pains = []
-    for i in range(min(4, len(pains))):
-        selected_pains.append(_cycle_pick(pains, day, pain_offset + i * 2))
+    selected_pains = _campaign_pick_without_replacement(
+        pains,
+        seed + day,
+        min(4, len(pains)),
+    )
 
-    selected_context = _cycle_pick(contexts, day, context_offset)
-    selected_cta = _cycle_pick(ctas, day, cta_offset)
+    selected_context = _campaign_pick_without_replacement(
+        contexts,
+        seed + (day * 3),
+        1,
+    )[0]
+
+    selected_cta = _campaign_pick_without_replacement(
+        ctas,
+        seed + (day * 7),
+        1,
+    )[0]
 
     if campaign_voice:
         personality_key = _clean_text(campaign_voice.get("style_key"), "human")
@@ -1239,8 +1404,16 @@ def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
     bad_template = any(_is_bad_template(str(e.get("body") or "")) for e in emails)
     ai_cliche = any(_looks_like_ai_cliche(str(e.get("body") or "")) for e in emails)
     repetitive_motif = _repetitive_motif_score(emails) >= 3
+    cross_email_repetition = _cross_email_repetition_score_v17(emails) >= 3
 
-    return repeated_subjects or repeated_prefixes or bad_template or ai_cliche or repetitive_motif
+    return (
+        repeated_subjects
+        or repeated_prefixes
+        or bad_template
+        or ai_cliche
+        or repetitive_motif
+        or cross_email_repetition
+    )
 
 
 def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str, campaign_voice: Dict[str, Any]) -> str:
@@ -1305,6 +1478,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     Règle anti-explication : {campaign_voice["explain_rule"]}
     Règle CTA globale : {campaign_voice["cta_rule"]}
     Variation : {nonce}
+    Stade émotionnel V1.7 : {_emotional_stage_v17(day, int(_get(payload, "duration_days"), 7))}
 
     MATIÈRE HUMAINE OBLIGATOIRE
 
@@ -1419,6 +1593,26 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     - aucun markdown
     - pas de signature
 
+    HUMAN SUBTEXT ENGINE V1.6 — OBLIGATOIRE
+
+    Tu dois réduire les explications visibles.
+    Tu dois montrer le comportement et laisser le lecteur comprendre.
+
+    Interdit de structurer tous les emails avec :
+    - Le pire ?
+    - Pendant ce temps
+    - Et c’est ça qui fatigue
+    - Ce faux travail
+    - C’est maintenant ou jamais
+
+    Le produit doit arriver plus tard.
+    L’email doit rester plus longtemps dans la scène vécue par le prospect.
+    Si tu peux supprimer une phrase d’explication et garder le sens, supprime-la.
+
+    Exemple de direction :
+    Mauvais : "Ce faux travail te coûte des ventes."
+    Meilleur : "Tu passes plus de temps dans Linear qu’avec un utilisateur réel."
+
     NARRATIVE CONSISTENCY ENGINE V1.5 — OBLIGATOIRE
 
     Toute la séquence utilise la même voix.
@@ -1481,7 +1675,7 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
 )
     parts = _extract_sections(str(raw))
     cta = _clean_text(parts.get("cta"), "")
-    body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
+    body = _soft_cliche_cleanup_v17(_subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)))
 
     if _is_bad_template(body):
         body = _sanitize_body(body)
@@ -1494,6 +1688,9 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
 
     if _explanatory_score(body) >= 5:
         raise ValueError(f"Email IA jour {day} rejeté : texte trop explicatif.")
+
+    if _subtext_score(body) >= 4:
+        raise ValueError(f"Email IA jour {day} rejeté : structure trop template.")
 
     if not cta or _ai_cliche_score(cta) >= 3:
         cta = _natural_cta_for_payload(payload, day, nonce, campaign_voice)
@@ -1542,6 +1739,9 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
 
         if _explanatory_score(str(email.get("body") or "")) >= 5:
             raise ValueError(f"Email IA jour {day} rejeté : texte trop explicatif.")
+
+        if _subtext_score(str(email.get("body") or "")) >= 4:
+            raise ValueError(f"Email IA jour {day} rejeté : structure trop template.")
 
         email["cta"] = email_cta
 

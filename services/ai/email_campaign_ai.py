@@ -615,6 +615,65 @@ HUMAN_CHAOS_BANK = {
     },
 }
 
+
+
+# ============================================================
+# LGD NARRATIVE CONSISTENCY ENGINE V1.5
+# Objectif : figer une seule voix par séquence : tu OU vous,
+# une même intensité narrative et une cohérence CTA du jour 1 au dernier email.
+# ============================================================
+CAMPAIGN_VOICE_MODES = {
+    "tu": {
+        "pronoun": "tu",
+        "address_rule": "Tutoiement strict : utiliser tu / ton / ta / tes. Ne jamais utiliser vous / votre / vos.",
+        "cta_rule": "CTA naturel, direct, intime, jamais corporate.",
+    },
+    "vous": {
+        "pronoun": "vous",
+        "address_rule": "Vouvoiement strict : utiliser vous / votre / vos. Ne jamais utiliser tu / ton / ta / tes.",
+        "cta_rule": "CTA sobre, professionnel, précis, jamais familier.",
+    },
+}
+
+VOICE_STYLE_BANK = {
+    "brutal_honest": {
+        "instruction": "voix directe, vérité sèche, phrases courtes, aucune consolation vide",
+        "rhythm": "ruptures courtes, silences, phrases qui restent en tête",
+        "explain_rule": "montrer le geste plutôt que commenter l’émotion",
+    },
+    "premium_human": {
+        "instruction": "voix premium, humaine, sobre, précise, sans lyrisme",
+        "rhythm": "rythme élégant, lignes aérées, tension maîtrisée",
+        "explain_rule": "éviter les diagnostics évidents et préférer les observations fines",
+    },
+    "analytical_cold": {
+        "instruction": "voix froide, lucide, orientée diagnostic et décision",
+        "rhythm": "phrases nettes, logique commerciale, pas d’emphase",
+        "explain_rule": "relier les comportements aux conséquences sans moraliser",
+    },
+    "intimate_real": {
+        "instruction": "voix proche, intime, réaliste, comme quelqu’un qui a vu la scène",
+        "rhythm": "phrases simples, micro-silences, détails concrets",
+        "explain_rule": "ne pas nommer les émotions quand un détail suffit à les faire sentir",
+    },
+}
+
+EXPLANATORY_PHRASE_SCORES = {
+    "cette micro-habitude révèle": 4,
+    "cela révèle": 3,
+    "un vrai enjeu": 3,
+    "la vérité est simple": 2,
+    "c’est là que": 2,
+    "la vraie question est": 2,
+    "ce qui te coûte": 2,
+    "ce qui vous coûte": 2,
+    "il est temps": 3,
+    "prêt à": 2,
+    "regardez par vous-même": 3,
+    "découvre": 3,
+    "clique": 4,
+}
+
 FORBIDDEN_CLICHE_SCORES = {
     "imagine": 2,
     "et si": 2,
@@ -631,6 +690,10 @@ FORBIDDEN_CLICHE_SCORES = {
     "fais le premier pas": 4,
     "commence à avancer": 4,
     "transforme ces pensées en actions concrètes": 4,
+    "regardez par vous-même": 4,
+    "découvre la démo": 4,
+    "clique": 4,
+    "prêt à voir": 3,
     "c’est le moment": 2,
     "tu peux continuer": 2,
     "personne ne va le faire à ta place": 4,
@@ -852,7 +915,69 @@ def _cycle_pick(items: List[str], day: int, offset: int = 0) -> str:
     return items[(max(day, 1) - 1 + offset) % len(items)]
 
 
-def _select_human_material(payload: Any, day: int, nonce: str) -> Dict[str, Any]:
+def _infer_requested_pronoun(payload: Any) -> str:
+    raw = " ".join(
+        [
+            _clean_text(_get(payload, "tone"), ""),
+            _clean_text(_get(payload, "voice"), ""),
+            _clean_text(_get(payload, "pronoun"), ""),
+            _clean_text(_get(payload, "address_mode"), ""),
+            _clean_text(_get(payload, "product_context"), ""),
+            _clean_text(_get(payload, "target_audience"), ""),
+        ]
+    ).lower()
+
+    if any(word in raw for word in ["vouvoiement", "vouvoyer", "vous", "b2b", "corporate", "professionnel", "dirigeant", "ceo"]):
+        return "vous"
+    return "tu"
+
+
+def _build_campaign_voice(payload: Any, nonce: str) -> Dict[str, Any]:
+    pronoun = _infer_requested_pronoun(payload)
+    market_key = _infer_market_key(payload)
+    seed = sum(ord(ch) for ch in f"{market_key}-{pronoun}-{nonce}")
+
+    style_keys = list(VOICE_STYLE_BANK.keys())
+    style_key = style_keys[seed % len(style_keys)]
+    style = VOICE_STYLE_BANK[style_key]
+    pronoun_rules = CAMPAIGN_VOICE_MODES[pronoun]
+
+    return {
+        "pronoun": pronoun,
+        "style_key": style_key,
+        "style_instruction": style["instruction"],
+        "rhythm": style["rhythm"],
+        "explain_rule": style["explain_rule"],
+        "address_rule": pronoun_rules["address_rule"],
+        "cta_rule": pronoun_rules["cta_rule"],
+    }
+
+
+def _contains_mixed_pronouns(text: str, campaign_voice: Dict[str, Any]) -> bool:
+    normalized = f" {_normalize_text(text).lower()} "
+    pronoun = _clean_text(campaign_voice.get("pronoun"), "tu")
+
+    tu_markers = [" tu ", " ton ", " ta ", " tes ", " toi ", " t’", " t'", " te "]
+    vous_markers = [" vous ", " votre ", " vos ", " vôtre "]
+
+    has_tu = any(marker in normalized for marker in tu_markers)
+    has_vous = any(marker in normalized for marker in vous_markers)
+
+    if pronoun == "tu":
+        return has_vous
+    return has_tu
+
+
+def _explanatory_score(text: str) -> int:
+    normalized = _normalize_text(text).lower()
+    score = 0
+    for marker, weight in EXPLANATORY_PHRASE_SCORES.items():
+        if marker in normalized:
+            score += weight
+    return score
+
+
+def _select_human_material(payload: Any, day: int, nonce: str, campaign_voice: Dict[str, Any] | None = None) -> Dict[str, Any]:
     market_key = _infer_market_key(payload)
     pains = HUMAN_PAIN_BANK.get(market_key, HUMAN_PAIN_BANK["business"])
     contexts = HUMAN_LIFE_CONTEXT_BANK.get(market_key, HUMAN_LIFE_CONTEXT_BANK["business"])
@@ -870,8 +995,13 @@ def _select_human_material(payload: Any, day: int, nonce: str) -> Dict[str, Any]
     selected_context = _cycle_pick(contexts, day, context_offset)
     selected_cta = _cycle_pick(ctas, day, cta_offset)
 
-    personality_keys = list(PERSONALITY_MODES.keys())
-    personality_key = personality_keys[(day + seed) % len(personality_keys)]
+    if campaign_voice:
+        personality_key = _clean_text(campaign_voice.get("style_key"), "human")
+        personality_instruction = _clean_text(campaign_voice.get("style_instruction"), PERSONALITY_MODES.get("human", "voix humaine"))
+    else:
+        personality_keys = list(PERSONALITY_MODES.keys())
+        personality_key = personality_keys[(day + seed) % len(personality_keys)]
+        personality_instruction = PERSONALITY_MODES[personality_key]
 
     chaos = HUMAN_CHAOS_BANK.get(market_key, HUMAN_CHAOS_BANK["business"])
     contradictions = chaos.get("contradictions", [])
@@ -890,7 +1020,7 @@ def _select_human_material(payload: Any, day: int, nonce: str) -> Dict[str, Any]
         "life_context": selected_context,
         "natural_cta": selected_cta,
         "personality_key": personality_key,
-        "personality_instruction": PERSONALITY_MODES[personality_key],
+        "personality_instruction": personality_instruction,
         "contradiction": selected_contradiction,
         "micro_habit": selected_micro_habit,
         "shame_thought": selected_shame_thought,
@@ -921,8 +1051,8 @@ def _repetitive_motif_score(emails: List[Dict[str, Any]]) -> int:
     return score
 
 
-def _natural_cta_for_payload(payload: Any, day: int, nonce: str) -> str:
-    return _clean_text(_select_human_material(payload, day, nonce).get("natural_cta"), "")
+def _natural_cta_for_payload(payload: Any, day: int, nonce: str, campaign_voice: Dict[str, Any] | None = None) -> str:
+    return _clean_text(_select_human_material(payload, day, nonce, campaign_voice).get("natural_cta"), "")
 
 
 def _cta_variant(base_cta: Any, day: int) -> str:
@@ -1113,7 +1243,7 @@ def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
     return repeated_subjects or repeated_prefixes or bad_template or ai_cliche or repetitive_motif
 
 
-def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> str:
+def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str, campaign_voice: Dict[str, Any]) -> str:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
     target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
     main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
@@ -1129,7 +1259,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     niche = _clean_text(_get(payload, "niche"), "")
     level = _clean_text(_get(payload, "level"), _clean_text(_get(payload, "prospectLevel"), ""))
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
-    human_material = _select_human_material(payload, day, nonce)
+    human_material = _select_human_material(payload, day, nonce, campaign_voice)
     pains_block = "\n".join(f"    - {pain}" for pain in human_material["pains"])
 
     prompt = f"""
@@ -1168,6 +1298,12 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     Ton : {tone}
     Expéditeur : {sender_name}
     Voix à utiliser : {human_material["personality_instruction"]}
+    Voix de séquence globale : {campaign_voice["style_instruction"]}
+    Pronom obligatoire pour toute la séquence : {campaign_voice["pronoun"]}
+    Règle de pronom : {campaign_voice["address_rule"]}
+    Rythme global : {campaign_voice["rhythm"]}
+    Règle anti-explication : {campaign_voice["explain_rule"]}
+    Règle CTA globale : {campaign_voice["cta_rule"]}
     Variation : {nonce}
 
     MATIÈRE HUMAINE OBLIGATOIRE
@@ -1283,6 +1419,27 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     - aucun markdown
     - pas de signature
 
+    NARRATIVE CONSISTENCY ENGINE V1.5 — OBLIGATOIRE
+
+    Toute la séquence utilise la même voix.
+    Cet email doit donc respecter strictement :
+    - le même pronom : {campaign_voice["pronoun"]}
+    - le même niveau de tension
+    - le même style de CTA
+    - la même posture narrative
+
+    Interdit de mélanger tu et vous.
+    Interdit de passer d’un ton intime à un ton corporate.
+    Interdit d’expliquer le comportement avec des phrases comme :
+    - cette micro-habitude révèle
+    - cela révèle un vrai enjeu
+    - la vérité est simple
+    - c’est là que
+    - prêt à voir
+    - regardez par vous-même
+
+    Tu dois remplacer ces explications par des observations concrètes.
+
     FORMAT STRICT
 
     SUJET: ...
@@ -1298,7 +1455,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     """.strip()
     return prompt.strip()
 
-def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
+def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str, campaign_voice: Dict[str, Any]) -> Dict[str, Any]:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
     primary_cta = _clean_text(_get(payload, "primary_cta"), "")
     sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
@@ -1310,7 +1467,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         day=day,
         email_type=email_type,
         angle=angle,
-        nonce=nonce
+        nonce=nonce,
+        campaign_voice=campaign_voice
     ),
     tone=tone,
     language="fr",
@@ -1331,8 +1489,14 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     if _looks_like_ai_cliche(body):
         raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
 
+    if _contains_mixed_pronouns(body, campaign_voice) or _contains_mixed_pronouns(cta, campaign_voice):
+        raise ValueError(f"Email IA jour {day} rejeté : mélange tu/vous détecté.")
+
+    if _explanatory_score(body) >= 5:
+        raise ValueError(f"Email IA jour {day} rejeté : texte trop explicatif.")
+
     if not cta or _ai_cliche_score(cta) >= 3:
-        cta = _natural_cta_for_payload(payload, day, nonce)
+        cta = _natural_cta_for_payload(payload, day, nonce, campaign_voice)
 
     return {
         "day": day,
@@ -1340,11 +1504,11 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
         "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
         "preheader": _clean_text(parts.get("preheader"), offer_name),
         "body": _clean_text(body, ""),
-        "cta": _clean_text(cta, _natural_cta_for_payload(payload, day, nonce)),
+        "cta": _clean_text(cta, _natural_cta_for_payload(payload, day, nonce, campaign_voice)),
     }
 
 
-def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types: List[str]) -> List[Dict[str, Any]]:
+def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types: List[str], campaign_voice: Dict[str, Any]) -> List[Dict[str, Any]]:
     clean_emails: List[Dict[str, Any]] = []
     seen_subjects: set[str] = set()
     seen_bodies: set[str] = set()
@@ -1368,10 +1532,16 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
 
         email_cta = _clean_text(email.get("cta"), "")
         if not email_cta or _ai_cliche_score(email_cta) >= 3:
-            email_cta = _natural_cta_for_payload(payload, day, f"dedupe-{day}")
+            email_cta = _natural_cta_for_payload(payload, day, f"dedupe-{day}", campaign_voice)
 
         if _looks_like_ai_cliche(str(email.get("body") or "")):
             raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
+
+        if _contains_mixed_pronouns(str(email.get("body") or ""), campaign_voice) or _contains_mixed_pronouns(email_cta, campaign_voice):
+            raise ValueError(f"Email IA jour {day} rejeté : mélange tu/vous détecté.")
+
+        if _explanatory_score(str(email.get("body") or "")) >= 5:
+            raise ValueError(f"Email IA jour {day} rejeté : texte trop explicatif.")
 
         email["cta"] = email_cta
 
@@ -1390,6 +1560,7 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
     email_types = _pattern_for_days(duration_days)
 
     base_nonce = f"{uuid.uuid4().hex[:8]}-{random.randint(1000, 9999)}"
+    campaign_voice = _build_campaign_voice(payload, base_nonce)
 
     def generate_live_pass(pass_name: str, angle_offset: int) -> List[Dict[str, Any]]:
         generated: List[Dict[str, Any]] = []
@@ -1407,10 +1578,11 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
                     email_type=email_type,
                     angle=angle,
                     nonce=f"{base_nonce}-{pass_name}-{day}",
+                    campaign_voice=campaign_voice,
                 )
             )
 
-        return _dedupe_final_emails(generated, payload, email_types)
+        return _dedupe_final_emails(generated, payload, email_types, campaign_voice)
 
     try:
         emails = generate_live_pass("live", random.randint(0, 999))
@@ -1437,5 +1609,6 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
         "campaign_type": campaign_type,
         "duration_days": duration_days,
         "sender_name": sender_name,
+        "campaign_voice": campaign_voice,
         "emails": emails,
     }

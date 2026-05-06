@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import Any, Dict
 
@@ -24,40 +25,78 @@ class ScenarioPayload(BaseModel):
 SYSTEM_PROMPT = """
 Tu es le moteur stratégique du CMO IA LGD.
 
-Tu génères des scénarios marketing concrets.
+Tu génères des scénarios marketing concrets, directs et exploitables.
 Tu ne génères PAS des conseils vagues.
+Tu ne génères PAS de texte marketing générique.
+Tu ne fais AUCUN fallback.
 
-Retour STRICT en JSON.
-"""
+Tu dois répondre UNIQUEMENT en JSON valide.
+
+FORMAT OBLIGATOIRE :
+
+{
+  "scenarios": [
+    {
+      "id": "awareness",
+      "badge": "ACTION PRIORITAIRE RECOMMANDÉE",
+      "title": "...",
+      "objective": "...",
+      "angle": "...",
+      "realProblem": "...",
+      "context": "...",
+      "whyItConverts": "...",
+      "recommended": true
+    }
+  ]
+}
+
+RÈGLES STRICTES :
+- Génère exactement 5 scénarios.
+- Chaque scénario doit contenir toutes les clés obligatoires.
+- Aucun champ ne doit être vide.
+- Chaque scénario doit être spécifique à l’offre, à la cible, à l’objectif et au blocage fournis.
+- Ne réponds jamais en markdown.
+- Ne mets jamais ```json.
+- N’ajoute aucun texte hors JSON.
+
+Les 5 scénarios doivent couvrir :
+1. Prise de conscience directe
+2. Erreur invisible
+3. Objection réelle
+4. Solution claire
+5. Projection réaliste
+""".strip()
 
 
 @router.post("/generate")
 async def generate_scenarios(payload: ScenarioPayload) -> Dict[str, Any]:
     try:
         user_prompt = f"""
-OFFRE:
+OFFRE :
 {payload.offer}
 
-CIBLE:
+CIBLE :
 {payload.target}
 
-OBJECTIF:
+OBJECTIF BUSINESS :
 {payload.objective}
 
-BLOCAGE:
+BLOCAGE PRINCIPAL :
 {payload.blocker}
 
-TYPE OFFRE:
+TYPE D'OFFRE :
 {payload.offerType}
 
-NIVEAU:
+NIVEAU DU PROSPECT :
 {payload.prospectLevel}
 
-Génère 5 scénarios marketing.
-"""
+Génère exactement 5 scénarios marketing au format JSON obligatoire.
+Chaque scénario doit être précis, concret, exploitable dans le CMO LGD et adapté au contexte fourni.
+""".strip()
 
         response = client.chat.completions.create(
             model="gpt-5",
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -66,9 +105,49 @@ Génère 5 scénarios marketing.
 
         content = response.choices[0].message.content
 
+        if not content:
+            raise ValueError("Réponse IA vide.")
+
+        parsed = json.loads(content)
+
+        scenarios = parsed.get("scenarios")
+        if not isinstance(scenarios, list) or len(scenarios) == 0:
+            raise ValueError("Réponse IA invalide : clé scenarios absente ou vide.")
+
+        required_keys = {
+            "id",
+            "badge",
+            "title",
+            "objective",
+            "angle",
+            "realProblem",
+            "context",
+            "whyItConverts",
+            "recommended",
+        }
+
+        for index, scenario in enumerate(scenarios[:5], start=1):
+            if not isinstance(scenario, dict):
+                raise ValueError(f"Réponse IA invalide : scénario {index} n'est pas un objet.")
+
+            missing = [key for key in required_keys if key not in scenario]
+            if missing:
+                raise ValueError(
+                    f"Réponse IA invalide : scénario {index} incomplet, clés manquantes : {', '.join(missing)}."
+                )
+
+            empty = [
+                key for key in required_keys
+                if key != "recommended" and not str(scenario.get(key) or "").strip()
+            ]
+            if empty:
+                raise ValueError(
+                    f"Réponse IA invalide : scénario {index} contient des champs vides : {', '.join(empty)}."
+                )
+
         return {
             "success": True,
-            "content": content,
+            "scenarios": scenarios[:5],
         }
 
     except Exception as e:

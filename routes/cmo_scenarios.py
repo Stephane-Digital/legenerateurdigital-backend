@@ -130,11 +130,25 @@ Chaque scénario doit être précis, concret, exploitable dans le CMO LGD et ada
             if not isinstance(scenario, dict):
                 raise ValueError(f"Réponse IA invalide : scénario {index} n'est pas un objet.")
 
-            missing = [key for key in required_keys if key not in scenario]
-            if missing:
-                raise ValueError(
-                    f"Réponse IA invalide : scénario {index} incomplet, clés manquantes : {', '.join(missing)}."
-                )
+scenario.setdefault("id", f"scenario_{index}")
+scenario.setdefault("badge", "SCÉNARIO IA")
+scenario.setdefault("title", "Scénario marketing")
+scenario.setdefault("objective", payload.objective)
+scenario.setdefault("angle", "Angle marketing")
+scenario.setdefault("realProblem", payload.blocker)
+scenario.setdefault("context", payload.offer)
+scenario.setdefault(
+    "whyItConverts",
+    "Ce scénario répond directement au blocage principal du prospect."
+)
+scenario.setdefault("recommended", index == 1)
+
+missing = [key for key in required_keys if key not in scenario]
+
+if missing:
+    raise ValueError(
+        f"Réponse IA invalide : scénario {index} incomplet, clés manquantes : {', '.join(missing)}."
+    )
 
             empty = [
                 key for key in required_keys

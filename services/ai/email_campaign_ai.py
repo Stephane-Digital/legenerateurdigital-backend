@@ -259,6 +259,36 @@ HUMAN_PAIN_BANK = {
         "sourit en réunion alors qu’il voulait défendre son idée",
         "laisse quelqu’un d’autre décider parce que s’affirmer paraît trop risqué",
     ],
+    "saas_tech": [
+        "regarde sa courbe de churn grimper sans comprendre où ça fuit",
+        "ajoute une énième feature alors que les utilisateurs bloquent encore dans l’onboarding",
+        "voit des dizaines d’inscrits en essai mais presque personne ne sort sa carte bancaire",
+        "passe la journée à corriger des bugs au lieu de parler aux utilisateurs qui abandonnent",
+        "ouvre Hotjar et voit les visiteurs quitter la première étape de configuration",
+        "repousse la sortie officielle parce que l’infrastructure pourrait encore être plus propre",
+        "confond roadmap produit et vraie preuve de valeur payée",
+        "corrige un détail d’interface au lieu d’appeler les trois comptes qui n’ont pas converti",
+    ],
+    "coaching_life": [
+        "dit que tout va bien alors qu’il se sent s’éteindre dans son job actuel",
+        "ouvre les offres d’emploi par habitude, soupire, puis referme l’onglet",
+        "écoute un énième podcast de développement personnel sans changer son quotidien",
+        "se lève à reculons en comptant les heures avant le week-end",
+        "dit oui à des projets qui l’épuisent juste pour ne pas décevoir",
+        "repousse son projet de reconversion en disant que ce n’est jamais le bon moment",
+        "a déjà un carnet rempli d’idées mais aucune décision visible dans son agenda",
+        "sourit en réunion alors qu’il sait qu’il n’a plus envie d’être là",
+    ],
+    "real_estate": [
+        "scrolle sur SeLoger dès qu’une alerte mail tombe",
+        "refait son plan de financement sur Excel en espérant que les chiffres changent",
+        "rappelle un agent qui avait promis de revenir vers lui et ne répond plus",
+        "visite un bien parfait sur les photos puis voit le défaut en cinq minutes",
+        "hésite à faire une offre et regarde le bien partir en 48 heures",
+        "laisse son dossier de prêt sur le bureau par peur du refus de la banque",
+        "compare encore deux villes alors que son financement n’est pas verrouillé",
+        "calcule la rentabilité nette mais évite d’appeler la banque",
+    ],
 }
 
 NATURAL_CTA_BANK = {
@@ -288,6 +318,24 @@ NATURAL_CTA_BANK = {
         "Le prochain message peut rester en brouillon, ou devenir une vraie demande.",
         "Ta voix ne prendra pas plus de place tant que tu la gardes pour toi.",
         "Commence par dire clairement ce que tu voulais déjà dire.",
+    ],
+    "saas_tech": [
+        "Tu peux coder une option de plus, ou rendre la valeur visible dès aujourd’hui.",
+        "Le prochain utilisateur ne veut pas plus de boutons. Il veut comprendre quoi faire en premier.",
+        "Ferme l’éditeur deux minutes. Regarde quelqu’un utiliser ton produit sans l’aider.",
+        "La prochaine preuve ne viendra pas d’une feature. Elle viendra d’un utilisateur qui paie.",
+    ],
+    "coaching_life": [
+        "La semaine prochaine ressemblera à celle-ci, sauf si tu changes le premier geste.",
+        "Tu n’as pas besoin de tout quitter demain. Tu as besoin de poser une vraie limite aujourd’hui.",
+        "Arrête d’attendre le déclic idéal. Choisis simplement par où tu commences.",
+        "Le signal le plus clair, c’est ce que tu acceptes encore alors que tu sais déjà que ça t’éteint.",
+    ],
+    "real_estate": [
+        "Le bon investissement ne vient pas de la chance. Il commence par un dossier qu’on peut défendre.",
+        "Tu peux simuler encore trois scénarios, ou verrouiller la prochaine visite utile.",
+        "Avant de chercher le bien parfait, assure-toi d’avoir une offre que le vendeur peut prendre au sérieux.",
+        "Le bien parti en 48 heures n’attendait pas ton hésitation. Le prochain non plus.",
     ],
 }
 
@@ -331,6 +379,12 @@ def _infer_market_key(payload: Any) -> str:
         return "productivity"
     if any(word in raw for word in ["confiance", "timidité", "oser", "prise de parole", "affirmation"]):
         return "confidence"
+    if any(word in raw for word in ["saas", "logiciel", "app", "tech", "churn", "code", "développeur", "mrr", "onboarding", "startup", "produit"]):
+        return "saas_tech"
+    if any(word in raw for word in ["coaching", "vie", "reconversion", "sens", "burnout", "épanouissement", "changer de vie", "job", "carrière"]):
+        return "coaching_life"
+    if any(word in raw for word in ["immo", "immobilier", "appartement", "achat", "locatif", "bien", "visite", "crédit", "prêt", "se loger", "seloger"]):
+        return "real_estate"
     return "business"
 
 
@@ -355,8 +409,45 @@ def _select_natural_cta(payload: Any, *, day: int, nonce: str) -> str:
     return bank[rng.randrange(len(bank))]
 
 
+def _forbidden_cliche_score(text: str) -> int:
+    normalized = _normalize_text(text).lower()
+    if not normalized:
+        return 0
+
+    weights = {
+        "imagine": 1,
+        "imagine-toi": 2,
+        "imaginez": 2,
+        "imaginez-vous": 2,
+        "et si": 1,
+        "passe à l'action": 3,
+        "passez à l'action": 3,
+        "passer à l'action": 3,
+        "tu hésites": 2,
+        "vous hésitez": 2,
+        "crois en toi": 4,
+        "croyez en vous": 4,
+        "rien n'est impossible": 4,
+        "ne laisse pas passer cette opportunité": 4,
+        "c'est le moment": 2,
+        "prêt à": 1,
+        "prête à": 1,
+        "découvre comment": 3,
+        "transformer ton business": 4,
+        "transformer votre business": 4,
+    }
+
+    score = 0
+    for pattern, weight in weights.items():
+        occurrences = normalized.count(pattern)
+        if occurrences:
+            score += occurrences * weight
+    return score
+
+
 def _is_forbidden_cliche(text: str) -> bool:
-    return _contains_any(text, FORBIDDEN_CLICHE_PATTERNS)
+    # Score progressif : une micro-occurrence peut passer, un email entier cliché reste bloqué.
+    return _forbidden_cliche_score(text) >= 5
 
 
 def _is_generic_cta(text: str) -> bool:
@@ -867,8 +958,12 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     subject = _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}")
     preheader = _clean_text(parts.get("preheader"), offer_name)
 
-    if _is_forbidden_cliche(subject) or _is_forbidden_cliche(preheader) or _is_forbidden_cliche(body):
-        raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
+    generation_quality_scan = "\n".join([subject, preheader, body, cta])
+    if _is_forbidden_cliche(generation_quality_scan):
+        raise ValueError(
+            f"Email IA jour {day} rejeté : cliché IA détecté "
+            f"(score {_forbidden_cliche_score(generation_quality_scan)})."
+        )
 
     return {
         "day": day,
@@ -917,7 +1012,10 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
             ]
         )
         if _is_forbidden_cliche(full_quality_scan):
-            raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
+            raise ValueError(
+                f"Email IA jour {day} rejeté : cliché IA détecté "
+                f"(score {_forbidden_cliche_score(full_quality_scan)})."
+            )
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

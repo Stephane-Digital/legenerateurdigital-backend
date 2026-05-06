@@ -149,8 +149,8 @@ DAY_ARCHETYPES = {
     },
     3: {
         "role": "objection / peur",
-        "subject": "Ce n’est pas le prix qui bloque",
-        "preheader": "La vraie peur est plus discrète.",
+        "subject": "Et si ce n’était pas trop tard ?",
+        "preheader": "Le bon moment n’arrive pas tout seul.",
     },
     4: {
         "role": "solution claire",
@@ -159,8 +159,8 @@ DAY_ARCHETYPES = {
     },
     5: {
         "role": "projection concrète",
-        "subject": "Dans 7 jours, tu peux avoir une preuve",
-        "preheader": "Pas une idée de plus. Un signal réel.",
+        "subject": "Imagine dans 7 jours",
+        "preheader": "Pas un rêve. Une prochaine étape claire.",
     },
     6: {
         "role": "relance / décision",
@@ -175,45 +175,12 @@ DAY_ARCHETYPES = {
 }
 
 
-FORBIDDEN_CLICHE_PATTERNS = [
-    "imagine",
-    "imagine-toi",
-    "imaginez",
-    "imaginez-vous",
-    "et si",
-    "passe à l'action",
-    "passez à l'action",
-    "passer à l'action",
-    "tu hésites",
-    "vous hésitez",
-    "crois en toi",
-    "croyez en vous",
-    "rien n'est impossible",
-    "ne laisse pas passer cette opportunité",
-    "c'est le moment",
-    "prêt à",
-    "prête à",
-    "découvre comment",
-    "transformer ton business",
-    "transformer votre business",
-]
-
-GENERIC_CTA_PATTERNS = [
-    "personne ne va le faire à ta place",
-    "tu peux continuer… ou changer",
-    "tu peux continuer... ou changer",
-    "rien ne changera si tu ne changes rien",
-    "tu sais déjà ce que tu dois faire",
-    "ne laisse pas ça redevenir une idée",
-    "maintenant tu sais",
-    "passer à l’action aujourd’hui",
-    "passer à l'action aujourd'hui",
-    "découvrir maintenant",
-    "voir comment ça fonctionne",
-    "accéder à la méthode",
-    "commencer simplement",
-]
-
+# ============================================================
+# LGD HUMAN LIFE ENGINE V1.3
+# Objectif : éviter la répétition "Stripe / zéro vente / écran" en injectant
+# des scènes humaines variées, des contextes de vie, des tensions concrètes
+# et des CTA naturels adaptés au marché.
+# ============================================================
 HUMAN_PAIN_BANK = {
     "business": [
         "ouvre Stripe plusieurs fois par jour sans notification",
@@ -226,6 +193,10 @@ HUMAN_PAIN_BANK = {
         "voit des likes arriver, mais aucun message privé sérieux",
         "ouvre sa boîte mail en espérant une réponse qui n’arrive pas",
         "repousse l’envoi parce qu’il veut encore rendre le visuel plus propre",
+        "laisse trois prospects chauds sans relance parce qu’il ne sait pas quoi dire",
+        "relit sa page de vente en boucle au lieu de la montrer à quelqu’un",
+        "poste pour se rassurer, puis vérifie les vues toutes les dix minutes",
+        "prépare une nouvelle idée alors que l’offre actuelle n’a jamais été testée",
     ],
     "fitness": [
         "promet de reprendre lundi puis craque le soir devant le frigo",
@@ -234,6 +205,8 @@ HUMAN_PAIN_BANK = {
         "cherche un nouveau programme au lieu de refaire la séance prévue",
         "se pèse le matin et laisse ce chiffre décider de toute sa journée",
         "sait quoi manger mais perd le contrôle quand la fatigue arrive",
+        "remplit son panier de courses propres puis commande quand même à 21h",
+        "ouvre une appli de sport et referme avant la première série",
     ],
     "crypto": [
         "ouvre son exchange à minuit après une bougie rouge",
@@ -242,6 +215,8 @@ HUMAN_PAIN_BANK = {
         "confond urgence et opportunité dès que le prix bouge",
         "cache ses pertes derrière l’idée qu’il va se refaire au prochain trade",
         "rafraîchit le graphique au lieu de respecter son plan",
+        "promet de réduire le levier puis recommence au prochain signal",
+        "coupe son stop pour ne pas accepter que le trade est mauvais",
     ],
     "productivity": [
         "déplace encore les mêmes tâches dans son agenda",
@@ -250,6 +225,8 @@ HUMAN_PAIN_BANK = {
         "finit la journée fatigué avec rien de vraiment livré",
         "commence par les petites tâches pour éviter celle qui compte",
         "se couche avec la sensation d’avoir été occupé, pas efficace",
+        "change de méthode chaque semaine sans finir le travail engagé",
+        "ouvre quinze onglets et oublie pourquoi il avait commencé",
     ],
     "confidence": [
         "réécrit son message dix fois puis ne l’envoie pas",
@@ -258,36 +235,99 @@ HUMAN_PAIN_BANK = {
         "évite de demander le prix juste pour ne pas déranger",
         "sourit en réunion alors qu’il voulait défendre son idée",
         "laisse quelqu’un d’autre décider parce que s’affirmer paraît trop risqué",
+        "efface une phrase honnête pour remettre une version plus acceptable",
+        "repousse un appel parce qu’il sait qu’il devra dire ce qu’il veut vraiment",
     ],
     "saas_tech": [
         "regarde sa courbe de churn grimper sans comprendre où ça fuit",
-        "ajoute une énième feature alors que les utilisateurs bloquent encore dans l’onboarding",
-        "voit des dizaines d’inscrits en essai mais presque personne ne sort sa carte bancaire",
-        "passe la journée à corriger des bugs au lieu de parler aux utilisateurs qui abandonnent",
-        "ouvre Hotjar et voit les visiteurs quitter la première étape de configuration",
-        "repousse la sortie officielle parce que l’infrastructure pourrait encore être plus propre",
-        "confond roadmap produit et vraie preuve de valeur payée",
-        "corrige un détail d’interface au lieu d’appeler les trois comptes qui n’ont pas converti",
+        "ajoute une énième feature alors que les utilisateurs n’ont pas fini l’onboarding",
+        "voit des inscrits en essai, mais presque aucun ne sort sa carte bancaire",
+        "passe ses journées à fixer des bugs au lieu de parler aux vrais utilisateurs",
+        "regarde Hotjar et voit les visiteurs partir dès la première étape de configuration",
+        "repousse la sortie officielle parce qu’il veut peaufiner l’infrastructure technique",
+        "relit les retours support en cherchant une excuse technique au manque de conversion",
+        "répond aux tickets faciles pendant que les comptes à risque disparaissent en silence",
+        "prépare une roadmap produit alors que trois utilisateurs n’ont toujours pas activé la valeur",
+        "ouvre Slack et voit le canal sales vide depuis plusieurs jours",
+        "décale encore l’appel utilisateur parce qu’il préfère livrer une correction de plus",
+        "voit un essai gratuit expirer sans avoir envoyé un seul message personnel",
     ],
     "coaching_life": [
-        "dit que tout va bien alors qu’il se sent s’éteindre dans son job actuel",
-        "ouvre les offres d’emploi par habitude, soupire, puis referme l’onglet",
+        "dit que tout va bien à ses proches alors qu’il se sent s’éteindre dans son job actuel",
+        "ouvre les sites d’offres d’emploi par habitude, soupire, puis referme l’onglet",
         "écoute un énième podcast de développement personnel sans changer son quotidien",
-        "se lève à reculons en comptant les heures avant le week-end",
-        "dit oui à des projets qui l’épuisent juste pour ne pas décevoir",
-        "repousse son projet de reconversion en disant que ce n’est jamais le bon moment",
-        "a déjà un carnet rempli d’idées mais aucune décision visible dans son agenda",
-        "sourit en réunion alors qu’il sait qu’il n’a plus envie d’être là",
+        "se lève à reculons en comptant les heures qui le séparent du week-end",
+        "dit oui à des projets qui l’épuisent juste pour ne pas décevoir son entourage",
+        "remet son projet de reconversion à plus tard en se disant que ce n’est jamais le bon moment",
+        "garde une note intitulée nouveau départ sans jamais prendre de rendez-vous",
+        "rentre chez lui vidé et prétend que c’est juste une mauvaise période",
     ],
     "real_estate": [
         "scrolle sur SeLoger dès qu’une alerte mail tombe",
-        "refait son plan de financement sur Excel en espérant que les chiffres changent",
-        "rappelle un agent qui avait promis de revenir vers lui et ne répond plus",
-        "visite un bien parfait sur les photos puis voit le défaut en cinq minutes",
-        "hésite à faire une offre et regarde le bien partir en 48 heures",
-        "laisse son dossier de prêt sur le bureau par peur du refus de la banque",
-        "compare encore deux villes alors que son financement n’est pas verrouillé",
-        "calcule la rentabilité nette mais évite d’appeler la banque",
+        "calcule son plan de financement sur Excel pour la dixième fois en espérant que les chiffres changent",
+        "rappelle des agents immobiliers qui promettent de recontacter et disparaissent",
+        "visite un bien parfait sur les photos et découvre un défaut majeur en cinq minutes",
+        "hésite à faire une offre et regarde le bien se vendre sous ses yeux en 48 heures",
+        "laisse son dossier de prêt traîner sur le bureau par peur du refus de la banque",
+        "compare deux quartiers pendant que les opportunités sérieuses partent déjà",
+        "ouvre le simulateur bancaire au lieu d’appeler le courtier",
+    ],
+}
+
+HUMAN_LIFE_CONTEXT_BANK = {
+    "business": [
+        "dans la cuisine, téléphone posé à côté de l’assiette froide",
+        "dans la voiture, avant de rentrer, en relisant une réponse jamais envoyée",
+        "au café, devant un ordinateur ouvert et une page de vente encore invisible",
+        "dans le lit, écran éclairé trop fort, avec l’idée de tout reprendre demain",
+        "entre deux rendez-vous, en regardant un concurrent vendre avec moins de contenu",
+        "sur WhatsApp, avec un message prospect ouvert depuis vingt minutes",
+        "dans un coworking, casque sur les oreilles, pendant que rien ne part vraiment",
+    ],
+    "fitness": [
+        "devant le frigo, encore debout alors que la journée est finie",
+        "dans les vestiaires, en évitant le miroir sans le dire",
+        "au supermarché, entre deux rayons, avec la fatigue qui décide à ta place",
+        "sur le canapé, tenue de sport déjà prête mais séance repoussée",
+    ],
+    "crypto": [
+        "dans le noir, écran du téléphone collé au visage",
+        "au bureau, onglet graphique caché derrière une fenêtre de travail",
+        "sur Telegram, pendant que tout le monde crie au signal",
+        "après une perte, en cherchant déjà le trade qui va réparer le précédent",
+    ],
+    "productivity": [
+        "à 18h47, liste de tâches pleine et vrai livrable toujours vide",
+        "dans Notion, avec une belle organisation qui ne livre rien",
+        "dans le train, en déplaçant encore une tâche au lendemain",
+        "à la pause déjeuner, en ouvrant trois outils au lieu d’un seul fichier",
+    ],
+    "confidence": [
+        "juste avant l’appel, doigt au-dessus du bouton rejoindre",
+        "dans la voiture, en rejouant la phrase qu’il aurait dû dire",
+        "devant un message prêt à partir, puis supprimé phrase après phrase",
+        "en réunion, sourire poli pendant qu’une idée importante reste bloquée",
+    ],
+    "saas_tech": [
+        "dans Slack, avec le canal ventes silencieux depuis lundi",
+        "sur le dashboard produit, entre une courbe d’activation plate et trois tickets support",
+        "dans Linear, en déplaçant une carte qui n’a jamais touché le vrai problème",
+        "sur Hotjar, à regarder des sessions où les utilisateurs quittent au même endroit",
+        "dans l’onglet Stripe, pendant qu’un essai gratuit expire sans bruit",
+        "en appel interne, à parler roadmap alors qu’aucun utilisateur n’a atteint la valeur",
+        "dans le changelog, à écrire une amélioration que personne ne demandait",
+    ],
+    "coaching_life": [
+        "dans la voiture, moteur coupé, avant de rentrer faire semblant que tout va bien",
+        "à la pause déjeuner, en scrollant des offres d’emploi sans conviction",
+        "le dimanche soir, quand la semaine qui arrive serre déjà la poitrine",
+        "devant un carnet, avec une page blanche intitulée nouvelle vie",
+    ],
+    "real_estate": [
+        "sur le parking après une visite, avec le doute qui remplace l’enthousiasme",
+        "devant Excel, prêt immobilier ouvert et calculs recommencés pour la dixième fois",
+        "dans la cuisine, alerte SeLoger reçue et déjà trois appels en retard",
+        "au téléphone avec un agent, en sentant que le bien est déjà presque parti",
     ],
 }
 
@@ -298,47 +338,92 @@ NATURAL_CTA_BANK = {
         "Tu peux garder ton offre en brouillon, ou la mettre devant quelqu’un aujourd’hui.",
         "Le premier signal ne viendra pas d’un nouveau logo. Il viendra d’un envoi réel.",
         "Si tu veux une preuve, commence par créer quelque chose que quelqu’un peut acheter.",
+        "La prochaine réponse ne viendra pas d’un ajustement invisible. Elle viendra d’un message envoyé.",
     ],
     "fitness": [
         "Le prochain repas peut redevenir une décision, pas une compensation.",
         "Tu n’as pas besoin d’un lundi parfait. Tu as besoin d’un premier choix propre.",
         "Commence par la prochaine assiette. Le reste suivra.",
+        "Ce soir, tu peux arrêter la négociation et reprendre une règle simple.",
     ],
     "crypto": [
         "Le prochain trade doit suivre un plan, pas une panique.",
         "Avant d’acheter encore, reprends la règle que tu avais décidé d’ignorer.",
         "Tu peux chercher un signal de plus, ou reprendre le contrôle du risque.",
+        "Le marché bougera encore demain. Ton plan, lui, doit exister avant.",
     ],
     "productivity": [
         "Ferme le tableau. Termine la tâche qui change vraiment ta journée.",
         "La prochaine heure peut produire un livrable, pas une nouvelle organisation.",
         "Choisis une tâche qui se voit quand elle est finie.",
+        "Demain, le système parfait comptera moins que le fichier réellement terminé.",
     ],
     "confidence": [
         "Le prochain message peut rester en brouillon, ou devenir une vraie demande.",
         "Ta voix ne prendra pas plus de place tant que tu la gardes pour toi.",
         "Commence par dire clairement ce que tu voulais déjà dire.",
+        "Le respect que tu attends commence souvent par une phrase que tu évites.",
     ],
     "saas_tech": [
-        "Tu peux coder une option de plus, ou rendre la valeur visible dès aujourd’hui.",
+        "Tu peux coder une option de plus, ou simplifier l’accès à ta valeur dès aujourd’hui.",
         "Le prochain utilisateur ne veut pas plus de boutons. Il veut comprendre quoi faire en premier.",
-        "Ferme l’éditeur deux minutes. Regarde quelqu’un utiliser ton produit sans l’aider.",
-        "La prochaine preuve ne viendra pas d’une feature. Elle viendra d’un utilisateur qui paie.",
+        "Ferme ton éditeur deux minutes. Regarde quelqu’un utiliser ton produit sans l’aider.",
+        "La prochaine preuve ne viendra pas d’une feature. Elle viendra d’un utilisateur qui atteint la valeur.",
+        "Avant la prochaine release, regarde où les essais gratuits abandonnent vraiment.",
+        "Le MRR ne monte pas parce que la roadmap est belle. Il monte quand la valeur devient évidente.",
     ],
     "coaching_life": [
-        "La semaine prochaine ressemblera à celle-ci, sauf si tu changes le premier geste.",
-        "Tu n’as pas besoin de tout quitter demain. Tu as besoin de poser une vraie limite aujourd’hui.",
+        "La semaine prochaine ressemblera exactement à celle-ci, à moins de changer le premier geste.",
+        "Tu n’as pas besoin de tout quitter demain. Tu as besoin de poser ta première vraie limite.",
         "Arrête d’attendre le déclic idéal. Choisis simplement par où tu commences.",
-        "Le signal le plus clair, c’est ce que tu acceptes encore alors que tu sais déjà que ça t’éteint.",
+        "Le bon moment ne viendra pas te chercher. Il commence par une décision visible.",
     ],
     "real_estate": [
-        "Le bon investissement ne vient pas de la chance. Il commence par un dossier qu’on peut défendre.",
-        "Tu peux simuler encore trois scénarios, ou verrouiller la prochaine visite utile.",
-        "Avant de chercher le bien parfait, assure-toi d’avoir une offre que le vendeur peut prendre au sérieux.",
-        "Le bien parti en 48 heures n’attendait pas ton hésitation. Le prochain non plus.",
+        "Le bon investissement ne vient pas de la chance. Il vient du premier dossier validé.",
+        "Tu peux continuer à simuler des scénarios, ou bloquer ta prochaine visite constructive.",
+        "Avant de chercher le bien parfait, assure-toi d’avoir une offre que personne ne peut ignorer.",
+        "Le prochain bien sérieux ne t’attendra pas. Ton dossier doit être prêt avant l’alerte.",
     ],
 }
 
+PERSONALITY_MODES = {
+    "mentor": "voix calme, précise, lucide, jamais agressive",
+    "brutal_honest": "voix directe, vérité sèche, phrases courtes, aucune consolation vide",
+    "premium": "voix premium, sobre, maîtrisée, avec tension commerciale élégante",
+    "analytical": "voix froide, factuelle, orientée diagnostic et décision",
+    "human": "voix proche, intime, réaliste, sans lyrisme",
+}
+
+FORBIDDEN_CLICHE_SCORES = {
+    "imagine": 2,
+    "et si": 2,
+    "passe à l’action": 3,
+    "passer à l’action": 2,
+    "crois en toi": 4,
+    "rêve": 2,
+    "transformer ton business": 4,
+    "solution complète": 4,
+    "outil puissant": 4,
+    "opportunité unique": 3,
+    "ne laisse pas passer": 3,
+    "c’est le moment": 2,
+    "tu peux continuer": 2,
+    "personne ne va le faire à ta place": 4,
+    "maintenant tu sais": 4,
+    "rien ne changera si tu ne changes rien": 4,
+    "ne laisse pas ça redevenir une idée": 4,
+}
+
+REPETITIVE_MOTIF_PATTERNS = [
+    r"\bstripe\b",
+    r"\bzéro vente\b",
+    r"\btoujours zéro\b",
+    r"\bnotification",
+    r"\bécran\b",
+    r"\bchurn\b",
+    r"\bhotjar\b",
+    r"\béditeur\b",
+]
 
 
 def _get(obj: Any, key: str, default: Any = "") -> Any:
@@ -352,106 +437,6 @@ def _get(obj: Any, key: str, default: Any = "") -> Any:
 def _clean_text(value: Any, fallback: str = "") -> str:
     text = str(value if value is not None else fallback).strip()
     return text or fallback
-
-
-def _contains_any(text: str, patterns: List[str]) -> bool:
-    normalized = _normalize_text(text).lower()
-    return any(pattern in normalized for pattern in patterns)
-
-
-def _infer_market_key(payload: Any) -> str:
-    raw = " ".join(
-        [
-            _clean_text(_get(payload, "niche"), ""),
-            _clean_text(_get(payload, "target_audience"), ""),
-            _clean_text(_get(payload, "offer_name"), ""),
-            _clean_text(_get(payload, "main_promise"), ""),
-            _clean_text(_get(payload, "main_objective"), ""),
-            _clean_text(_get(payload, "product_context"), ""),
-        ]
-    ).lower()
-
-    if any(word in raw for word in ["sport", "fitness", "poids", "mincir", "muscle", "nutrition"]):
-        return "fitness"
-    if any(word in raw for word in ["crypto", "trading", "bitcoin", "btc", "exchange", "invest"]):
-        return "crypto"
-    if any(word in raw for word in ["productivité", "temps", "agenda", "organisation", "notion", "tâche"]):
-        return "productivity"
-    if any(word in raw for word in ["confiance", "timidité", "oser", "prise de parole", "affirmation"]):
-        return "confidence"
-    if any(word in raw for word in ["saas", "logiciel", "app", "tech", "churn", "code", "développeur", "mrr", "onboarding", "startup", "produit"]):
-        return "saas_tech"
-    if any(word in raw for word in ["coaching", "vie", "reconversion", "sens", "burnout", "épanouissement", "changer de vie", "job", "carrière"]):
-        return "coaching_life"
-    if any(word in raw for word in ["immo", "immobilier", "appartement", "achat", "locatif", "bien", "visite", "crédit", "prêt", "se loger", "seloger"]):
-        return "real_estate"
-    return "business"
-
-
-def _select_human_pain_profile(payload: Any, *, day: int, angle: str, nonce: str) -> List[str]:
-    market_key = _infer_market_key(payload)
-    bank = HUMAN_PAIN_BANK.get(market_key, HUMAN_PAIN_BANK["business"])
-    seed = f"{market_key}-{day}-{angle}-{nonce}"
-    rng = random.Random(seed)
-    count = min(4, len(bank))
-    return rng.sample(bank, count)
-
-
-def _format_bullets(items: List[str]) -> str:
-    return "\n".join(f"- {item}" for item in items if item.strip())
-
-
-def _select_natural_cta(payload: Any, *, day: int, nonce: str) -> str:
-    market_key = _infer_market_key(payload)
-    bank = NATURAL_CTA_BANK.get(market_key, NATURAL_CTA_BANK["business"])
-    seed = f"cta-{market_key}-{day}-{nonce}"
-    rng = random.Random(seed)
-    return bank[rng.randrange(len(bank))]
-
-
-def _forbidden_cliche_score(text: str) -> int:
-    normalized = _normalize_text(text).lower()
-    if not normalized:
-        return 0
-
-    weights = {
-        "imagine": 1,
-        "imagine-toi": 2,
-        "imaginez": 2,
-        "imaginez-vous": 2,
-        "et si": 1,
-        "passe à l'action": 3,
-        "passez à l'action": 3,
-        "passer à l'action": 3,
-        "tu hésites": 2,
-        "vous hésitez": 2,
-        "crois en toi": 4,
-        "croyez en vous": 4,
-        "rien n'est impossible": 4,
-        "ne laisse pas passer cette opportunité": 4,
-        "c'est le moment": 2,
-        "prêt à": 1,
-        "prête à": 1,
-        "découvre comment": 3,
-        "transformer ton business": 4,
-        "transformer votre business": 4,
-    }
-
-    score = 0
-    for pattern, weight in weights.items():
-        occurrences = normalized.count(pattern)
-        if occurrences:
-            score += occurrences * weight
-    return score
-
-
-def _is_forbidden_cliche(text: str) -> bool:
-    # Score progressif : une micro-occurrence peut passer, un email entier cliché reste bloqué.
-    return _forbidden_cliche_score(text) >= 5
-
-
-def _is_generic_cta(text: str) -> bool:
-    return _contains_any(text, GENERIC_CTA_PATTERNS)
 
 
 def _normalize_text(value: Any) -> str:
@@ -533,12 +518,6 @@ def _strip_cta_from_body(body: str, cta: str) -> str:
         r"(?im)^\s*👉?\s*inscrivez-vous dès maintenant pour découvrir notre méthode\s*!?\s*$",
         r"(?im)^\s*👉?\s*passez à l’action maintenant\s*!?\s*$",
         r"(?im)^\s*👉?\s*commencez maintenant\s*!?\s*$",
-        r"(?im)^\s*👉?\s*personne ne va le faire à ta place\s*[.!?]?\s*$",
-        r"(?im)^\s*👉?\s*tu peux continuer… ou changer\s*[.!?]?\s*$",
-        r"(?im)^\s*👉?\s*rien ne changera si tu ne changes rien\s*[.!?]?\s*$",
-        r"(?im)^\s*👉?\s*tu sais déjà ce que tu dois faire\s*[.!?]?\s*$",
-        r"(?im)^\s*👉?\s*ne laisse pas ça redevenir une idée\s*[.!?]?\s*$",
-        r"(?im)^\s*👉?\s*maintenant tu sais\s*[.!?]?\s*$",
     ]
     for pattern in generic_cta_patterns:
         cleaned = re.sub(pattern, "", cleaned).strip()
@@ -609,6 +588,101 @@ CONTEXTE PERSONNALISATION V3
 - Niveau détecté: {level}
 - Règle: adapte la pédagogie, la densité et le vocabulaire à ce niveau.
 """.strip()
+
+
+
+def _infer_market_key(payload: Any) -> str:
+    raw = " ".join(
+        [
+            _clean_text(_get(payload, "niche"), ""),
+            _clean_text(_get(payload, "target_audience"), ""),
+            _clean_text(_get(payload, "offer_name"), ""),
+            _clean_text(_get(payload, "main_promise"), ""),
+            _clean_text(_get(payload, "main_objective"), ""),
+            _clean_text(_get(payload, "product_context"), ""),
+            _clean_text(_get(payload, "main_objection"), ""),
+        ]
+    ).lower()
+
+    if any(word in raw for word in ["sport", "fitness", "poids", "mincir", "muscle", "nutrition", "repas"]):
+        return "fitness"
+    if any(word in raw for word in ["crypto", "trading", "bitcoin", "btc", "exchange", "invest", "trade"]):
+        return "crypto"
+    if any(word in raw for word in ["productivité", "temps", "agenda", "organisation", "notion", "tâche", "efficacité"]):
+        return "productivity"
+    if any(word in raw for word in ["confiance", "timidité", "oser", "prise de parole", "affirmation", "s'affirmer"]):
+        return "confidence"
+    if any(word in raw for word in ["saas", "logiciel", "app", "application", "tech", "churn", "code", "développeur", "mrr", "onboarding", "hotjar", "stripe", "feature"]):
+        return "saas_tech"
+    if any(word in raw for word in ["coaching", "vie", "reconversion", "sens", "burnout", "épanouissement", "changer de vie", "job"]):
+        return "coaching_life"
+    if any(word in raw for word in ["immo", "immobilier", "appartement", "achat", "locatif", "bien", "visite", "crédit", "se loger", "seloger"]):
+        return "real_estate"
+    return "business"
+
+
+def _cycle_pick(items: List[str], day: int, offset: int = 0) -> str:
+    if not items:
+        return ""
+    return items[(max(day, 1) - 1 + offset) % len(items)]
+
+
+def _select_human_material(payload: Any, day: int, nonce: str) -> Dict[str, Any]:
+    market_key = _infer_market_key(payload)
+    pains = HUMAN_PAIN_BANK.get(market_key, HUMAN_PAIN_BANK["business"])
+    contexts = HUMAN_LIFE_CONTEXT_BANK.get(market_key, HUMAN_LIFE_CONTEXT_BANK["business"])
+    ctas = NATURAL_CTA_BANK.get(market_key, NATURAL_CTA_BANK["business"])
+
+    seed = sum(ord(ch) for ch in f"{market_key}-{day}-{nonce}")
+    pain_offset = seed % max(1, len(pains))
+    context_offset = (seed // 3) % max(1, len(contexts))
+    cta_offset = (seed // 7) % max(1, len(ctas))
+
+    selected_pains = []
+    for i in range(min(4, len(pains))):
+        selected_pains.append(_cycle_pick(pains, day, pain_offset + i * 2))
+
+    selected_context = _cycle_pick(contexts, day, context_offset)
+    selected_cta = _cycle_pick(ctas, day, cta_offset)
+
+    personality_keys = list(PERSONALITY_MODES.keys())
+    personality_key = personality_keys[(day + seed) % len(personality_keys)]
+
+    return {
+        "market_key": market_key,
+        "pains": selected_pains,
+        "life_context": selected_context,
+        "natural_cta": selected_cta,
+        "personality_key": personality_key,
+        "personality_instruction": PERSONALITY_MODES[personality_key],
+    }
+
+
+def _ai_cliche_score(text: str) -> int:
+    normalized = _normalize_text(text).lower()
+    score = 0
+    for marker, weight in FORBIDDEN_CLICHE_SCORES.items():
+        if marker in normalized:
+            score += weight
+    return score
+
+
+def _looks_like_ai_cliche(text: str) -> bool:
+    return _ai_cliche_score(text) >= 6
+
+
+def _repetitive_motif_score(emails: List[Dict[str, Any]]) -> int:
+    combined = "\n".join(_clean_text(email.get("body"), "").lower() for email in emails)
+    score = 0
+    for pattern in REPETITIVE_MOTIF_PATTERNS:
+        count = len(re.findall(pattern, combined, flags=re.IGNORECASE))
+        if count >= max(4, len(emails) // 2):
+            score += 1
+    return score
+
+
+def _natural_cta_for_payload(payload: Any, day: int, nonce: str) -> str:
+    return _clean_text(_select_human_material(payload, day, nonce).get("natural_cta"), "")
 
 
 def _cta_variant(base_cta: Any, day: int) -> str:
@@ -786,19 +860,24 @@ Ou commencer maintenant."""
 def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
     if len(emails) < 2:
         return False
+
     subjects = [(_clean_text(e.get("subject"), "")).lower() for e in emails]
     prefixes = [(_clean_text(e.get("body"), "")[:260]).lower() for e in emails]
+
     repeated_subjects = len(set(subjects)) <= max(1, len(subjects) // 3)
     repeated_prefixes = len(set(prefixes)) <= max(1, len(prefixes) // 3)
     bad_template = any(_is_bad_template(str(e.get("body") or "")) for e in emails)
-    return repeated_subjects or repeated_prefixes or bad_template
+    ai_cliche = any(_looks_like_ai_cliche(str(e.get("body") or "")) for e in emails)
+    repetitive_motif = _repetitive_motif_score(emails) >= 3
+
+    return repeated_subjects or repeated_prefixes or bad_template or ai_cliche or repetitive_motif
 
 
 def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> str:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
     target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
     main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
-    main_objective = _clean_text(_get(payload, "main_objective"), "obtenir un résultat concret")
+    main_objective = _clean_text(_get(payload, "main_objective"), "passer à l'action")
     primary_cta = _clean_text(_get(payload, "primary_cta"), "")
     tone = _clean_text(_get(payload, "tone"), "premium")
     sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
@@ -808,116 +887,136 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     objection = _clean_text(_get(payload, "main_objection"), "")
     proof = _clean_text(_get(payload, "proof"), "")
     niche = _clean_text(_get(payload, "niche"), "")
+    level = _clean_text(_get(payload, "level"), _clean_text(_get(payload, "prospectLevel"), ""))
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
-    human_pain_profile = _select_human_pain_profile(payload, day=day, angle=angle, nonce=nonce)
-    natural_cta = _select_natural_cta(payload, day=day, nonce=nonce)
+    human_material = _select_human_material(payload, day, nonce)
+    pains_block = "\n".join(f"    - {pain}" for pain in human_material["pains"])
 
     prompt = f"""
-Tu es Emailing IA LGD.
+    Tu es Emailing IA LGD.
 
-Tu n’écris pas comme un copywriter IA.
-Tu n’écris pas une motivation LinkedIn.
-Tu écris une scène réelle qui vend parce qu’elle sonne vraie.
+    Tu écris des emails commerciaux humains, directs, mobiles et convertissants.
+    Tu ne rédiges pas un template.
+    Tu transformes une situation humaine précise en décision commerciale.
 
-MISSION
-Écris EXACTEMENT UN SEUL email pour le jour {day}.
-Ne fais jamais référence aux autres emails.
-Ne génère jamais plusieurs versions.
-Ne réutilise jamais exactement la même phrase d’un email à l’autre.
+    MISSION
+    Écris EXACTEMENT UN SEUL email pour le jour {day}.
+    Ne fais jamais référence aux autres emails.
+    Ne génère jamais plusieurs versions.
+    Ne réutilise jamais la même ouverture d’un email à l’autre.
 
-CONTEXTE STRATÉGIQUE CMO — PRIORITÉ ABSOLUE
-Campagne : {campaign_name}
-Type : {campaign_type}
-Jour : {day}
-Rôle : {archetype["role"]}
-Type email : {email_type}
-Angle : {angle}
-Offre : {offer_name}
-Cible : {target_audience}
-Niche : {niche or "non précisée"}
-Promesse : {main_promise}
-Objectif : {main_objective}
-Blocage réel : {objection or "à inférer depuis l’offre, la cible et le contexte"}
-Preuve : {proof or "non précisée"}
-Contexte : {product_context or "non précisé"}
-CTA fourni : {primary_cta or "à reformuler naturellement"}
-Ton : {tone}
-Expéditeur : {sender_name}
-Variation : {nonce}
+    CONTEXTE STRATÉGIQUE CMO — PRIORITÉ ABSOLUE
 
-MATIÈRE HUMAINE OBLIGATOIRE
-Tu dois utiliser AU MOINS DEUX comportements réels ci-dessous.
-Tu peux les reformuler, mais pas les rendre abstraits.
-{_format_bullets(human_pain_profile)}
+    Campagne : {campaign_name}
+    Type : {campaign_type}
+    Jour : {day}
+    Rôle : {archetype["role"]}
+    Type email : {email_type}
+    Angle : {angle}
+    Offre : {offer_name}
+    Cible : {target_audience}
+    Niche : {niche or "non précisée"}
+    Marché détecté : {human_material["market_key"]}
+    Niveau prospect : {level or "intermediate"}
+    Promesse : {main_promise}
+    Objectif : {main_objective}
+    Blocage : {objection or "à inférer à partir du contexte"}
+    Preuve : {proof or "non précisée"}
+    Contexte : {product_context or "non précisé"}
+    CTA fourni : {primary_cta or "à reformuler naturellement"}
+    CTA naturel recommandé : {human_material["natural_cta"]}
+    Ton : {tone}
+    Expéditeur : {sender_name}
+    Voix à utiliser : {human_material["personality_instruction"]}
+    Variation : {nonce}
 
-RÈGLE DE QUALITÉ LGD
-L’email doit montrer une situation que la cible reconnaît immédiatement.
-Si le texte peut fonctionner pour n’importe quelle offre, il est mauvais.
-Si le texte peut être posté tel quel par un coach motivation, il est mauvais.
-Si le texte explique le problème au lieu de le faire vivre, il est mauvais.
+    MATIÈRE HUMAINE OBLIGATOIRE
 
-INTERDICTIONS ABSOLUES
-N’utilise jamais ces formulations :
-- imagine
-- et si
-- passe à l’action
-- tu hésites
-- crois en toi
-- ne laisse pas passer cette opportunité
-- c’est le moment
-- prêt à / prête à
-- découvre comment
-- transformer ton business
-- outil puissant
-- solution complète
-- le problème c’est
-- avec LGD tu vas
+    Tu dois utiliser cette matière pour éviter tout email générique.
 
-SCÈNE OBLIGATOIRE
-Le corps doit commencer par une scène observable en 2 à 5 lignes.
-La scène doit contenir au moins UN détail concret : heure, écran, téléphone, paiement, silence, analytics, Stripe, WhatsApp, email, fatigue, brouillon, notification, page, prospect.
+    Comportements réels du prospect :
+{pains_block}
 
-Exemples de niveau attendu, à ne pas recopier :
-- Il est 22h48. Tu ouvres encore Stripe. Toujours zéro. Alors tu retournes modifier le bouton de ta page.
-- Tu as trois brouillons prêts. Aucun envoyé. Pas parce qu’ils sont mauvais. Parce qu’après l’envoi, il faudra regarder le silence en face.
+    Moment de vie / décor imposé :
+    - {human_material["life_context"]}
 
-MÉCANISME DE VENTE
-Tu dois relier la scène à l’offre {offer_name} sans dire “solution complète” ni “outil puissant”.
-LGD doit apparaître comme un déclencheur : il aide à produire une action visible, testable, envoyable.
+    RÈGLE FONDAMENTALE
 
-CONFRONTATION
-Une phrase doit confronter honnêtement la cible.
-Pas de morale.
-Pas de motivation.
-Une vérité sèche.
+    L’email doit donner l’impression que LGD comprend la scène exacte vécue par la cible.
+    Si le texte peut fonctionner pour trois marchés différents, il est mauvais.
 
-CTA NATUREL
-Le CTA doit être une phrase de continuité, pas un bouton marketing.
-Base possible : {natural_cta}
-Interdit dans le CTA : clique, réserve, inscris-toi, télécharge, découvrir maintenant, personne ne va le faire à ta place, maintenant tu sais.
+    ARCHITECTURE D’ÉCRITURE
 
-STYLE
-- français naturel
-- tutoiement uniquement
-- phrases courtes
-- lignes coupées
-- rythme iPhone
-- pas de markdown
-- pas d’émoji sauf si le CTA final commence par 👉
-- pas de signature
+    1. Ouvre avec une scène observable, concrète, située.
+       Pas de formule abstraite.
+       Pas de "Imagine".
+       Pas de "Et si".
 
-FORMAT STRICT
-SUJET: ...
-PREHEADER: ...
-CORPS:
-Bonjour {{{{prenom}}}},
+    2. Montre le faux travail ou l’évitement.
+       Exemple : corriger une interface, acheter un outil, réorganiser un tableau, lire encore, repousser l’envoi.
 
-...
+    3. Fais monter la tension commerciale.
+       Ce qui coûte : temps, ventes, confiance, énergie, crédibilité.
 
-CTA: ...
+    4. Introduis LGD comme déclencheur concret.
+       Pas comme "outil puissant".
+       Pas comme "solution complète".
+       LGD aide à créer / envoyer / tester quelque chose de visible.
 
-Tu t’arrêtes après le CTA.
-""".strip()
+    5. Termine par une phrase de décision naturelle.
+       Le CTA doit être une continuation de la scène, pas un bouton marketing.
+
+    INTERDIT ABSOLU
+
+    - Imagine
+    - Et si
+    - Passe à l’action
+    - Crois en toi
+    - Opportunité unique
+    - Solution complète
+    - Outil puissant
+    - Transformer ton business
+    - Personne ne va le faire à ta place
+    - Maintenant tu sais
+    - Rien ne changera si tu ne changes rien
+    - Tu peux continuer… ou changer
+    - Ne laisse pas ça redevenir une idée
+
+    VARIATION OBLIGATOIRE
+
+    Tu dois varier :
+    - l’heure ou le lieu
+    - le support observé : téléphone, mail, Slack, dashboard, conversation, café, voiture, cuisine, appel, onglet, brouillon
+    - la tension principale
+    - la phrase de fin
+
+    Ne commence pas systématiquement par "Il est...".
+    Tu peux commencer par un geste, une notification, un silence, un objet, une phrase que la cible évite.
+
+    STYLE
+
+    - phrases courtes
+    - lignes coupées
+    - rythme mobile
+    - vocabulaire simple
+    - aucune grandiloquence
+    - aucune motivation vide
+    - aucun markdown
+    - pas de signature
+
+    FORMAT STRICT
+
+    SUJET: ...
+    PREHEADER: ...
+    CORPS:
+    Bonjour {{{{prenom}}}},
+
+    ...
+
+    CTA: ...
+
+    Tu t’arrêtes après le CTA.
+    """.strip()
     return prompt.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
@@ -944,34 +1043,25 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     presence_penalty=0.3
 )
     parts = _extract_sections(str(raw))
-    natural_cta = _select_natural_cta(payload, day=day, nonce=nonce)
     cta = _clean_text(parts.get("cta"), "")
-    if not cta or _is_generic_cta(cta) or _is_forbidden_cliche(cta):
-        cta = natural_cta
-
     body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
 
     if _is_bad_template(body):
-        # Filtre soft : on nettoie sans bloquer une génération IA exploitable.
         body = _sanitize_body(body)
 
-    subject = _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}")
-    preheader = _clean_text(parts.get("preheader"), offer_name)
+    if _looks_like_ai_cliche(body):
+        raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
 
-    generation_quality_scan = "\n".join([subject, preheader, body, cta])
-    if _is_forbidden_cliche(generation_quality_scan):
-        raise ValueError(
-            f"Email IA jour {day} rejeté : cliché IA détecté "
-            f"(score {_forbidden_cliche_score(generation_quality_scan)})."
-        )
+    if not cta or _ai_cliche_score(cta) >= 3:
+        cta = _natural_cta_for_payload(payload, day, nonce)
 
     return {
         "day": day,
         "email_type": email_type,
-        "subject": subject,
-        "preheader": preheader,
+        "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
+        "preheader": _clean_text(parts.get("preheader"), offer_name),
         "body": _clean_text(body, ""),
-        "cta": cta,
+        "cta": _clean_text(cta, _natural_cta_for_payload(payload, day, nonce)),
     }
 
 
@@ -997,25 +1087,14 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
         if _is_bad_template(str(email.get("body") or "")):
             raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
 
-        fallback_cta_pool = NATURAL_CTA_BANK.get(_infer_market_key(payload), NATURAL_CTA_BANK["business"])
-        cta = _clean_text(email.get("cta"), "")
-        if not cta or _is_generic_cta(cta) or _is_forbidden_cliche(cta):
-            cta = fallback_cta_pool[(day - 1) % len(fallback_cta_pool)]
-        email["cta"] = cta
+        email_cta = _clean_text(email.get("cta"), "")
+        if not email_cta or _ai_cliche_score(email_cta) >= 3:
+            email_cta = _natural_cta_for_payload(payload, day, f"dedupe-{day}")
 
-        full_quality_scan = "\n".join(
-            [
-                _clean_text(email.get("subject"), ""),
-                _clean_text(email.get("preheader"), ""),
-                _clean_text(email.get("body"), ""),
-                _clean_text(email.get("cta"), ""),
-            ]
-        )
-        if _is_forbidden_cliche(full_quality_scan):
-            raise ValueError(
-                f"Email IA jour {day} rejeté : cliché IA détecté "
-                f"(score {_forbidden_cliche_score(full_quality_scan)})."
-            )
+        if _looks_like_ai_cliche(str(email.get("body") or "")):
+            raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
+
+        email["cta"] = email_cta
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

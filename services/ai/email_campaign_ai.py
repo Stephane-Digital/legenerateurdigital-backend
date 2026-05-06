@@ -149,8 +149,8 @@ DAY_ARCHETYPES = {
     },
     3: {
         "role": "objection / peur",
-        "subject": "Et si ce n’était pas trop tard ?",
-        "preheader": "Le bon moment n’arrive pas tout seul.",
+        "subject": "Ce n’est pas le prix qui bloque",
+        "preheader": "La vraie peur est plus discrète.",
     },
     4: {
         "role": "solution claire",
@@ -159,8 +159,8 @@ DAY_ARCHETYPES = {
     },
     5: {
         "role": "projection concrète",
-        "subject": "Imagine dans 7 jours",
-        "preheader": "Pas un rêve. Une prochaine étape claire.",
+        "subject": "Dans 7 jours, tu peux avoir une preuve",
+        "preheader": "Pas une idée de plus. Un signal réel.",
     },
     6: {
         "role": "relance / décision",
@@ -175,6 +175,124 @@ DAY_ARCHETYPES = {
 }
 
 
+FORBIDDEN_CLICHE_PATTERNS = [
+    "imagine",
+    "imagine-toi",
+    "imaginez",
+    "imaginez-vous",
+    "et si",
+    "passe à l'action",
+    "passez à l'action",
+    "passer à l'action",
+    "tu hésites",
+    "vous hésitez",
+    "crois en toi",
+    "croyez en vous",
+    "rien n'est impossible",
+    "ne laisse pas passer cette opportunité",
+    "c'est le moment",
+    "prêt à",
+    "prête à",
+    "découvre comment",
+    "transformer ton business",
+    "transformer votre business",
+]
+
+GENERIC_CTA_PATTERNS = [
+    "personne ne va le faire à ta place",
+    "tu peux continuer… ou changer",
+    "tu peux continuer... ou changer",
+    "rien ne changera si tu ne changes rien",
+    "tu sais déjà ce que tu dois faire",
+    "ne laisse pas ça redevenir une idée",
+    "maintenant tu sais",
+    "passer à l’action aujourd’hui",
+    "passer à l'action aujourd'hui",
+    "découvrir maintenant",
+    "voir comment ça fonctionne",
+    "accéder à la méthode",
+    "commencer simplement",
+]
+
+HUMAN_PAIN_BANK = {
+    "business": [
+        "ouvre Stripe plusieurs fois par jour sans notification",
+        "rafraîchit ses analytics au lieu d’envoyer l’offre",
+        "change encore le titre de sa page alors que personne ne l’a vue",
+        "prépare un nouveau post alors qu’il n’a jamais relancé les prospects chauds",
+        "garde son offre en brouillon parce qu’il a peur du silence après l’envoi",
+        "achète un nouvel outil pour éviter le vrai geste : vendre",
+        "dit que ça avance, mais aucun paiement n’est arrivé cette semaine",
+        "voit des likes arriver, mais aucun message privé sérieux",
+        "ouvre sa boîte mail en espérant une réponse qui n’arrive pas",
+        "repousse l’envoi parce qu’il veut encore rendre le visuel plus propre",
+    ],
+    "fitness": [
+        "promet de reprendre lundi puis craque le soir devant le frigo",
+        "compte les calories deux jours puis abandonne au premier repas social",
+        "évite le miroir après une journée trop longue",
+        "cherche un nouveau programme au lieu de refaire la séance prévue",
+        "se pèse le matin et laisse ce chiffre décider de toute sa journée",
+        "sait quoi manger mais perd le contrôle quand la fatigue arrive",
+    ],
+    "crypto": [
+        "ouvre son exchange à minuit après une bougie rouge",
+        "vend trop tôt puis regarde le marché repartir sans lui",
+        "achète parce qu’un groupe Telegram s’agite",
+        "confond urgence et opportunité dès que le prix bouge",
+        "cache ses pertes derrière l’idée qu’il va se refaire au prochain trade",
+        "rafraîchit le graphique au lieu de respecter son plan",
+    ],
+    "productivity": [
+        "déplace encore les mêmes tâches dans son agenda",
+        "ouvre Notion pour réorganiser au lieu de terminer",
+        "répond à trois notifications et perd le fil de sa vraie priorité",
+        "finit la journée fatigué avec rien de vraiment livré",
+        "commence par les petites tâches pour éviter celle qui compte",
+        "se couche avec la sensation d’avoir été occupé, pas efficace",
+    ],
+    "confidence": [
+        "réécrit son message dix fois puis ne l’envoie pas",
+        "prépare sa prise de parole et coupe la caméra au dernier moment",
+        "dit oui trop vite puis regrette dans la voiture",
+        "évite de demander le prix juste pour ne pas déranger",
+        "sourit en réunion alors qu’il voulait défendre son idée",
+        "laisse quelqu’un d’autre décider parce que s’affirmer paraît trop risqué",
+    ],
+}
+
+NATURAL_CTA_BANK = {
+    "business": [
+        "Demain matin, tu peux avoir une offre envoyée au lieu d’une idée de plus.",
+        "Le test à 1€ sert à ça : arrêter de deviner et regarder ce qui répond vraiment.",
+        "Tu peux garder ton offre en brouillon, ou la mettre devant quelqu’un aujourd’hui.",
+        "Le premier signal ne viendra pas d’un nouveau logo. Il viendra d’un envoi réel.",
+        "Si tu veux une preuve, commence par créer quelque chose que quelqu’un peut acheter.",
+    ],
+    "fitness": [
+        "Le prochain repas peut redevenir une décision, pas une compensation.",
+        "Tu n’as pas besoin d’un lundi parfait. Tu as besoin d’un premier choix propre.",
+        "Commence par la prochaine assiette. Le reste suivra.",
+    ],
+    "crypto": [
+        "Le prochain trade doit suivre un plan, pas une panique.",
+        "Avant d’acheter encore, reprends la règle que tu avais décidé d’ignorer.",
+        "Tu peux chercher un signal de plus, ou reprendre le contrôle du risque.",
+    ],
+    "productivity": [
+        "Ferme le tableau. Termine la tâche qui change vraiment ta journée.",
+        "La prochaine heure peut produire un livrable, pas une nouvelle organisation.",
+        "Choisis une tâche qui se voit quand elle est finie.",
+    ],
+    "confidence": [
+        "Le prochain message peut rester en brouillon, ou devenir une vraie demande.",
+        "Ta voix ne prendra pas plus de place tant que tu la gardes pour toi.",
+        "Commence par dire clairement ce que tu voulais déjà dire.",
+    ],
+}
+
+
+
 def _get(obj: Any, key: str, default: Any = "") -> Any:
     if obj is None:
         return default
@@ -186,6 +304,63 @@ def _get(obj: Any, key: str, default: Any = "") -> Any:
 def _clean_text(value: Any, fallback: str = "") -> str:
     text = str(value if value is not None else fallback).strip()
     return text or fallback
+
+
+def _contains_any(text: str, patterns: List[str]) -> bool:
+    normalized = _normalize_text(text).lower()
+    return any(pattern in normalized for pattern in patterns)
+
+
+def _infer_market_key(payload: Any) -> str:
+    raw = " ".join(
+        [
+            _clean_text(_get(payload, "niche"), ""),
+            _clean_text(_get(payload, "target_audience"), ""),
+            _clean_text(_get(payload, "offer_name"), ""),
+            _clean_text(_get(payload, "main_promise"), ""),
+            _clean_text(_get(payload, "main_objective"), ""),
+            _clean_text(_get(payload, "product_context"), ""),
+        ]
+    ).lower()
+
+    if any(word in raw for word in ["sport", "fitness", "poids", "mincir", "muscle", "nutrition"]):
+        return "fitness"
+    if any(word in raw for word in ["crypto", "trading", "bitcoin", "btc", "exchange", "invest"]):
+        return "crypto"
+    if any(word in raw for word in ["productivité", "temps", "agenda", "organisation", "notion", "tâche"]):
+        return "productivity"
+    if any(word in raw for word in ["confiance", "timidité", "oser", "prise de parole", "affirmation"]):
+        return "confidence"
+    return "business"
+
+
+def _select_human_pain_profile(payload: Any, *, day: int, angle: str, nonce: str) -> List[str]:
+    market_key = _infer_market_key(payload)
+    bank = HUMAN_PAIN_BANK.get(market_key, HUMAN_PAIN_BANK["business"])
+    seed = f"{market_key}-{day}-{angle}-{nonce}"
+    rng = random.Random(seed)
+    count = min(4, len(bank))
+    return rng.sample(bank, count)
+
+
+def _format_bullets(items: List[str]) -> str:
+    return "\n".join(f"- {item}" for item in items if item.strip())
+
+
+def _select_natural_cta(payload: Any, *, day: int, nonce: str) -> str:
+    market_key = _infer_market_key(payload)
+    bank = NATURAL_CTA_BANK.get(market_key, NATURAL_CTA_BANK["business"])
+    seed = f"cta-{market_key}-{day}-{nonce}"
+    rng = random.Random(seed)
+    return bank[rng.randrange(len(bank))]
+
+
+def _is_forbidden_cliche(text: str) -> bool:
+    return _contains_any(text, FORBIDDEN_CLICHE_PATTERNS)
+
+
+def _is_generic_cta(text: str) -> bool:
+    return _contains_any(text, GENERIC_CTA_PATTERNS)
 
 
 def _normalize_text(value: Any) -> str:
@@ -267,6 +442,12 @@ def _strip_cta_from_body(body: str, cta: str) -> str:
         r"(?im)^\s*👉?\s*inscrivez-vous dès maintenant pour découvrir notre méthode\s*!?\s*$",
         r"(?im)^\s*👉?\s*passez à l’action maintenant\s*!?\s*$",
         r"(?im)^\s*👉?\s*commencez maintenant\s*!?\s*$",
+        r"(?im)^\s*👉?\s*personne ne va le faire à ta place\s*[.!?]?\s*$",
+        r"(?im)^\s*👉?\s*tu peux continuer… ou changer\s*[.!?]?\s*$",
+        r"(?im)^\s*👉?\s*rien ne changera si tu ne changes rien\s*[.!?]?\s*$",
+        r"(?im)^\s*👉?\s*tu sais déjà ce que tu dois faire\s*[.!?]?\s*$",
+        r"(?im)^\s*👉?\s*ne laisse pas ça redevenir une idée\s*[.!?]?\s*$",
+        r"(?im)^\s*👉?\s*maintenant tu sais\s*[.!?]?\s*$",
     ]
     for pattern in generic_cta_patterns:
         cleaned = re.sub(pattern, "", cleaned).strip()
@@ -526,7 +707,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     offer_name = _clean_text(_get(payload, "offer_name"), "Votre offre")
     target_audience = _clean_text(_get(payload, "target_audience"), "votre audience")
     main_promise = _clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat")
-    main_objective = _clean_text(_get(payload, "main_objective"), "passer à l'action")
+    main_objective = _clean_text(_get(payload, "main_objective"), "obtenir un résultat concret")
     primary_cta = _clean_text(_get(payload, "primary_cta"), "")
     tone = _clean_text(_get(payload, "tone"), "premium")
     sender_name = _clean_text(_get(payload, "sender_name"), "Le Générateur Digital")
@@ -537,229 +718,115 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     proof = _clean_text(_get(payload, "proof"), "")
     niche = _clean_text(_get(payload, "niche"), "")
     archetype = DAY_ARCHETYPES.get(day, DAY_ARCHETYPES[((day - 1) % 7) + 1])
+    human_pain_profile = _select_human_pain_profile(payload, day=day, angle=angle, nonce=nonce)
+    natural_cta = _select_natural_cta(payload, day=day, nonce=nonce)
 
     prompt = f"""
-    Tu es Emailing IA LGD.
+Tu es Emailing IA LGD.
+
+Tu n’écris pas comme un copywriter IA.
+Tu n’écris pas une motivation LinkedIn.
+Tu écris une scène réelle qui vend parce qu’elle sonne vraie.
+
+MISSION
+Écris EXACTEMENT UN SEUL email pour le jour {day}.
+Ne fais jamais référence aux autres emails.
+Ne génère jamais plusieurs versions.
+Ne réutilise jamais exactement la même phrase d’un email à l’autre.
+
+CONTEXTE STRATÉGIQUE CMO — PRIORITÉ ABSOLUE
+Campagne : {campaign_name}
+Type : {campaign_type}
+Jour : {day}
+Rôle : {archetype["role"]}
+Type email : {email_type}
+Angle : {angle}
+Offre : {offer_name}
+Cible : {target_audience}
+Niche : {niche or "non précisée"}
+Promesse : {main_promise}
+Objectif : {main_objective}
+Blocage réel : {objection or "à inférer depuis l’offre, la cible et le contexte"}
+Preuve : {proof or "non précisée"}
+Contexte : {product_context or "non précisé"}
+CTA fourni : {primary_cta or "à reformuler naturellement"}
+Ton : {tone}
+Expéditeur : {sender_name}
+Variation : {nonce}
+
+MATIÈRE HUMAINE OBLIGATOIRE
+Tu dois utiliser AU MOINS DEUX comportements réels ci-dessous.
+Tu peux les reformuler, mais pas les rendre abstraits.
+{_format_bullets(human_pain_profile)}
+
+RÈGLE DE QUALITÉ LGD
+L’email doit montrer une situation que la cible reconnaît immédiatement.
+Si le texte peut fonctionner pour n’importe quelle offre, il est mauvais.
+Si le texte peut être posté tel quel par un coach motivation, il est mauvais.
+Si le texte explique le problème au lieu de le faire vivre, il est mauvais.
+
+INTERDICTIONS ABSOLUES
+N’utilise jamais ces formulations :
+- imagine
+- et si
+- passe à l’action
+- tu hésites
+- crois en toi
+- ne laisse pas passer cette opportunité
+- c’est le moment
+- prêt à / prête à
+- découvre comment
+- transformer ton business
+- outil puissant
+- solution complète
+- le problème c’est
+- avec LGD tu vas
+
+SCÈNE OBLIGATOIRE
+Le corps doit commencer par une scène observable en 2 à 5 lignes.
+La scène doit contenir au moins UN détail concret : heure, écran, téléphone, paiement, silence, analytics, Stripe, WhatsApp, email, fatigue, brouillon, notification, page, prospect.
+
+Exemples de niveau attendu, à ne pas recopier :
+- Il est 22h48. Tu ouvres encore Stripe. Toujours zéro. Alors tu retournes modifier le bouton de ta page.
+- Tu as trois brouillons prêts. Aucun envoyé. Pas parce qu’ils sont mauvais. Parce qu’après l’envoi, il faudra regarder le silence en face.
+
+MÉCANISME DE VENTE
+Tu dois relier la scène à l’offre {offer_name} sans dire “solution complète” ni “outil puissant”.
+LGD doit apparaître comme un déclencheur : il aide à produire une action visible, testable, envoyable.
+
+CONFRONTATION
+Une phrase doit confronter honnêtement la cible.
+Pas de morale.
+Pas de motivation.
+Une vérité sèche.
+
+CTA NATUREL
+Le CTA doit être une phrase de continuité, pas un bouton marketing.
+Base possible : {natural_cta}
+Interdit dans le CTA : clique, réserve, inscris-toi, télécharge, découvrir maintenant, personne ne va le faire à ta place, maintenant tu sais.
+
+STYLE
+- français naturel
+- tutoiement uniquement
+- phrases courtes
+- lignes coupées
+- rythme iPhone
+- pas de markdown
+- pas d’émoji sauf si le CTA final commence par 👉
+- pas de signature
+
+FORMAT STRICT
+SUJET: ...
+PREHEADER: ...
+CORPS:
+Bonjour {{{{prenom}}}},
+
+...
+
+CTA: ...
 
-    Tu écris des emails de vente humains, directs et alignés avec une stratégie CMO.
-    Tu n’écris pas des emails génériques.
-    Tu n’écris pas du développement personnel vague.
-    Tu écris pour vendre une offre précise à une cible précise.
-    Tu écris comme si tu envoyais ces emails depuis un iPhone.
-
-    MISSION
-    Écris EXACTEMENT UN SEUL email pour le jour {day}.
-    Ne fais jamais référence aux autres emails.
-    Ne génère jamais plusieurs versions.
-    INTERDIT DE RÉUTILISER EXACTEMENT LA MÊME PHRASE D’UN EMAIL À L’AUTRE
-
-    CONTEXTE STRATÉGIQUE CMO — PRIORITÉ ABSOLUE
-
-    Campagne : {campaign_name}
-    Type : {campaign_type}
-    Jour : {day}
-    Rôle : {archetype["role"]}
-    Type email : {email_type}
-    Angle : {angle}
-    Offre : {offer_name}
-    Cible : {target_audience}
-    Niche : {niche or "non précisée"}
-    Promesse : {main_promise}
-    Objectif : {main_objective}
-    Blocage : {objection or "à inférer"}
-    Preuve : {proof or "non précisée"}
-    Contexte : {product_context or "non précisé"}
-    CTA fourni : {primary_cta or "à reformuler"}
-    Ton : {tone}
-    Expéditeur : {sender_name}
-    Variation : {nonce}
-
-    RÈGLE CMO NON NÉGOCIABLE
-
-    L’email doit clairement utiliser :
-    - offre
-    - cible
-    - promesse
-    - objection
-    - angle
-
-    Sinon → mauvais.
-
-    ---
-
-    BLOC IMMERSION MARCHÉ (OBLIGATOIRE)
-
-    Tu dois parler EXACTEMENT comme la cible vit son problème.
-
-    Fitness → sport / repas / craquage
-    Crypto → argent / perte / peur
-    Business → clients / revenus
-    Confiance → peur / regard / blocage
-    Productivité → temps / tâches / procrastination
-
-    Interdit d’utiliser un exemple hors contexte.
-
-    ---
-
-  BLOC ADAPTATION RÉELLE (STABILISÉ)
-
-Tu adaptes :
-- mots
-- scènes
-- exemples
-
-MAIS :
-
-Tu rends le problème précis, concret, vécu.
-
-Tu ne restes jamais vague.
-
-Si le texte peut fonctionner pour plusieurs cibles → il est mauvais → tu réécris.
-
-    ---
-
-    BLOC CRITIQUE LGD
-
-    Interdit :
-    - outil puissant
-    - solution complète
-
-    Tu montres concrètement :
-    - quoi faire chaque jour
-    - comment agir
-    - comment avancer
-
-    ---
-
-    BLOC PSYCHOLOGIQUE
-
-    Tu travailles UNIQUEMENT le vrai blocage fourni.
-
-    Interdit d’imposer :
-    - manque de structure
-    - surcharge info
-
-    ---
-
-    BLOC RUPTURE
-
-    Tu casses une croyance.
-
-    ---
-
-    BLOC MICRO-RÉALITÉ
-
-    Tu écris UNE scène réelle.
-
-    Courte.
-    Visuelle.
-
-    ---
-
-    BLOC IMPACT
-
-    1 phrase forte obligatoire.
-
-    ---
-
-    BLOC CONFRONTATION
-
-    Tu confrontes honnêtement.
-
-    ---
-
-    BLOC POSITIONNEMENT
-
-    LGD = déclencheur
-    Pas outil
-
-    ---
-
-    BLOC DÉCISION
-
-    Toujours :
-    continuer
-    ou changer
-
-    ---
-
-    STYLE
-
-    - phrases courtes
-    - lignes coupées
-    - rythme iPhone
-
-    ---
-
-    BLOC RYTHME
-
-    Exemple :
-
-    Tu fais.
-
-    Tu arrêtes.
-
-    Rien.
-
-    ---
-
-    BLOC COUPURE
-
-    Stop.
-    Regarde.
-    Honnêtement.
-
-    ---
-
-    BLOC SILENCE
-
-    Tu peux laisser des lignes vides.
-
-    ---
-
-    BLOC CTA INVISIBLE
-
-    Interdit :
-    - clique
-    - réserve
-    - inscris-toi
-    - télécharge
-
-    Autorisé :
-    - tu peux tester
-    - juste pour voir
-
-    ---
-
-    BLOC FIN FORTE
-
-    Avant CTA → phrase qui fait réfléchir.
-
-    ---
-
-    BLOC ANTI-EXPLICATION
-
-    Interdit :
-    - “le problème c’est”
-    - “avec LGD tu vas”
-
-    Tu montres. Tu ne racontes pas.
-
-    ---
-
-    FORMAT STRICT
-
-    SUJET: ...
-    PREHEADER: ...
-    CORPS:
-    Bonjour {{{{prenom}}}},
-
-    ...
-
-    CTA: ...
-
-    Tu t’arrêtes après le CTA.
-    """.strip()
+Tu t’arrêtes après le CTA.
+""".strip()
     return prompt.strip()
 
 def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, nonce: str) -> Dict[str, Any]:
@@ -786,18 +853,28 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     presence_penalty=0.3
 )
     parts = _extract_sections(str(raw))
+    natural_cta = _select_natural_cta(payload, day=day, nonce=nonce)
     cta = _clean_text(parts.get("cta"), "")
+    if not cta or _is_generic_cta(cta) or _is_forbidden_cliche(cta):
+        cta = natural_cta
+
     body = _strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)
 
     if _is_bad_template(body):
         # Filtre soft : on nettoie sans bloquer une génération IA exploitable.
         body = _sanitize_body(body)
 
+    subject = _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}")
+    preheader = _clean_text(parts.get("preheader"), offer_name)
+
+    if _is_forbidden_cliche(subject) or _is_forbidden_cliche(preheader) or _is_forbidden_cliche(body):
+        raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
+
     return {
         "day": day,
         "email_type": email_type,
-        "subject": _clean_text(parts.get("subject"), f"Jour {day} — {offer_name}"),
-        "preheader": _clean_text(parts.get("preheader"), offer_name),
+        "subject": subject,
+        "preheader": preheader,
         "body": _clean_text(body, ""),
         "cta": cta,
     }
@@ -825,16 +902,22 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
         if _is_bad_template(str(email.get("body") or "")):
             raise ValueError(f"Email IA jour {day} rejeté : ancien template détecté.")
 
-        fallback_cta_pool = [
-            "personne ne va le faire à ta place",
-            "tu peux continuer… ou changer",
-            "rien ne changera si tu ne changes rien",
-            "tu sais déjà ce que tu dois faire",
-            "ne laisse pas ça redevenir une idée",
-            "maintenant tu sais",
-        ]
+        fallback_cta_pool = NATURAL_CTA_BANK.get(_infer_market_key(payload), NATURAL_CTA_BANK["business"])
+        cta = _clean_text(email.get("cta"), "")
+        if not cta or _is_generic_cta(cta) or _is_forbidden_cliche(cta):
+            cta = fallback_cta_pool[(day - 1) % len(fallback_cta_pool)]
+        email["cta"] = cta
 
-        email["cta"] = _clean_text(email.get("cta"), "") or fallback_cta_pool[(day - 1) % len(fallback_cta_pool)]
+        full_quality_scan = "\n".join(
+            [
+                _clean_text(email.get("subject"), ""),
+                _clean_text(email.get("preheader"), ""),
+                _clean_text(email.get("body"), ""),
+                _clean_text(email.get("cta"), ""),
+            ]
+        )
+        if _is_forbidden_cliche(full_quality_scan):
+            raise ValueError(f"Email IA jour {day} rejeté : cliché IA détecté.")
 
         seen_subjects.add(subject_key)
         seen_bodies.add(body_key)

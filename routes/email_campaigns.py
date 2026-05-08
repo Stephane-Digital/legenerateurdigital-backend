@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
@@ -107,7 +107,14 @@ def _estimate_email_generation_cost(sequence: dict) -> int:
 
 @router.options("/generate")
 async def options_generate_email_campaign():
-    return {"ok": True}
+    response = Response(status_code=204)
+    response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Vary"] = "Origin"
+    return response
+
 
 @router.post("/generate", response_model=EmailCampaignGenerateResponse)
 def generate_email_campaign(

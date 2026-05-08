@@ -105,6 +105,9 @@ def _estimate_email_generation_cost(sequence: dict) -> int:
     except Exception:
         return 1200
 
+@router.options("/generate")
+async def options_generate_email_campaign():
+    return {"ok": True}
 
 @router.post("/generate", response_model=EmailCampaignGenerateResponse)
 def generate_email_campaign(
@@ -255,4 +258,3 @@ def prepare_systeme_io_campaign(
         delivery_status=campaign.delivery_status,
         payload=prepared_payload,
     )
-

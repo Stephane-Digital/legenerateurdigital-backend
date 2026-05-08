@@ -735,6 +735,19 @@ EXPLANATORY_PHRASE_SCORES = {
 }
 
 FORBIDDEN_CLICHE_SCORES = {
+    "vous remplacez l’action par l’apprentissage": 4,
+    "tu remplaces l’action par l’apprentissage": 4,
+    "vous devez passer à l’action": 5,
+    "tu dois passer à l’action": 5,
+    "tu t’auto-sabotes": 4,
+    "vous manquez de confiance": 4,
+    "tu manques de confiance": 4,
+    "vous êtes bloqué": 3,
+    "tu es bloqué": 3,
+    "vous avez peur": 3,
+    "tu as peur": 3,
+    "vous procrastinez": 4,
+    "tu procrastines": 4,
     "qu’attendez-vous": 3,
     "qu’attends-tu": 3,
     "cesse d’attendre": 4,
@@ -819,6 +832,28 @@ SUBTEXT_TEMPLATE_PHRASES = [
 ]
 
 
+DIRECT_PSYCHOLOGY_PATTERNS = [
+    r"(?i)\btu procrastines\b",
+    r"(?i)\bvous procrastinez\b",
+    r"(?i)\btu as peur\b",
+    r"(?i)\bvous avez peur\b",
+    r"(?i)\btu es bloqué\b",
+    r"(?i)\bvous êtes bloqué\b",
+    r"(?i)\btu manques de confiance\b",
+    r"(?i)\bvous manquez de confiance\b",
+    r"(?i)\btu t['’]auto-sabotes\b",
+    r"(?i)\bvous vous auto-sabotez\b",
+    r"(?i)\btu dois passer à l['’]action\b",
+    r"(?i)\bvous devez passer à l['’]action\b",
+    r"(?i)\btu remplaces l['’]action par l['’]apprentissage\b",
+    r"(?i)\bvous remplacez l['’]action par l['’]apprentissage\b",
+    r"(?i)\btu es paralysé\b",
+    r"(?i)\bvous êtes paralysé\b",
+    r"(?i)\bton blocage\b",
+    r"(?i)\bvotre blocage\b",
+]
+
+
 def _subtext_cleanup(text_value: str) -> str:
     cleaned = _clean_text(text_value, "")
 
@@ -846,6 +881,17 @@ def _subtext_score(text_value: str) -> int:
             score += 1
 
     for pattern in SUBTEXT_EXPLANATION_PATTERNS:
+        if re.search(pattern, normalized, flags=re.IGNORECASE):
+            score += 2
+
+    return score
+
+
+def _direct_psychology_score(text_value: str) -> int:
+    normalized = _normalize_text(text_value)
+    score = 0
+
+    for pattern in DIRECT_PSYCHOLOGY_PATTERNS:
         if re.search(pattern, normalized, flags=re.IGNORECASE):
             score += 2
 
@@ -1554,6 +1600,33 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     - ses vrais blocages sont : peur de lancer, peur du regard, procrastination, addiction à apprendre, tunnel jamais publié, Canva ouvert, Notion rempli, offre invisible, zéro message envoyé.
     - LGD doit être présenté comme le passage concret de la formation consommée à l’action visible : une page, une offre, un message, des premiers clics, un premier test réel.
 
+    SUBTEXT GUARD LGD — INTERDICTION DU DIAGNOSTIC PSYCHOLOGIQUE DIRECT
+
+    Tu ne dois jamais expliquer directement la psychologie du prospect.
+    Tu ne dois jamais écrire comme un coach, un thérapeute ou un consultant qui pose un diagnostic.
+    Tu ne dois jamais nommer frontalement l’émotion si une scène peut la faire comprendre.
+
+    Interdit d’écrire :
+    - tu procrastines
+    - tu as peur
+    - tu es bloqué
+    - tu manques de confiance
+    - tu t’auto-sabotes
+    - tu dois passer à l’action
+    - tu remplaces l’action par l’apprentissage
+
+    À la place, tu montres :
+    - une vidéo relancée
+    - Canva ouvert
+    - une page restée en brouillon
+    - Notion rempli
+    - un lien jamais envoyé
+    - une formation revue une troisième fois
+    - un message prospect supprimé avant l’envoi
+
+    Le lecteur doit comprendre seul.
+    Si tu peux remplacer une explication par un geste observable, tu choisis le geste observable.
+
     ARCHITECTURE D’ÉCRITURE
 
     1. Ouvre avec une scène observable, concrète, située.
@@ -1626,6 +1699,13 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
 
     Tu dois réduire les explications visibles.
     Tu dois montrer le comportement et laisser le lecteur comprendre.
+
+    Règle absolue :
+    - ne dis pas "tu procrastines" : montre la vidéo relancée.
+    - ne dis pas "tu as peur" : montre la page restée en brouillon.
+    - ne dis pas "tu es bloqué" : montre Canva ouvert depuis une heure.
+    - ne dis pas "tu manques de confiance" : montre le lien supprimé avant l’envoi.
+    - ne dis pas "tu dois passer à l’action" : montre la première page qui peut enfin être publiée.
 
     Interdit de structurer tous les emails avec :
     - Le pire ?
@@ -1721,6 +1801,9 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     if _subtext_score(body) >= 4:
         raise ValueError(f"Email IA jour {day} rejeté : structure trop template.")
 
+    if _direct_psychology_score(body) >= 2:
+        raise ValueError(f"Email IA jour {day} rejeté : diagnostic psychologique direct.")
+
     if not cta or _ai_cliche_score(cta) >= 3:
         cta = _natural_cta_for_payload(payload, day, nonce, campaign_voice)
 
@@ -1771,6 +1854,9 @@ def _dedupe_final_emails(emails: List[Dict[str, Any]], payload: Any, email_types
 
         if _subtext_score(str(email.get("body") or "")) >= 4:
             raise ValueError(f"Email IA jour {day} rejeté : structure trop template.")
+
+        if _direct_psychology_score(str(email.get("body") or "")) >= 2:
+            raise ValueError(f"Email IA jour {day} rejeté : diagnostic psychologique direct.")
 
         email["cta"] = email_cta
 

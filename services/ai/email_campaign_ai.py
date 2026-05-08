@@ -793,69 +793,6 @@ def _subtext_score(text_value: str) -> int:
 
 
 
-# ============================================================
-# LGD VARIATION ENGINE V1.7
-# ============================================================
-EMOTIONAL_CURVES_V17 = {
-    "early": ["prise de conscience", "friction invisible", "fatigue mentale"],
-    "middle": ["contradiction", "micro-échec", "réalité terrain", "preuve silencieuse"],
-    "late": ["décision", "projection réaliste", "perte du statu quo", "mouvement concret"],
-}
-
-SOFT_CLICHE_REPLACEMENTS_V17 = {
-    r"\b[Ii]magine\b": "Pense à",
-    r"\b[Ii]maginez\b": "Pensez à",
-    r"\b[Pp]asse à l’action\b": "avance vraiment",
-    r"\b[Pp]asser à l’action\b": "avancer réellement",
-    r"\b[Ss]olution complète\b": "système concret",
-}
-
-def _campaign_pick_without_replacement(items, seed, count):
-    if not items:
-        return []
-    pool = list(dict.fromkeys(items))
-    while len(pool) < count:
-        pool.extend(items)
-    rng = random.Random(seed)
-    rng.shuffle(pool)
-    return pool[:count]
-
-def _soft_cliche_cleanup_v17(text_value):
-    cleaned = _clean_text(text_value, "")
-    for pattern, replacement in SOFT_CLICHE_REPLACEMENTS_V17.items():
-        cleaned = re.sub(pattern, replacement, cleaned)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned.strip()
-
-def _cross_email_repetition_score_v17(emails):
-    openings = []
-    endings = []
-    score = 0
-
-    for email in emails:
-        body = _normalize_text(email.get("body", ""))
-        paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
-
-        if paragraphs:
-            openings.append(paragraphs[0][:140].lower())
-            endings.append(paragraphs[-1][-140:].lower())
-
-    if len(openings) != len(set(openings)):
-        score += 3
-
-    if len(endings) != len(set(endings)):
-        score += 2
-
-    return score
-
-def _emotional_stage_v17(day, total_days):
-    ratio = day / max(total_days, 1)
-    if ratio <= 0.33:
-        return random.choice(EMOTIONAL_CURVES_V17["early"])
-    if ratio <= 0.66:
-        return random.choice(EMOTIONAL_CURVES_V17["middle"])
-    return random.choice(EMOTIONAL_CURVES_V17["late"])
-
 REPETITIVE_MOTIF_PATTERNS = [
     r"\bstripe\b",
     r"\bzéro vente\b",
@@ -1142,23 +1079,12 @@ def _select_human_material(payload: Any, day: int, nonce: str, campaign_voice: D
     context_offset = (seed // 3) % max(1, len(contexts))
     cta_offset = (seed // 7) % max(1, len(ctas))
 
-    selected_pains = _campaign_pick_without_replacement(
-        pains,
-        seed + day,
-        min(4, len(pains)),
-    )
+    selected_pains = []
+    for i in range(min(4, len(pains))):
+        selected_pains.append(_cycle_pick(pains, day, pain_offset + i * 2))
 
-    selected_context = _campaign_pick_without_replacement(
-        contexts,
-        seed + (day * 3),
-        1,
-    )[0]
-
-    selected_cta = _campaign_pick_without_replacement(
-        ctas,
-        seed + (day * 7),
-        1,
-    )[0]
+    selected_context = _cycle_pick(contexts, day, context_offset)
+    selected_cta = _cycle_pick(ctas, day, cta_offset)
 
     if campaign_voice:
         personality_key = _clean_text(campaign_voice.get("style_key"), "human")
@@ -1404,16 +1330,8 @@ def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
     bad_template = any(_is_bad_template(str(e.get("body") or "")) for e in emails)
     ai_cliche = any(_looks_like_ai_cliche(str(e.get("body") or "")) for e in emails)
     repetitive_motif = _repetitive_motif_score(emails) >= 3
-    cross_email_repetition = _cross_email_repetition_score_v17(emails) >= 3
 
-    return (
-        repeated_subjects
-        or repeated_prefixes
-        or bad_template
-        or ai_cliche
-        or repetitive_motif
-        or cross_email_repetition
-    )
+    return repeated_subjects or repeated_prefixes or bad_template or ai_cliche or repetitive_motif
 
 
 def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce: str, campaign_voice: Dict[str, Any]) -> str:
@@ -1478,7 +1396,6 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     Règle anti-explication : {campaign_voice["explain_rule"]}
     Règle CTA globale : {campaign_voice["cta_rule"]}
     Variation : {nonce}
-    Stade émotionnel V1.7 : {_emotional_stage_v17(day, int(_get(payload, "duration_days"), 7))}
 
     MATIÈRE HUMAINE OBLIGATOIRE
 
@@ -1675,7 +1592,7 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
 )
     parts = _extract_sections(str(raw))
     cta = _clean_text(parts.get("cta"), "")
-    body = _soft_cliche_cleanup_v17(_subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta)))
+    body = _subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta))
 
     if _is_bad_template(body):
         body = _sanitize_body(body)

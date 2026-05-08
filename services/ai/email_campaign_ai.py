@@ -979,6 +979,22 @@ def _human_rhythm_cleanup(text_value: str, market_key: str = "business") -> str:
 
     cleaned = "\n\n".join(p for p in rebuilt if p).strip()
     cleaned = re.sub(r"([^\n]{180,}?\.\s+)", lambda m: m.group(1).strip() + "\n\n", cleaned)
+
+    # Nettoyage micro défauts premium V1.8.2
+    cleaned = re.sub(r"(?im)^\s*Et\s*$", "", cleaned)
+    cleaned = re.sub(r"\s+\.", ".", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+
+    weak_lines = [
+        "Il est temps.",
+        "Passe à l’action.",
+        "Maintenant ou jamais.",
+        "Tu t’arrêtes après le CTA.",
+    ]
+
+    for weak in weak_lines:
+        cleaned = cleaned.replace(weak, "")
+
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -1021,6 +1037,11 @@ def _soft_cliche_cleanup_v181(text_value: str) -> str:
 
 
 REPETITIVE_MOTIF_PATTERNS = [
+    r"\bgroupe discord défile\b",
+    r"\bcanva reste ouvert\b",
+    r"\bnotion est plein\b",
+    r"\ble bouton publier\b",
+
     r"\bstripe\b",
     r"\blinear\b",
     r"\bhotjar\b",
@@ -1375,6 +1396,8 @@ def _select_human_material(payload: Any, day: int, nonce: str, campaign_voice: D
     selected_shame_thought = _cycle_pick(shame_thoughts, day, (seed // 11) % max(1, len(shame_thoughts)))
     selected_rupture = _cycle_pick(ruptures, day, (seed // 13) % max(1, len(ruptures)))
 
+    emotional_progression = _emotional_progression_line(day)
+
     return {
         "market_key": market_key,
         "pains": selected_pains,
@@ -1386,6 +1409,7 @@ def _select_human_material(payload: Any, day: int, nonce: str, campaign_voice: D
         "micro_habit": selected_micro_habit,
         "shame_thought": selected_shame_thought,
         "rupture": selected_rupture,
+        "emotional_progression": emotional_progression,
     }
 
 
@@ -1410,6 +1434,22 @@ def _repetitive_motif_score(emails: List[Dict[str, Any]]) -> int:
         if count >= max(4, len(emails) // 2):
             score += 1
     return score
+
+
+
+
+def _emotional_progression_line(day: int) -> str:
+    progression = {
+        1: "Tu observes encore avant d’agir.",
+        2: "Le doute commence à fatiguer plus que le travail.",
+        3: "Tu vois le problème plus clairement maintenant.",
+        4: "La situation devient concrète.",
+        5: "Tu commences à imaginer quelque chose de réel.",
+        6: "Le prochain geste devient évident.",
+        7: "La décision paraît beaucoup plus simple qu’au début.",
+    }
+
+    return progression.get(day, "")
 
 
 def _natural_cta_for_payload(payload: Any, day: int, nonce: str, campaign_voice: Dict[str, Any] | None = None) -> str:

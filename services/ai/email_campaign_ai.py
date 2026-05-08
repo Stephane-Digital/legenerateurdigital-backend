@@ -993,6 +993,32 @@ def _human_rhythm_cta(cta_value: str) -> str:
     return cleaned
 
 
+def _soft_cliche_cleanup_v181(text_value: str) -> str:
+    cleaned = _clean_text(text_value, "")
+
+    replacements = {
+        r"(?i)\bpasse à l[’']action maintenant\b": "publie la première version",
+        r"(?i)\bpasser à l[’']action\b": "faire le prochain geste visible",
+        r"(?i)\bil est temps d[’']agir\b": "le moment peut rester simple",
+        r"(?i)\bfais le premier pas\b": "envoie le premier lien",
+        r"(?i)\bdécouvre la démo\b": "regarde ce que LGD peut préparer",
+        r"(?i)\bdécouvre\b": "regarde",
+        r"(?i)\bclique\b": "ouvre",
+        r"(?i)\bsolution complète\b": "système concret",
+        r"(?i)\boutil puissant\b": "outil simple",
+        r"(?i)\btransformer ton business\b": "mettre ton offre devant le marché",
+        r"(?i)\btransformer votre business\b": "mettre votre offre devant le marché",
+        r"(?i)\bopportunité unique\b": "occasion simple",
+        r"(?i)\bne laisse pas passer\b": "ne laisse pas redevenir un brouillon",
+    }
+
+    for pattern, replacement in replacements.items():
+        cleaned = re.sub(pattern, replacement, cleaned)
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 
 REPETITIVE_MOTIF_PATTERNS = [
     r"\bstripe\b",
@@ -1373,7 +1399,7 @@ def _ai_cliche_score(text: str) -> int:
 
 
 def _looks_like_ai_cliche(text: str) -> bool:
-    return _ai_cliche_score(text) >= 6
+    return _ai_cliche_score(_soft_cliche_cleanup_v181(text)) >= 12
 
 
 def _repetitive_motif_score(emails: List[Dict[str, Any]]) -> int:
@@ -1925,7 +1951,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     cta = _clean_text(parts.get("cta"), "")
     body = _subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta))
     body = _human_rhythm_cleanup(body, _infer_market_key(payload))
-    cta = _human_rhythm_cta(cta)
+    body = _soft_cliche_cleanup_v181(body)
+    cta = _human_rhythm_cta(_soft_cliche_cleanup_v181(cta))
 
     if _is_bad_template(body):
         body = _sanitize_body(body)
@@ -1942,11 +1969,11 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     if _subtext_score(body) >= 4:
         raise ValueError(f"Email IA jour {day} rejeté : structure trop template.")
 
-    if _direct_psychology_score(body) >= 2:
+    if _direct_psychology_score(_soft_cliche_cleanup_v181(body)) >= 4:
         raise ValueError(f"Email IA jour {day} rejeté : diagnostic psychologique direct.")
 
-    if not cta or _ai_cliche_score(cta) >= 3:
-        cta = _natural_cta_for_payload(payload, day, nonce, campaign_voice)
+    if not cta or _ai_cliche_score(_soft_cliche_cleanup_v181(cta)) >= 6:
+        cta = _human_rhythm_cta(_natural_cta_for_payload(payload, day, nonce, campaign_voice))
 
     return {
         "day": day,

@@ -973,8 +973,28 @@ def _human_rhythm_cleanup(text_value: str, market_key: str = "business") -> str:
 
         if idx == 0 and market_key in RHYTHM_MICRO_OBSERVATIONS:
             observations = RHYTHM_MICRO_OBSERVATIONS[market_key]
-            observation = observations[len(paragraph) % len(observations)]
-            if observation.lower() not in cleaned.lower():
+
+            # ============================================================
+            # LGD NARRATIVE MEMORY LIGHT V1
+            # Objectif :
+            # - éviter les ouvertures répétitives
+            # - faire varier les micro-scènes
+            # - conserver le moteur V1.8 intact
+            # ============================================================
+            narrative_seed = (
+                len(paragraph)
+                + sum(ord(char) for char in paragraph[:80])
+                + (idx * 7)
+            )
+
+            observation = observations[narrative_seed % len(observations)]
+
+            recent_observations = " ".join(rebuilt[-2:]).lower()
+
+            if (
+                observation.lower() not in cleaned.lower()
+                and observation.lower() not in recent_observations
+            ):
                 rebuilt.append(observation)
 
     cleaned = "\n\n".join(p for p in rebuilt if p).strip()

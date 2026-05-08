@@ -4,6 +4,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from config.settings import settings
 from database import Base, engine
@@ -53,7 +54,27 @@ from routes.ai_caption import router as ai_caption_router
 from routes.password_reset import router as password_reset_router
 from routes.trend_radar import router as trend_radar_router
 from routes.cmo_ai import router as cmo_ai_router
-from routes.cmo_scenarios import router as cmo_scenarios_router
+
+app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
+
+from fastapi.responses import JSONResponse
+
+@app.middleware("http")
+async def force_cors_on_error(request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+    response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+
+    return response
 
 def normalize_origins(value):
     if not value:
@@ -104,16 +125,20 @@ print("settings.CORS_ORIGINS norm :", settings_origins)
 print("allow_origins effectifs    :", allow_origins)
 print("================================")
 
-
-app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origins=[
+        "https://legenerateurdigital-front.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return Response(status_code=200)
 
 
 Base.metadata.create_all(bind=engine)
@@ -167,7 +192,6 @@ app.include_router(ai_caption_router)
 app.include_router(password_reset_router)
 app.include_router(trend_radar_router)
 app.include_router(cmo_ai_router)
-app.include_router(cmo_scenarios_router)
 
 print("========== ROUTES CHARGEES ==========")
 for r in app.routes:

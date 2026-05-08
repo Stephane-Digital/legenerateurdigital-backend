@@ -4,6 +4,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from config.settings import settings
 from database import Base, engine
@@ -55,6 +56,29 @@ from routes.trend_radar import router as trend_radar_router
 from routes.cmo_ai import router as cmo_ai_router
 from routes.cmo_scenarios import router as cmo_scenarios_router
 
+app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
+
+from fastapi.responses import JSONResponse
+
+
+@app.middleware("http")
+async def force_cors_on_error(request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+    response.headers["Access-Control-Allow-Origin"] = "https://legenerateurdigital-front.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+
+    return response
+
+
 def normalize_origins(value):
     if not value:
         return []
@@ -78,19 +102,14 @@ def normalize_origins(value):
 
 
 default_origins = [
-    # Local
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-
-    # Prod / custom / Vercel
     "https://legenerateurdigital-front.vercel.app",
     "https://le-generateur-digital.vercel.app",
     "https://legenerateurdigital.com",
     "https://www.legenerateurdigital.com",
-
-    # URLs Vercel déjà vues
     "https://legenerateurdigital-front-git-main-stephanes-projects-4f681f66.vercel.app",
     "https://legenerateurdigital-front-fx7bfjv8g-stephanes-projects-4f681f66.vercel.app",
 ]
@@ -104,16 +123,20 @@ print("settings.CORS_ORIGINS norm :", settings_origins)
 print("allow_origins effectifs    :", allow_origins)
 print("================================")
 
-
-app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origins=[
+        "https://legenerateurdigital-front.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return Response(status_code=200)
 
 
 Base.metadata.create_all(bind=engine)

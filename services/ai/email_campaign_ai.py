@@ -238,6 +238,20 @@ HUMAN_PAIN_BANK = {
         "efface une phrase honnête pour remettre une version plus acceptable",
         "repousse un appel parce qu’il sait qu’il devra dire ce qu’il veut vraiment",
     ],
+    "mrr_blocked": [
+        "regarde encore une vidéo business au lieu de lancer son offre",
+        "achète une nouvelle formation pour éviter de publier quelque chose de réel",
+        "ouvre Canva puis referme sans avoir mis sa page en ligne",
+        "remplit Notion avec des idées qui ne rencontrent jamais personne",
+        "relit les modules de formation au lieu d’envoyer un premier message",
+        "change encore le nom de son offre alors qu’aucun prospect ne l’a vue",
+        "prépare un tunnel Systeme.io qu’il n’a jamais partagé",
+        "scrolle dans un groupe MRR en regardant les résultats des autres",
+        "garde sa page en brouillon parce qu’il a peur que personne ne clique",
+        "se dit qu’il commencera lundi alors qu’il connaît déjà la prochaine action",
+        "télécharge un nouveau template au lieu de publier la première version",
+        "confond apprentissage et avancement depuis plusieurs semaines",
+    ],
     "saas_tech": [
         "regarde sa courbe de churn grimper sans comprendre où ça fuit",
         "ajoute une énième feature alors que les utilisateurs n’ont pas fini l’onboarding",
@@ -308,6 +322,15 @@ HUMAN_LIFE_CONTEXT_BANK = {
         "devant un message prêt à partir, puis supprimé phrase après phrase",
         "en réunion, sourire poli pendant qu’une idée importante reste bloquée",
     ],
+    "mrr_blocked": [
+        "dans le lit, téléphone à la main, encore sur une vidéo business",
+        "devant Canva ouvert depuis une heure sans publication",
+        "dans Notion, avec quarante idées et aucune page en ligne",
+        "dans un groupe Discord MRR, à regarder les captures de résultats des autres",
+        "sur Systeme.io, tunnel presque prêt mais lien jamais envoyé",
+        "à la table de la cuisine, formation ouverte et carnet rempli",
+        "sur Instagram, bio modifiée pour la troisième fois au lieu de publier",
+    ],
     "saas_tech": [
         "dans Slack, avec le canal ventes silencieux depuis lundi",
         "sur le dashboard produit, entre une courbe d’activation plate et trois tickets support",
@@ -363,6 +386,14 @@ NATURAL_CTA_BANK = {
         "Ta voix ne prendra pas plus de place tant que tu la gardes pour toi.",
         "Commence par dire clairement ce que tu voulais déjà dire.",
         "Le respect que tu attends commence souvent par une phrase que tu évites.",
+    ],
+    "mrr_blocked": [
+        "Tu n’as pas besoin d’une formation de plus. Tu as besoin d’une première page visible.",
+        "La prochaine preuve ne viendra pas d’un module regardé. Elle viendra d’un test lancé.",
+        "Une page imparfaite publiée vaut mieux qu’un tunnel parfait invisible.",
+        "Le premier clic compte plus que la prochaine vidéo sauvegardée.",
+        "Tu peux encore apprendre aujourd’hui, ou mettre ton offre devant quelqu’un.",
+        "LGD sert à ça : sortir ton idée du dossier et la mettre devant le marché.",
     ],
     "saas_tech": [
         "Tu peux coder une option de plus, ou simplifier l’accès à ta valeur dès aujourd’hui.",
@@ -427,6 +458,35 @@ HUMAN_CHAOS_BANK = {
             "Ce n’est pas compliqué. C’est exposant.",
             "Une idée ne vend rien tant qu’elle reste propre dans un dossier.",
             "Tu n’as pas besoin d’un meilleur angle. Tu as besoin d’un vrai contact avec le marché.",
+        ],
+    },
+    "mrr_blocked": {
+        "contradictions": [
+            "veut réussir en ligne, mais évite de montrer son offre",
+            "veut vendre, mais passe son temps à apprendre",
+            "veut un business rentable, mais garde tout en brouillon",
+            "veut agir, mais attend encore de se sentir prêt",
+            "veut des résultats, mais remplace l’exposition par la préparation",
+        ],
+        "micro_habits": [
+            "ouvre YouTube pour apprendre puis oublie d’agir",
+            "change encore les couleurs de sa page Canva",
+            "réécrit sa bio Instagram au lieu de publier",
+            "sauvegarde un nouveau template qu’il n’utilisera probablement pas",
+            "relit une leçon déjà comprise pour retarder l’envoi du lien",
+        ],
+        "shame_thoughts": [
+            "a peur que personne ne clique",
+            "redoute de publier quelque chose de médiocre",
+            "se sent en retard par rapport à ceux qui affichent déjà des résultats",
+            "n’ose pas admettre qu’il a surtout peur du regard des autres",
+            "se demande si les formations achetées n’ont servi qu’à repousser le moment de vendre",
+        ],
+        "ruptures": [
+            "Tu n’es pas bloqué par le manque d’information.",
+            "La formation t’a donné la carte. Pas le mouvement.",
+            "Le vrai test commence quand quelqu’un peut cliquer.",
+            "Ton offre ne peut pas répondre tant qu’elle reste invisible.",
         ],
     },
     "saas_tech": {
@@ -795,6 +855,12 @@ def _subtext_score(text_value: str) -> int:
 
 REPETITIVE_MOTIF_PATTERNS = [
     r"\bstripe\b",
+    r"\blinear\b",
+    r"\bhotjar\b",
+    r"\bchurn\b",
+    r"\broadmap\b",
+    r"\bfeature\b",
+    r"\bonboarding\b",
     r"\bzéro vente\b",
     r"\btoujours zéro\b",
     r"\bnotification",
@@ -980,8 +1046,45 @@ def _infer_market_key(payload: Any) -> str:
             _clean_text(_get(payload, "main_objective"), ""),
             _clean_text(_get(payload, "product_context"), ""),
             _clean_text(_get(payload, "main_objection"), ""),
+            _clean_text(_get(payload, "campaign_type"), ""),
         ]
     ).lower()
+
+    # Priorité absolue : MRR / formations / business en ligne bloqué.
+    # Important : "MRR" ne doit pas basculer en SaaS technique par défaut.
+    if any(
+        word in raw
+        for word in [
+            "mrr",
+            "formation mrr",
+            "formations en mrr",
+            "formation business",
+            "business en ligne",
+            "revenu passif",
+            "infopreneur",
+            "infopreneuriat",
+            "formation digitale",
+            "tunnel systeme",
+            "systeme.io",
+            "système.io",
+            "canva",
+            "gumroad",
+            "stan store",
+            "skool",
+            "discord mrr",
+            "acheté des formations",
+            "achete des formations",
+            "zéro vente",
+            "zero vente",
+            "bloqués par leur inaction",
+            "bloque par leur inaction",
+            "passer à l'action",
+            "passer a l'action",
+            "paralysie",
+            "inaction",
+        ]
+    ):
+        return "mrr_blocked"
 
     if any(word in raw for word in ["sport", "fitness", "poids", "mincir", "muscle", "nutrition", "repas"]):
         return "fitness"
@@ -991,14 +1094,14 @@ def _infer_market_key(payload: Any) -> str:
         return "productivity"
     if any(word in raw for word in ["confiance", "timidité", "oser", "prise de parole", "affirmation", "s'affirmer"]):
         return "confidence"
-    if any(word in raw for word in ["saas", "logiciel", "app", "application", "tech", "churn", "code", "développeur", "mrr", "onboarding", "hotjar", "stripe", "feature"]):
-        return "saas_tech"
     if any(word in raw for word in ["coaching", "vie", "reconversion", "sens", "burnout", "épanouissement", "changer de vie", "job"]):
         return "coaching_life"
     if any(word in raw for word in ["immo", "immobilier", "appartement", "achat", "locatif", "bien", "visite", "crédit", "se loger", "seloger"]):
         return "real_estate"
-    return "business"
+    if any(word in raw for word in ["saas", "logiciel", "app", "application", "tech", "churn", "code", "développeur", "onboarding", "hotjar", "feature"]):
+        return "saas_tech"
 
+    return "business"
 
 def _cycle_pick(items: List[str], day: int, offset: int = 0) -> str:
     if not items:
@@ -1442,6 +1545,15 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     L’email doit donner l’impression que LGD comprend la scène exacte vécue par la cible.
     Si le texte peut fonctionner pour trois marchés différents, il est mauvais.
 
+    MARKET INTELLIGENCE LGD — PRIORITÉ PERSONA
+
+    Si le marché détecté est "mrr_blocked" :
+    - tu ne parles PAS comme à un fondateur SaaS technique.
+    - tu évites Linear, Hotjar, churn, onboarding, roadmap, feature, tickets support, dashboard produit.
+    - tu parles à une personne qui a acheté des formations MRR / business en ligne et qui reste bloquée dans la théorie.
+    - ses vrais blocages sont : peur de lancer, peur du regard, procrastination, addiction à apprendre, tunnel jamais publié, Canva ouvert, Notion rempli, offre invisible, zéro message envoyé.
+    - LGD doit être présenté comme le passage concret de la formation consommée à l’action visible : une page, une offre, un message, des premiers clics, un premier test réel.
+
     ARCHITECTURE D’ÉCRITURE
 
     1. Ouvre avec une scène observable, concrète, située.
@@ -1528,7 +1640,7 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
 
     Exemple de direction :
     Mauvais : "Ce faux travail te coûte des ventes."
-    Meilleur : "Tu passes plus de temps dans Linear qu’avec un utilisateur réel."
+    Meilleur : "Tu passes plus de temps à préparer qu’à mettre ton offre devant quelqu’un de réel."
 
     NARRATIVE CONSISTENCY ENGINE V1.5 — OBLIGATOIRE
 

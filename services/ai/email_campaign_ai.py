@@ -392,8 +392,8 @@ NATURAL_CTA_BANK = {
         "La prochaine preuve ne viendra pas d’un module regardé. Elle viendra d’un test lancé.",
         "Une page imparfaite publiée vaut mieux qu’un tunnel parfait invisible.",
         "Le premier clic compte plus que la prochaine vidéo sauvegardée.",
-        "Tu peux encore apprendre aujourd’hui, ou mettre ton offre devant quelqu’un.",
-        "LGD sert à ça : sortir ton idée du dossier et la mettre devant le marché.",
+        "Tu peux encore apprendre aujourd’hui. Ou mettre ton offre devant quelqu’un.",
+        "LGD sert à ça : sortir l’idée du dossier et la mettre devant le marché.",
     ],
     "saas_tech": [
         "Tu peux coder une option de plus, ou simplifier l’accès à ta valeur dès aujourd’hui.",
@@ -896,6 +896,101 @@ def _direct_psychology_score(text_value: str) -> int:
             score += 2
 
     return score
+
+
+
+# ============================================================
+# LGD HUMAN RHYTHM ENGINE V1.8
+# Objectif : casser l'effet structure IA sans refactor.
+# - phrases plus irrégulières
+# - micro-silences
+# - scènes plus visuelles
+# - transitions moins propres
+# - CTA moins injonctifs
+# ============================================================
+RHYTHM_MICRO_OBSERVATIONS = {
+    "mrr_blocked": [
+        "L’onglet Canva reste ouvert.",
+        "La vidéo continue en arrière-plan.",
+        "Le brouillon n’a pas bougé.",
+        "Le lien Systeme.io attend encore.",
+        "Notion est plein. La page est vide.",
+        "Le groupe Discord défile.",
+        "Le bouton publier est toujours au même endroit.",
+    ],
+    "business": [
+        "Le message reste ouvert.",
+        "La page est prête depuis trop longtemps.",
+        "Le prospect n’a toujours rien reçu.",
+        "Le brouillon grossit. Le marché ne voit rien.",
+    ],
+    "saas_tech": [
+        "Le ticket est fermé.",
+        "La session utilisateur, elle, reste incomprise.",
+        "La roadmap avance. L’activation non.",
+        "L’essai gratuit approche de la fin.",
+    ],
+}
+
+RHYTHM_TRANSITION_REPLACEMENTS = {
+    r"(?i)\bcependant,?\b": "",
+    r"(?i)\bnéanmoins,?\b": "",
+    r"(?i)\ben réalité,?\b": "",
+    r"(?i)\bpar conséquent,?\b": "",
+    r"(?i)\bc’est pourquoi\b": "",
+    r"(?i)\bainsi,?\b": "",
+    r"(?i)\bde plus,?\b": "",
+}
+
+RHYTHM_CTA_REPLACEMENTS = {
+    r"(?i)^passe à l[’']action maintenant\.?$": "Publie la première version.",
+    r"(?i)^fais-le sortir du brouillon maintenant\.?$": "Envoie le lien.",
+    r"(?i)^lance-toi maintenant\.?$": "Mets la page en ligne.",
+    r"(?i)^commence maintenant\.?$": "Commence par la page visible.",
+    r"(?i)^découvre maintenant\.?$": "Regarde ce que LGD peut préparer pour toi.",
+}
+
+
+def _human_rhythm_cleanup(text_value: str, market_key: str = "business") -> str:
+    cleaned = _clean_text(text_value, "")
+
+    for pattern, replacement in RHYTHM_TRANSITION_REPLACEMENTS.items():
+        cleaned = re.sub(pattern, replacement, cleaned).strip()
+
+    paragraphs = [p.strip() for p in re.split(r"\n{2,}", cleaned) if p.strip()]
+    rebuilt = []
+
+    for idx, paragraph in enumerate(paragraphs):
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        if len(sentences) >= 4:
+            midpoint = max(1, len(sentences) // 2)
+            rebuilt.append(" ".join(sentences[:midpoint]).strip())
+            rebuilt.append(" ".join(sentences[midpoint:]).strip())
+        else:
+            rebuilt.append(paragraph)
+
+        if idx == 0 and market_key in RHYTHM_MICRO_OBSERVATIONS:
+            observations = RHYTHM_MICRO_OBSERVATIONS[market_key]
+            observation = observations[len(paragraph) % len(observations)]
+            if observation.lower() not in cleaned.lower():
+                rebuilt.append(observation)
+
+    cleaned = "\n\n".join(p for p in rebuilt if p).strip()
+    cleaned = re.sub(r"([^\n]{180,}?\.\s+)", lambda m: m.group(1).strip() + "\n\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _human_rhythm_cta(cta_value: str) -> str:
+    cleaned = _clean_text(cta_value, "")
+
+    for pattern, replacement in RHYTHM_CTA_REPLACEMENTS.items():
+        if re.search(pattern, cleaned):
+            return replacement
+
+    return cleaned
 
 
 
@@ -1462,8 +1557,13 @@ Ou commencer maintenant."""
         "email_type": email_type,
         "subject": archetype["subject"],
         "preheader": archetype["preheader"],
-        "body": _sanitize_body(body),
-        "cta": clean_cta,
+        "body": _human_rhythm_cleanup(_sanitize_body(body), _infer_market_key({
+            "target_audience": target_audience,
+            "offer_name": offer_name,
+            "main_promise": main_promise,
+            "main_objective": main_objective,
+        })),
+        "cta": _human_rhythm_cta(clean_cta),
     }
 
 
@@ -1722,6 +1822,45 @@ def _build_prompt(*, payload: Any, day: int, email_type: str, angle: str, nonce:
     Mauvais : "Ce faux travail te coûte des ventes."
     Meilleur : "Tu passes plus de temps à préparer qu’à mettre ton offre devant quelqu’un de réel."
 
+    HUMAN RHYTHM ENGINE V1.8 — OBLIGATOIRE
+
+    Le texte ne doit pas sonner parfaitement structuré.
+    Il doit parfois respirer comme un email écrit par un humain :
+    - une ligne seule
+    - une phrase très courte
+    - une observation sèche
+    - un silence
+    - une cassure
+    - une pensée qui ne cherche pas à tout expliquer
+
+    Interdit de suivre systématiquement :
+    problème → explication → solution → CTA.
+
+    Tu dois varier le rythme :
+    - phrase courte
+    - phrase moyenne
+    - retour à la ligne
+    - micro-scène
+    - silence
+    - reprise
+
+    Exemple :
+    Mauvais : "Tu regardes encore des formations parce que tu procrastines."
+    Meilleur :
+    "Encore une vidéo ouverte.
+
+    “10k/mois avec le MRR”.
+
+    Tu prends des notes.
+
+    Puis tu retournes modifier une couleur sur une page que personne n’a encore vue."
+
+    Le CTA final doit rester naturel.
+    Pas d'injonction.
+    Pas de "Passe à l’action maintenant".
+    Pas de "Fais-le sortir du brouillon maintenant".
+    Le lecteur doit sentir la prochaine étape, pas recevoir un ordre.
+
     NARRATIVE CONSISTENCY ENGINE V1.5 — OBLIGATOIRE
 
     Toute la séquence utilise la même voix.
@@ -1785,6 +1924,8 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     parts = _extract_sections(str(raw))
     cta = _clean_text(parts.get("cta"), "")
     body = _subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta))
+    body = _human_rhythm_cleanup(body, _infer_market_key(payload))
+    cta = _human_rhythm_cta(cta)
 
     if _is_bad_template(body):
         body = _sanitize_body(body)

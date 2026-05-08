@@ -4,7 +4,6 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 
 from config.settings import settings
 from database import Base, engine
@@ -56,8 +55,6 @@ from routes.trend_radar import router as trend_radar_router
 from routes.cmo_ai import router as cmo_ai_router
 from routes.cmo_scenarios import router as cmo_scenarios_router
 
-app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
-
 def normalize_origins(value):
     if not value:
         return []
@@ -107,6 +104,9 @@ print("settings.CORS_ORIGINS norm :", settings_origins)
 print("allow_origins effectifs    :", allow_origins)
 print("================================")
 
+
+app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
@@ -114,6 +114,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 Base.metadata.create_all(bind=engine)
 

@@ -63,7 +63,7 @@ def _quota_snapshot(q: Any) -> Dict[str, int | str]:
         remaining = max(limit - used, 0)
 
     return {
-        "feature": "coach",
+        "feature": "global",
         "plan": getattr(q, "plan", None) or "essentiel",
         "tokens_used": used,
         "tokens_limit": limit,
@@ -124,9 +124,14 @@ def generate(
 ):
     user_id = _user_id(current_user)
 
-    quota = get_or_create_quota(db, user_id, feature="coach")
+    quota = get_or_create_quota(db, user_id, feature="global")
     snap = _quota_snapshot(quota)
     if _to_int(snap["tokens_limit"], 0) > 0 and _to_int(snap["remaining"], 0) <= 0:
+        raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+    reserved_tokens = max(2_500, min(_estimate_tokens(payload.goal, payload.brief, payload.emotional_style or "", payload.business_context or "") + 3_500, 8_000))
+    reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+    if reserved_quota is None:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
     memories = (
@@ -149,17 +154,8 @@ def generate(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"LEAD_ENGINE_AI_ERROR: {exc}") from exc
 
-    tokens_consumed = _estimate_tokens(
-        payload.goal,
-        payload.brief,
-        payload.emotional_style or "",
-        payload.business_context or "",
-        content,
-    )
-
-    updated_quota = update_quota(db, user_id, tokens_consumed, feature="coach")
-    if updated_quota is None:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
+    tokens_consumed = reserved_tokens
+    updated_quota = reserved_quota
 
     memory = LeadEngineMemory(
         user_id=user_id,

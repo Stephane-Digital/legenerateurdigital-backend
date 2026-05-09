@@ -13,7 +13,7 @@ DeliveryStatus = Literal["draft", "ready", "sent", "failed"]
 class EmailCampaignBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     campaign_type: CampaignType = "vente"
-    duration_days: Literal[7, 14, 30] = 7
+    duration_days: Literal[5, 7] = 5
     sender_name: str = Field(default="Le Générateur Digital", min_length=2, max_length=255)
     offer_name: Optional[str] = None
     target_audience: Optional[str] = None
@@ -65,7 +65,7 @@ class EmailCampaignCreate(EmailCampaignBase):
 class EmailCampaignUpdate(BaseModel):
     name: Optional[str] = None
     campaign_type: Optional[CampaignType] = None
-    duration_days: Optional[Literal[7, 14, 30]] = None
+    duration_days: Optional[Literal[5, 7]] = None
     sender_name: Optional[str] = None
     offer_name: Optional[str] = None
     target_audience: Optional[str] = None

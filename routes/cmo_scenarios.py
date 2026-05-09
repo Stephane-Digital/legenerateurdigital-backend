@@ -231,7 +231,7 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.35,
+            temperature=0.8,
             max_completion_tokens=4000,
         )
 

@@ -66,13 +66,6 @@ def _quota_remaining(quota: Any) -> int:
     return 0
 
 
-def _choose_model() -> str:
-    return (
-        os.getenv("OPENAI_CMO_SCENARIO_MODEL", "").strip()
-        or os.getenv("OPENAI_CMO_MODEL", "").strip()
-        or os.getenv("OPENAI_MODEL", "").strip()
-        or "gpt-4o-mini"
-    )
 
 SYSTEM_PROMPT = """
 Tu es le moteur stratégique premium du CMO IA LGD.
@@ -80,8 +73,8 @@ Tu es le moteur stratégique premium du CMO IA LGD.
 Tu agis comme un CMO senior spécialisé en marketing digital, offres MRR, infoproduits,
 business en ligne, tunnels Systeme.io, audiences bloquées par l'inaction et conversion.
 
-Ta mission : générer 3 scénarios marketing PROFONDS, concrets et directement exploitables
-par Le Générateur Digital.
+Ta mission : générer 1 scénario marketing PREMIUM ultra détaillé,
+concret et directement exploitable par Le Générateur Digital.
 
 Tu ne génères PAS :
 - des conseils vagues ;
@@ -142,22 +135,23 @@ CLÉS PREMIUM À AJOUTER À CHAQUE SCÉNARIO :
 - whyNow : raison crédible d'agir maintenant, sans urgence artificielle.
 
 RÈGLES STRICTES :
-- Génère exactement 3 scénarios.
-- Chaque scénario doit contenir toutes les clés obligatoires minimales.
-- Chaque scénario doit aussi contenir les clés premium.
+- Génère exactement 1 scénario premium.
+- Ce scénario doit être extrêmement détaillé.
+- Il doit pouvoir alimenter directement Emailing IA sans perte de contexte.
+- Le scénario doit contenir toutes les clés obligatoires minimales.
+- Le scénario doit aussi contenir les clés premium.
 - Aucun champ ne doit être vide.
-- Chaque scénario doit être spécifique à l'offre, à la cible, à l'objectif et au blocage fournis.
+- Le scénario doit être spécifique à l'offre, à la cible, à l'objectif et au blocage fournis.
 - Chaque champ doit être rédigé en français naturel.
 - Chaque champ important doit faire 2 à 5 phrases quand c'est utile.
 - Le rendu doit être premium, stratégique, dense, mais lisible.
 - Le scénario doit pouvoir alimenter ensuite un CMO, une séquence email, une page de vente ou un lead magnet.
-- Ne répète pas la même idée dans les 3 scénarios.
-- Ne commence pas tous les scénarios avec la même structure.
+- Ne répète pas la même idée dans le scénario : chaque champ doit apporter une information nouvelle.
 - Ne répète pas mécaniquement le blocage fourni : interprète-le intelligemment.
 - Ne promets pas de résultat irréaliste.
 - Garde un ton humain, lucide, marketing, pas professoral.
 
-LES 3 SCÉNARIOS DOIVENT COUVRIR :
+LE SCÉNARIO PREMIUM DOIT COUVRIR :
 1. Prise de conscience directe
    Montrer au prospect ce qu'il fait déjà qui l'empêche d'obtenir le résultat.
 
@@ -166,6 +160,9 @@ LES 3 SCÉNARIOS DOIVENT COUVRIR :
 
 3. Solution claire / projection réaliste
    Présenter le chemin le plus simple vers une action visible, testable et commercialement utile.
+
+4. Carburant Emailing IA
+   Donner assez de détails émotionnels, stratégiques et concrets pour alimenter une séquence email premium sans ajouter un second scénario.
 
 CRITÈRES DE QUALITÉ PREMIUM :
 - On doit sentir que le scénario comprend le marché.
@@ -190,7 +187,7 @@ async def generate_scenarios(
         if _quota_remaining(quota_check) <= 0:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
 
-        quota = update_quota(db, user_id, 4_500, feature="global")
+        quota = update_quota(db, user_id, 1_500, feature="global")
         if quota is None:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
 
@@ -214,28 +211,28 @@ NIVEAU DU PROSPECT :
 {payload.prospectLevel}
 
 MISSION PREMIUM :
-Génère exactement 3 scénarios marketing au format JSON obligatoire.
-Chaque scénario doit être précis, dense, concret, exploitable dans le CMO LGD et adapté au contexte fourni.
+Génère exactement 1 scénario marketing premium au format JSON obligatoire.
+Ce scénario doit être précis, dense, concret, exploitable dans le CMO LGD et adapté au contexte fourni.
 
-Pour chaque scénario :
+Pour ce scénario :
 - explique le vrai levier psychologique ;
 - montre le coût business de l'inaction ;
 - donne un mécanisme marketing clair ;
 - prépare implicitement une future séquence Emailing IA ;
 - évite les phrases génériques comme "passer à l'action", sauf si elles sont reliées à une action concrète visible.
 
-Le scénario recommandé doit être celui qui crée le meilleur pont entre le blocage actuel et une action commerciale rapide.
+Le scénario doit créer le meilleur pont entre le blocage actuel et une action commerciale rapide.
 """.strip()
 
         response = client.chat.completions.create(
-            model=_choose_model(),
+            model="gpt-5",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.35,
-            max_tokens=1800,
+            max_tokens=1500,
         )
 
         content = response.choices[0].message.content
@@ -273,7 +270,7 @@ Le scénario recommandé doit être celui qui crée le meilleur pont entre le bl
 
         normalized_scenarios = []
 
-        for index, scenario in enumerate(scenarios[:3], start=1):
+        for index, scenario in enumerate(scenarios[:1], start=1):
             if not isinstance(scenario, dict):
                 raise ValueError(f"Réponse IA invalide : scénario {index} n'est pas un objet.")
 

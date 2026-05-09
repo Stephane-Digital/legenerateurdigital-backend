@@ -1243,6 +1243,10 @@ def _infer_market_key(payload: Any) -> str:
         word in raw
         for word in [
             "mrr",
+            "mlr",
+            "lgd",
+            "le générateur digital",
+            "le generateur digital",
             "formation mrr",
             "formations en mrr",
             "formation business",
@@ -1613,30 +1617,6 @@ Ou commencer maintenant."""
     }
 
 
-def _fallback_email_from_payload(
-    *,
-    payload: Any,
-    day: int,
-    email_type: str,
-) -> Dict[str, Any]:
-    """
-    Pare-feu coût LGD : lorsqu'un email IA est rejeté par les contrôles qualité,
-    on complète localement avec le fallback existant au lieu de relancer OpenAI.
-    Le moteur copywriting live reste intact ; on évite uniquement les retries coûteux.
-    """
-    return _fallback_email(
-        day=day,
-        email_type=email_type,
-        offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
-        target_audience=_clean_text(_get(payload, "target_audience"), "votre audience"),
-        main_promise=_clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat"),
-        main_objective=_clean_text(_get(payload, "main_objective"), "passer à l’action"),
-        primary_cta=_clean_text(_get(payload, "primary_cta"), "Voir comment ça fonctionne"),
-        sender_name=_clean_text(_get(payload, "sender_name"), "Le Générateur Digital"),
-        tone=_clean_text(_get(payload, "tone"), "premium"),
-    )
-
-
 def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
     if len(emails) < 2:
         return False
@@ -1974,25 +1954,23 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     tone = _clean_text(_get(payload, "tone"), "premium")
 
     raw = generate_ai_text(
-        prompt=_build_prompt(
-            payload=payload,
-            day=day,
-            email_type=email_type,
-            angle=angle,
-            nonce=nonce,
-            campaign_voice=campaign_voice,
-        ),
-        tone=tone,
-        language="fr",
+    prompt=_build_prompt(
+        payload=payload,
+        day=day,
+        email_type=email_type,
+        angle=angle,
+        nonce=nonce,
+        campaign_voice=campaign_voice
+    ),
+    tone=tone,
+    language="fr",
 
-        # 🔥 COPYWRITER ELITE SETTINGS — CONSERVÉS
-        # Pare-feu coût : un email = un appel IA maximum, sans retry IA automatique.
-        temperature=0.82,
-        top_p=0.9,
-        frequency_penalty=0.4,
-        presence_penalty=0.3,
-        max_tokens=900,
-    )
+    # 🔥 COPYWRITER ELITE SETTINGS
+    temperature=0.82,
+    top_p=0.9,
+    frequency_penalty=0.4,
+    presence_penalty=0.3
+)
     parts = _extract_sections(str(raw))
     cta = _clean_text(parts.get("cta"), "")
     body = _subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta))
@@ -2113,38 +2091,51 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
                 )
             except Exception:
                 generated.append(
-                    _fallback_email_from_payload(
-                        payload=payload,
+                    _fallback_email(
                         day=day,
                         email_type=email_type,
+                        offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
+                        target_audience=_clean_text(_get(payload, "target_audience"), "les personnes qui veulent avancer"),
+                        main_promise=_clean_text(_get(payload, "main_promise"), "obtenir un résultat concret"),
+                        main_objective=_clean_text(_get(payload, "main_objective"), "passer à l’action"),
+                        primary_cta=_clean_text(_get(payload, "primary_cta"), ""),
+                        sender_name=sender_name,
+                        tone=_clean_text(_get(payload, "tone"), "premium"),
                     )
                 )
 
-        return generated
-
-    # Pare-feu coût LGD : une seule passe live.
-    # Avant : live + retry + similarity-retry pouvaient multiplier les appels IA.
-    # Maintenant : aucun retry IA automatique ; les corrections se font localement.
-    emails = generate_live_pass("live", random.randint(0, 999))
+        return _dedupe_final_emails(generated, payload, email_types, campaign_voice)
 
     try:
-        emails = _dedupe_final_emails(emails, payload, email_types, campaign_voice)
+        emails = generate_live_pass("live", random.randint(0, 999))
     except Exception:
         emails = [
-            _fallback_email_from_payload(
-                payload=payload,
+            _fallback_email(
                 day=index + 1,
                 email_type=email_types[index],
+                offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
+                target_audience=_clean_text(_get(payload, "target_audience"), "les personnes qui veulent avancer"),
+                main_promise=_clean_text(_get(payload, "main_promise"), "obtenir un résultat concret"),
+                main_objective=_clean_text(_get(payload, "main_objective"), "passer à l’action"),
+                primary_cta=_clean_text(_get(payload, "primary_cta"), ""),
+                sender_name=sender_name,
+                tone=_clean_text(_get(payload, "tone"), "premium"),
             )
             for index in range(duration_days)
         ]
 
     if _looks_too_similar(emails):
         emails = [
-            _fallback_email_from_payload(
-                payload=payload,
+            _fallback_email(
                 day=index + 1,
                 email_type=email_types[index],
+                offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
+                target_audience=_clean_text(_get(payload, "target_audience"), "les personnes qui veulent avancer"),
+                main_promise=_clean_text(_get(payload, "main_promise"), "obtenir un résultat concret"),
+                main_objective=_clean_text(_get(payload, "main_objective"), "passer à l’action"),
+                primary_cta=_clean_text(_get(payload, "primary_cta"), ""),
+                sender_name=sender_name,
+                tone=_clean_text(_get(payload, "tone"), "premium"),
             )
             for index in range(duration_days)
         ]

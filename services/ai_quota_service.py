@@ -22,10 +22,17 @@ except Exception:
 # Pro = 1 000 000
 # Ultime = 2 500 000
 #
-# Buckets synchronisés :
-# - coach
-# - global
+# Correctif coût IA 2026-05 :
+# - Tous les appels IA consomment le bucket canonique "global".
+# - Le plafond journalier est réellement bloquant SANS migration DB.
+# - Le suivi journalier utilise une ligne technique ia_quota par jour :
+#   feature="global_daily:YYYY-MM-DD".
+# - Le frontend continue de lire /ai-quota/global comme avant.
 # ======================================================
+
+_CANONICAL_FEATURE = "global"
+_DAILY_FEATURE_PREFIX = "global_daily:"
+_LEGACY_FEATURES_TO_SYNC = ("coach",)
 
 
 def _to_int(v: Any, default: int = 0) -> int:
@@ -51,6 +58,23 @@ def _default_limit_for_plan(plan: str) -> int:
     return 400_000
 
 
+def _daily_limit_for_plan(plan: str, monthly_limit: int) -> int:
+    p = (plan or "").lower()
+    if "trial" in p:
+        return 10_000
+    if monthly_limit <= 0:
+        monthly_limit = _default_limit_for_plan(p or "essentiel")
+    return max(1, int(monthly_limit // 30))
+
+
+def _today_key() -> str:
+    return datetime.date.today().isoformat()
+
+
+def _daily_feature() -> str:
+    return f"{_DAILY_FEATURE_PREFIX}{_today_key()}"
+
+
 def _get_used(quota: Any) -> int:
     if hasattr(quota, "tokens_used"):
         return _to_int(getattr(quota, "tokens_used", 0), 0)
@@ -60,7 +84,7 @@ def _get_used(quota: Any) -> int:
 
 
 def _set_used(quota: Any, value: int) -> None:
-    v = int(value)
+    v = max(0, int(value))
     if hasattr(quota, "tokens_used"):
         setattr(quota, "tokens_used", v)
         return
@@ -80,7 +104,7 @@ def _get_limit(quota: Any) -> int:
 
 
 def _set_limit(quota: Any, value: int) -> None:
-    v = int(value)
+    v = max(0, int(value))
     if hasattr(quota, "credits"):
         setattr(quota, "credits", v)
         return
@@ -95,177 +119,201 @@ def _set_limit(quota: Any, value: int) -> None:
 def _set_remaining(quota: Any, remaining: int) -> None:
     if hasattr(quota, "remaining"):
         try:
-            setattr(quota, "remaining", int(remaining))
+            setattr(quota, "remaining", max(0, int(remaining)))
         except Exception:
             pass
 
 
-def _today_key() -> str:
-    return datetime.date.today().isoformat()
+def _set_plan(quota: Any, plan: str) -> None:
+    if hasattr(quota, "plan"):
+        try:
+            setattr(quota, "plan", str(plan or "essentiel").lower())
+        except Exception:
+            pass
 
 
-_DAILY_USED_FIELDS = ("daily_used", "tokens_used_daily", "used_today", "tokens_used_today")
-_DAILY_DATE_FIELDS = ("daily_date", "daily_reset_date", "used_today_date", "tokens_used_today_date")
+def _get_plan(quota: Any) -> str:
+    return str(getattr(quota, "plan", None) or "essentiel").lower()
 
 
-def _get_daily_used(quota: Any) -> int:
-    for k in _DAILY_USED_FIELDS:
-        if hasattr(quota, k) and getattr(quota, k, None) is not None:
-            return _to_int(getattr(quota, k, 0), 0)
-    return 0
+def _set_reset_at(quota: Any, value: datetime.datetime | None) -> None:
+    if hasattr(quota, "reset_at"):
+        try:
+            setattr(quota, "reset_at", value)
+        except Exception:
+            pass
 
 
-def _set_daily_used(quota: Any, value: int) -> None:
-    v = int(value)
-    for k in _DAILY_USED_FIELDS:
-        if hasattr(quota, k):
-            try:
-                setattr(quota, k, v)
-                return
-            except Exception:
-                pass
+def _next_midnight_utc() -> datetime.datetime:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    tomorrow = now.date() + datetime.timedelta(days=1)
+    return datetime.datetime.combine(tomorrow, datetime.time.min, tzinfo=datetime.timezone.utc)
 
 
-def _get_daily_date(quota: Any) -> str:
-    for k in _DAILY_DATE_FIELDS:
-        if hasattr(quota, k) and getattr(quota, k, None):
-            return str(getattr(quota, k))
-    return ""
-
-
-def _set_daily_date(quota: Any, value: str) -> None:
-    for k in _DAILY_DATE_FIELDS:
-        if hasattr(quota, k):
-            try:
-                setattr(quota, k, value)
-                return
-            except Exception:
-                pass
-
-
-def get_or_create_quota(db: Session, user_id: int, feature: str = "coach"):
+def _query_quota(db: Session, user_id: int, feature: str):
     if QuotaModel is None:
         raise RuntimeError("QuotaModel introuvable (models.ia_quota_model)")
 
-    feature = (feature or "coach").strip() or "coach"
+    query = db.query(QuotaModel).filter(QuotaModel.user_id == int(user_id))  # type: ignore
+    if hasattr(QuotaModel, "feature"):
+        query = query.filter(QuotaModel.feature == feature)  # type: ignore
+    return query.first()
 
-    q = (
-        db.query(QuotaModel)
-        .filter(QuotaModel.user_id == int(user_id))  # type: ignore
-        .filter(QuotaModel.feature == feature)  # type: ignore
-        .first()
-    )
 
-    if q:
-        limit = _get_limit(q)
-        if limit <= 0:
-            plan = str(getattr(q, "plan", None) or "essentiel")
-            _set_limit(q, _default_limit_for_plan(plan))
-            _set_remaining(q, max(_get_limit(q) - _get_used(q), 0))
-            db.add(q)
-            db.flush()
-            db.refresh(q)
-        return q
+def _create_quota(db: Session, user_id: int, feature: str, *, plan: str, limit: int, used: int = 0):
+    if QuotaModel is None:
+        raise RuntimeError("QuotaModel introuvable (models.ia_quota_model)")
 
-    q = QuotaModel()  # type: ignore
-    setattr(q, "user_id", int(user_id))
-    try:
-        setattr(q, "feature", feature)
-    except Exception:
-        pass
-
-    plan = getattr(q, "plan", None) or "essentiel"
-    try:
-        if hasattr(q, "plan"):
-            setattr(q, "plan", plan)
-    except Exception:
-        pass
-
-    default_limit = _default_limit_for_plan(str(plan))
-    _set_limit(q, default_limit)
-    _set_used(q, 0)
-    _set_remaining(q, default_limit)
-
-    today = _today_key()
-    _set_daily_date(q, today)
-    _set_daily_used(q, 0)
-
-    db.add(q)
+    quota = QuotaModel()  # type: ignore
+    setattr(quota, "user_id", int(user_id))
+    if hasattr(quota, "feature"):
+        setattr(quota, "feature", feature)
+    _set_plan(quota, plan)
+    _set_limit(quota, limit)
+    _set_used(quota, used)
+    _set_remaining(quota, max(limit - used, 0))
+    if feature.startswith(_DAILY_FEATURE_PREFIX):
+        _set_reset_at(quota, _next_midnight_utc())
+    db.add(quota)
     db.flush()
-    db.refresh(q)
-    return q
+    db.refresh(quota)
+    return quota
+
+
+def get_or_create_quota(db: Session, user_id: int, feature: str = _CANONICAL_FEATURE):
+    """Retourne le quota demandé, en gardant `global` comme source d'affichage.
+
+    Les anciennes features restent lisibles pour compatibilité, mais toute consommation
+    réelle passe par update_quota(), qui force le bucket global + daily.
+    """
+    if QuotaModel is None:
+        raise RuntimeError("QuotaModel introuvable (models.ia_quota_model)")
+
+    feature = (feature or _CANONICAL_FEATURE).strip() or _CANONICAL_FEATURE
+    quota = _query_quota(db, int(user_id), feature)
+
+    if quota:
+        limit = _get_limit(quota)
+        if limit <= 0 and not feature.startswith(_DAILY_FEATURE_PREFIX):
+            plan = _get_plan(quota)
+            _set_limit(quota, _default_limit_for_plan(plan))
+            _set_remaining(quota, max(_get_limit(quota) - _get_used(quota), 0))
+            db.add(quota)
+            db.flush()
+            db.refresh(quota)
+        return quota
+
+    # Si on crée une feature non-global, on récupère le plan du global si possible.
+    plan = "essentiel"
+    global_quota = None
+    if feature != _CANONICAL_FEATURE:
+        global_quota = _query_quota(db, int(user_id), _CANONICAL_FEATURE)
+        if global_quota:
+            plan = _get_plan(global_quota)
+
+    if feature.startswith(_DAILY_FEATURE_PREFIX):
+        monthly_limit = _get_limit(global_quota) if global_quota else _default_limit_for_plan(plan)
+        limit = _daily_limit_for_plan(plan, monthly_limit)
+    else:
+        limit = _default_limit_for_plan(plan)
+
+    return _create_quota(db, int(user_id), feature, plan=plan, limit=limit, used=0)
+
+
+def _get_global_quota(db: Session, user_id: int):
+    quota = get_or_create_quota(db, int(user_id), _CANONICAL_FEATURE)
+    limit = _get_limit(quota)
+    if limit <= 0:
+        _set_limit(quota, _default_limit_for_plan(_get_plan(quota)))
+        _set_remaining(quota, max(_get_limit(quota) - _get_used(quota), 0))
+        db.add(quota)
+        db.flush()
+        db.refresh(quota)
+    return quota
+
+
+def _get_daily_quota(db: Session, user_id: int, *, plan: str, monthly_limit: int):
+    feature = _daily_feature()
+    daily_limit = _daily_limit_for_plan(plan, monthly_limit)
+    quota = _query_quota(db, int(user_id), feature)
+    if quota is None:
+        quota = _create_quota(db, int(user_id), feature, plan=plan, limit=daily_limit, used=0)
+    else:
+        _set_plan(quota, plan)
+        _set_limit(quota, daily_limit)
+        _set_remaining(quota, max(daily_limit - _get_used(quota), 0))
+        _set_reset_at(quota, _next_midnight_utc())
+        db.add(quota)
+        db.flush()
+        db.refresh(quota)
+    return quota
 
 
 def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
     clean_plan = str(plan or "essentiel").lower()
     limit_tokens = _default_limit_for_plan(clean_plan)
 
-    for feature_name in ("coach", "global"):
+    # Source de vérité.
+    global_quota = get_or_create_quota(db, int(user_id), feature=_CANONICAL_FEATURE)
+    _set_plan(global_quota, clean_plan)
+    _set_used(global_quota, 0)
+    _set_limit(global_quota, limit_tokens)
+    _set_remaining(global_quota, limit_tokens)
+    db.add(global_quota)
+
+    # Compat affichages/routes anciennes.
+    for feature_name in _LEGACY_FEATURES_TO_SYNC:
         quota = get_or_create_quota(db, int(user_id), feature=feature_name)
-
-        if hasattr(quota, "plan"):
-            quota.plan = clean_plan
-
-        if hasattr(quota, "tokens_used"):
-            quota.tokens_used = 0
-
+        _set_plan(quota, clean_plan)
+        _set_used(quota, 0)
         _set_limit(quota, limit_tokens)
-        _set_remaining(quota, max(limit_tokens - _get_used(quota), 0))
-
-        today = _today_key()
-        _set_daily_date(quota, today)
-        _set_daily_used(quota, 0)
-
+        _set_remaining(quota, limit_tokens)
         db.add(quota)
+
+    # Reset du compteur journalier du jour.
+    daily_quota = _get_daily_quota(db, int(user_id), plan=clean_plan, monthly_limit=limit_tokens)
+    _set_used(daily_quota, 0)
+    _set_remaining(daily_quota, _daily_limit_for_plan(clean_plan, limit_tokens))
+    db.add(daily_quota)
 
     db.flush()
 
 
-def update_quota(db: Session, user_id: int, amount: int, feature: str = "coach"):
+def update_quota(db: Session, user_id: int, amount: int, feature: str = _CANONICAL_FEATURE):
+    """Décrémente réellement le quota IA.
+
+    Important : `feature` est conservé dans la signature pour compatibilité,
+    mais la consommation est volontairement centralisée sur `global` pour éviter
+    les contournements coach/lead/emailing.
+    """
     amt = _to_int(amount, 0)
     if amt <= 0:
         amt = 1
 
-    q = get_or_create_quota(db, int(user_id), feature=feature)
+    global_quota = _get_global_quota(db, int(user_id))
+    plan = _get_plan(global_quota)
+    monthly_limit = _get_limit(global_quota)
+    monthly_used = _get_used(global_quota)
 
-    limit = _get_limit(q)
-    used = _get_used(q)
+    daily_quota = _get_daily_quota(db, int(user_id), plan=plan, monthly_limit=monthly_limit)
+    daily_limit = _get_limit(daily_quota)
+    daily_used = _get_used(daily_quota)
 
-    current_plan = str(getattr(q, "plan", "")).lower()
-    daily_supported = any(hasattr(q, k) for k in _DAILY_USED_FIELDS) or any(
-        hasattr(q, k) for k in _DAILY_DATE_FIELDS
-    )
-
-    if "trial" in current_plan:
-        daily_limit = 10_000
-    else:
-        daily_limit = max(1, int(limit // 30)) if limit > 0 else 0
-
-    if daily_supported and daily_limit > 0:
-        today = _today_key()
-        last_day = _get_daily_date(q)
-        if last_day != today:
-            _set_daily_used(q, 0)
-            _set_daily_date(q, today)
-
-        daily_used = _get_daily_used(q)
-        if daily_used + amt > daily_limit:
-            return None
-
-    if limit > 0 and used + amt > limit:
+    if daily_limit > 0 and daily_used + amt > daily_limit:
         return None
 
-    new_used = used + amt
-    _set_used(q, new_used)
+    if monthly_limit > 0 and monthly_used + amt > monthly_limit:
+        return None
 
-    if daily_supported and daily_limit > 0:
-        _set_daily_used(q, _get_daily_used(q) + amt)
-        _set_daily_date(q, _today_key())
+    _set_used(global_quota, monthly_used + amt)
+    _set_remaining(global_quota, max(monthly_limit - _get_used(global_quota), 0))
+    db.add(global_quota)
 
-    if limit > 0:
-        _set_remaining(q, max(limit - new_used, 0))
+    _set_used(daily_quota, daily_used + amt)
+    _set_remaining(daily_quota, max(daily_limit - _get_used(daily_quota), 0))
+    _set_reset_at(daily_quota, _next_midnight_utc())
+    db.add(daily_quota)
 
-    db.add(q)
     db.commit()
-    db.refresh(q)
-    return q
+    db.refresh(global_quota)
+    return global_quota

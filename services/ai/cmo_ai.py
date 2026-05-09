@@ -402,7 +402,7 @@ def generate_cmo_dispatch(
             {"role": "user", "content": prompt},
         ],
         temperature=0.32,
-        max_tokens=2200,
+        max_tokens=1400,
         response_format={"type": "json_object"},
     )
 
@@ -505,7 +505,7 @@ def generate_cmo_strategy(
             {"role": "user", "content": prompt},
         ],
         temperature=0.45,
-        max_tokens=1800,
+        max_tokens=1200,
         response_format={"type": "json_object"},
     )
 

@@ -28,6 +28,10 @@ class ScenarioPayload(BaseModel):
     prospectLevel: str
 
 
+def _user_id(user: Any) -> int:
+    if isinstance(user, dict):
+        return int(user.get("id"))
+    return int(getattr(user, "id"))
 
 
 def _choose_model() -> str:
@@ -148,7 +152,7 @@ async def generate_scenarios(
     current_user=Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        user_id = int(getattr(current_user, "id"))
+        user_id = _user_id(current_user)
         quota = update_quota(db, user_id, 4_500, feature="global")
         if quota is None:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")

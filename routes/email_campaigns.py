@@ -80,10 +80,10 @@ def get_email_campaign_user(request: Request, db: Session = Depends(get_db)):
 
 def _estimate_email_generation_cost(sequence: dict) -> int:
     """
-    Estimation volontairement prudente pour décrémenter le quota IA existant
-    sans toucher à la logique stable de ia-quotas.
-    On reste sur le bucket existant `feature="coach"` car c'est celui affiché
-    et piloté dans l'admin actuel.
+    Estimation post-génération conservée pour compatibilité interne.
+    La protection économique réelle se fait AVANT l'appel IA via
+    _reserve_email_generation_quota(), afin d'éviter toute dépense OpenAI
+    si le quota global/journalier est atteint.
     """
     try:
         emails = sequence.get("emails") or []
@@ -105,6 +105,24 @@ def _estimate_email_generation_cost(sequence: dict) -> int:
     except Exception:
         return 1200
 
+
+def _reserve_email_generation_quota(payload: EmailCampaignGenerateRequest) -> int:
+    """Réserve prudente avant l'appel OpenAI.
+
+    Objectif : bloquer AVANT de consommer si le quota journalier est atteint.
+    Les valeurs restent volontairement simples pour éviter tout refactor.
+    """
+    try:
+        duration = int(getattr(payload, "duration_days", None) or 7)
+    except Exception:
+        duration = 7
+
+    if duration <= 7:
+        return 9_000
+    if duration <= 14:
+        return 16_000
+    return 28_000
+
 @router.options("/generate")
 async def options_generate_email_campaign():
     response = Response(status_code=204)
@@ -123,12 +141,12 @@ def generate_email_campaign(
     db: Session = Depends(get_db),
     user=Depends(get_email_campaign_user),
 ):
-    sequence = generate_email_campaign_sequence(payload.model_dump())
-
-    amount = _estimate_email_generation_cost(sequence)
-    quota = update_quota(db, user.id, amount, feature="coach")
+    reserved_amount = _reserve_email_generation_quota(payload)
+    quota = update_quota(db, user.id, reserved_amount, feature="global")
     if quota is None:
-        raise HTTPException(status_code=400, detail="Quota insuffisant")
+        raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
+
+    sequence = generate_email_campaign_sequence(payload.model_dump())
 
     return EmailCampaignGenerateResponse(**sequence)
 

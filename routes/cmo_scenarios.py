@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from routes.auth import get_current_user
-from services.ai_quota_service import update_quota
+from services.ai_quota_service import get_or_create_quota, update_quota
 
 router = APIRouter(prefix="/cmo-scenarios", tags=["CMO Scenarios"])
 
@@ -32,6 +32,38 @@ def _user_id(user: Any) -> int:
     if isinstance(user, dict):
         return int(user.get("id"))
     return int(getattr(user, "id"))
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except Exception:
+        try:
+            return int(float(value))
+        except Exception:
+            return default
+
+
+def _quota_remaining(quota: Any) -> int:
+    limit = _to_int(
+        getattr(quota, "credits", None)
+        or getattr(quota, "tokens_limit", None)
+        or getattr(quota, "limit_tokens", None),
+        0,
+    )
+    used = _to_int(
+        getattr(quota, "tokens_used", None)
+        or getattr(quota, "used_tokens", None),
+        0,
+    )
+    remaining = _to_int(getattr(quota, "remaining", None), -1)
+    if remaining >= 0:
+        return remaining
+    if limit > 0:
+        return max(limit - used, 0)
+    return 0
 
 
 def _choose_model() -> str:
@@ -153,6 +185,11 @@ async def generate_scenarios(
 ) -> Dict[str, Any]:
     try:
         user_id = _user_id(current_user)
+
+        quota_check = get_or_create_quota(db, user_id, feature="global")
+        if _quota_remaining(quota_check) <= 0:
+            raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
+
         quota = update_quota(db, user_id, 4_500, feature="global")
         if quota is None:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
@@ -308,5 +345,7 @@ Le scénario recommandé doit être celui qui crée le meilleur pont entre le bl
             "scenarios": normalized_scenarios,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

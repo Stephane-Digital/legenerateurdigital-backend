@@ -1613,6 +1613,30 @@ Ou commencer maintenant."""
     }
 
 
+def _fallback_email_from_payload(
+    *,
+    payload: Any,
+    day: int,
+    email_type: str,
+) -> Dict[str, Any]:
+    """
+    Pare-feu coût LGD : lorsqu'un email IA est rejeté par les contrôles qualité,
+    on complète localement avec le fallback existant au lieu de relancer OpenAI.
+    Le moteur copywriting live reste intact ; on évite uniquement les retries coûteux.
+    """
+    return _fallback_email(
+        day=day,
+        email_type=email_type,
+        offer_name=_clean_text(_get(payload, "offer_name"), "Votre offre"),
+        target_audience=_clean_text(_get(payload, "target_audience"), "votre audience"),
+        main_promise=_clean_text(_get(payload, "main_promise"), "atteindre un meilleur résultat"),
+        main_objective=_clean_text(_get(payload, "main_objective"), "passer à l’action"),
+        primary_cta=_clean_text(_get(payload, "primary_cta"), "Voir comment ça fonctionne"),
+        sender_name=_clean_text(_get(payload, "sender_name"), "Le Générateur Digital"),
+        tone=_clean_text(_get(payload, "tone"), "premium"),
+    )
+
+
 def _looks_too_similar(emails: List[Dict[str, Any]]) -> bool:
     if len(emails) < 2:
         return False
@@ -1950,23 +1974,25 @@ def _generate_one_email(*, payload: Any, day: int, email_type: str, angle: str, 
     tone = _clean_text(_get(payload, "tone"), "premium")
 
     raw = generate_ai_text(
-    prompt=_build_prompt(
-        payload=payload,
-        day=day,
-        email_type=email_type,
-        angle=angle,
-        nonce=nonce,
-        campaign_voice=campaign_voice
-    ),
-    tone=tone,
-    language="fr",
+        prompt=_build_prompt(
+            payload=payload,
+            day=day,
+            email_type=email_type,
+            angle=angle,
+            nonce=nonce,
+            campaign_voice=campaign_voice,
+        ),
+        tone=tone,
+        language="fr",
 
-    # 🔥 COPYWRITER ELITE SETTINGS
-    temperature=0.82,
-    top_p=0.9,
-    frequency_penalty=0.4,
-    presence_penalty=0.3
-)
+        # 🔥 COPYWRITER ELITE SETTINGS — CONSERVÉS
+        # Pare-feu coût : un email = un appel IA maximum, sans retry IA automatique.
+        temperature=0.82,
+        top_p=0.9,
+        frequency_penalty=0.4,
+        presence_penalty=0.3,
+        max_tokens=900,
+    )
     parts = _extract_sections(str(raw))
     cta = _clean_text(parts.get("cta"), "")
     body = _subtext_cleanup(_strip_cta_from_body(_clean_text(parts.get("body"), ""), cta))
@@ -2074,38 +2100,54 @@ def generate_email_campaign_sequence(payload: Any) -> Dict[str, Any]:
             angle_options = ANGLE_BANK.get(email_type, ["angle simple"])
             angle = angle_options[(index + angle_offset) % len(angle_options)]
 
-            generated.append(
-                _generate_one_email(
-                    payload=payload,
-                    day=day,
-                    email_type=email_type,
-                    angle=angle,
-                    nonce=f"{base_nonce}-{pass_name}-{day}",
-                    campaign_voice=campaign_voice,
+            try:
+                generated.append(
+                    _generate_one_email(
+                        payload=payload,
+                        day=day,
+                        email_type=email_type,
+                        angle=angle,
+                        nonce=f"{base_nonce}-{pass_name}-{day}",
+                        campaign_voice=campaign_voice,
+                    )
                 )
-            )
+            except Exception:
+                generated.append(
+                    _fallback_email_from_payload(
+                        payload=payload,
+                        day=day,
+                        email_type=email_type,
+                    )
+                )
 
-        return _dedupe_final_emails(generated, payload, email_types, campaign_voice)
+        return generated
+
+    # Pare-feu coût LGD : une seule passe live.
+    # Avant : live + retry + similarity-retry pouvaient multiplier les appels IA.
+    # Maintenant : aucun retry IA automatique ; les corrections se font localement.
+    emails = generate_live_pass("live", random.randint(0, 999))
 
     try:
-        emails = generate_live_pass("live", random.randint(0, 999))
-    except Exception as first_error:
-        try:
-            emails = generate_live_pass("retry", 3)
-        except Exception as retry_error:
-            raise RuntimeError(
-                "Génération IA live impossible. Aucun fallback local n’a été utilisé. "
-                f"Erreur initiale: {first_error}. Erreur retry: {retry_error}"
-            ) from retry_error
+        emails = _dedupe_final_emails(emails, payload, email_types, campaign_voice)
+    except Exception:
+        emails = [
+            _fallback_email_from_payload(
+                payload=payload,
+                day=index + 1,
+                email_type=email_types[index],
+            )
+            for index in range(duration_days)
+        ]
 
     if _looks_too_similar(emails):
-        try:
-            emails = generate_live_pass("similarity-retry", 5)
-        except Exception as similarity_error:
-            raise RuntimeError(
-                "La génération IA live a produit une séquence trop similaire. "
-                "Aucun fallback local n’a été utilisé."
-            ) from similarity_error
+        emails = [
+            _fallback_email_from_payload(
+                payload=payload,
+                day=index + 1,
+                email_type=email_types[index],
+            )
+            for index in range(duration_days)
+        ]
 
     return {
         "campaign_name": campaign_name,

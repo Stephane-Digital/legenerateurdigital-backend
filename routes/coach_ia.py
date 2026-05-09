@@ -61,16 +61,21 @@ def chat(
 ):
     """
     LGD — Coach V2 token debit (STABLE)
-    - Source of truth bucket: feature="coach"
+    - Source of truth bucket: feature="global"
     - Debit is performed via services.ai_quota_service.update_quota()
       so the header (/ai-quota) reflects real consumption.
     """
     user_id = int(getattr(current_user, "id"))
 
-    # Ensure the canonical coach bucket exists
-    q = get_or_create_quota(db, user_id, feature="coach")
+    # Ensure the canonical global bucket exists and reserve before OpenAI call.
+    q = get_or_create_quota(db, user_id, feature="global")
     snap = _quota_snapshot(q)
     if snap["limit"] > 0 and snap["remaining"] <= 0:
+        raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+    reserved_tokens = max(1_200, min(_estimate_tokens(payload.message) + 1_800, 5_000))
+    reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+    if reserved_quota is None:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
     # Generate response (provider usage may be included)
@@ -94,20 +99,16 @@ def chat(
         reply = str(result).strip()
 
     if tokens <= 0:
-        tokens = _estimate_tokens(payload.message) + _estimate_tokens(reply)
-
-    updated = update_quota(db, user_id, tokens, feature="coach")
-    if updated is None:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
+        tokens = reserved_tokens
 
     return {
         "reply": reply,
-        "tokens_consumed": tokens,
+        "tokens_consumed": reserved_tokens,
         "quota": {
-            "feature": "coach",
-            "plan": getattr(updated, "plan", None) or getattr(q, "plan", None) or "essentiel",
-            "tokens_used": _to_int(getattr(updated, "tokens_used", None), _to_int(getattr(updated, "used_tokens", None), 0)),
-            "tokens_limit": _to_int(getattr(updated, "credits", None), _to_int(getattr(updated, "tokens_limit", None), _to_int(getattr(updated, "limit_tokens", None), 0))),
-            "remaining": _to_int(getattr(updated, "remaining", None), 0),
+            "feature": "global",
+            "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
+            "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
+            "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
+            "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
         },
     }

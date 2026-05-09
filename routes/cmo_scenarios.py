@@ -232,7 +232,7 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.35,
-            max_tokens=1500,
+            max_completion_tokens=4000,
         )
 
         content = response.choices[0].message.content

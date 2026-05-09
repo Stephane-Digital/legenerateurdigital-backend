@@ -80,30 +80,25 @@ def get_email_campaign_user(request: Request, db: Session = Depends(get_db)):
 
 def _estimate_email_generation_cost(sequence: dict) -> int:
     """
-    Estimation volontairement prudente pour décrémenter le quota IA existant
-    sans toucher à la logique stable de ia-quotas.
-    On reste sur le bucket existant `feature="coach"` car c'est celui affiché
-    et piloté dans l'admin actuel.
+    LGD RENTABILITY PATCH V1
+    Coût volontairement plafonné pour garder Emailing IA rentable
+    sans toucher au moteur premium.
     """
+
     try:
         emails = sequence.get("emails") or []
         if not isinstance(emails, list):
             emails = []
 
-        total_chars = 0
-        for email in emails:
-            if not isinstance(email, dict):
-                continue
-            total_chars += len(str(email.get("subject") or ""))
-            total_chars += len(str(email.get("preheader") or ""))
-            total_chars += len(str(email.get("body") or ""))
-            total_chars += len(str(email.get("cta") or ""))
+        count = len(emails)
 
-        approx_tokens = max(1, total_chars // 4)
+        if count <= 5:
+            return 800
 
-        return max(600, min(approx_tokens, 12000))
-    except Exception:
         return 1200
+
+    except Exception:
+        return 800
 
 @router.options("/generate")
 async def options_generate_email_campaign():
@@ -126,7 +121,7 @@ def generate_email_campaign(
     sequence = generate_email_campaign_sequence(payload.model_dump())
 
     amount = _estimate_email_generation_cost(sequence)
-    quota = update_quota(db, user.id, amount, feature="coach")
+    quota = update_quota(db, user.id, amount, feature="global")
     if quota is None:
         raise HTTPException(status_code=400, detail="Quota insuffisant")
 

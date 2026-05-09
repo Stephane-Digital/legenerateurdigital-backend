@@ -4,9 +4,15 @@ import json
 import os
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from sqlalchemy.orm import Session
+
+from fastapi import APIRouter, Depends, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
+
+from database import get_db
+from routes.auth import get_current_user
+from services.ai_quota_service import update_quota
 
 router = APIRouter(prefix="/cmo-scenarios", tags=["CMO Scenarios"])
 
@@ -22,13 +28,23 @@ class ScenarioPayload(BaseModel):
     prospectLevel: str
 
 
+
+
+def _choose_model() -> str:
+    return (
+        os.getenv("OPENAI_CMO_SCENARIO_MODEL", "").strip()
+        or os.getenv("OPENAI_CMO_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "").strip()
+        or "gpt-4o-mini"
+    )
+
 SYSTEM_PROMPT = """
 Tu es le moteur stratégique premium du CMO IA LGD.
 
 Tu agis comme un CMO senior spécialisé en marketing digital, offres MRR, infoproduits,
 business en ligne, tunnels Systeme.io, audiences bloquées par l'inaction et conversion.
 
-Ta mission : générer 5 scénarios marketing PROFONDS, concrets et directement exploitables
+Ta mission : générer 3 scénarios marketing PROFONDS, concrets et directement exploitables
 par Le Générateur Digital.
 
 Tu ne génères PAS :
@@ -90,7 +106,7 @@ CLÉS PREMIUM À AJOUTER À CHAQUE SCÉNARIO :
 - whyNow : raison crédible d'agir maintenant, sans urgence artificielle.
 
 RÈGLES STRICTES :
-- Génère exactement 5 scénarios.
+- Génère exactement 3 scénarios.
 - Chaque scénario doit contenir toutes les clés obligatoires minimales.
 - Chaque scénario doit aussi contenir les clés premium.
 - Aucun champ ne doit être vide.
@@ -99,27 +115,21 @@ RÈGLES STRICTES :
 - Chaque champ important doit faire 2 à 5 phrases quand c'est utile.
 - Le rendu doit être premium, stratégique, dense, mais lisible.
 - Le scénario doit pouvoir alimenter ensuite un CMO, une séquence email, une page de vente ou un lead magnet.
-- Ne répète pas la même idée dans les 5 scénarios.
+- Ne répète pas la même idée dans les 3 scénarios.
 - Ne commence pas tous les scénarios avec la même structure.
 - Ne répète pas mécaniquement le blocage fourni : interprète-le intelligemment.
 - Ne promets pas de résultat irréaliste.
 - Garde un ton humain, lucide, marketing, pas professoral.
 
-LES 5 SCÉNARIOS DOIVENT COUVRIR :
+LES 3 SCÉNARIOS DOIVENT COUVRIR :
 1. Prise de conscience directe
    Montrer au prospect ce qu'il fait déjà qui l'empêche d'obtenir le résultat.
 
-2. Erreur invisible
-   Révéler le faux travail, la mauvaise priorité ou la croyance qui entretient le blocage.
+2. Erreur invisible / objection réelle
+   Révéler le faux travail, la mauvaise priorité ou la peur qui entretient le blocage.
 
-3. Objection réelle
-   Traiter la peur ou l'excuse dominante sans la caricaturer.
-
-4. Solution claire
-   Présenter le chemin le plus simple vers une action visible et testable.
-
-5. Projection réaliste
-   Projeter le prospect dans une situation concrète après une première action réussie.
+3. Solution claire / projection réaliste
+   Présenter le chemin le plus simple vers une action visible, testable et commercialement utile.
 
 CRITÈRES DE QUALITÉ PREMIUM :
 - On doit sentir que le scénario comprend le marché.
@@ -132,8 +142,17 @@ CRITÈRES DE QUALITÉ PREMIUM :
 
 
 @router.post("/generate")
-async def generate_scenarios(payload: ScenarioPayload) -> Dict[str, Any]:
+async def generate_scenarios(
+    payload: ScenarioPayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> Dict[str, Any]:
     try:
+        user_id = int(getattr(current_user, "id"))
+        quota = update_quota(db, user_id, 4_500, feature="global")
+        if quota is None:
+            raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
+
         user_prompt = f"""
 OFFRE :
 {payload.offer}
@@ -154,7 +173,7 @@ NIVEAU DU PROSPECT :
 {payload.prospectLevel}
 
 MISSION PREMIUM :
-Génère exactement 5 scénarios marketing au format JSON obligatoire.
+Génère exactement 3 scénarios marketing au format JSON obligatoire.
 Chaque scénario doit être précis, dense, concret, exploitable dans le CMO LGD et adapté au contexte fourni.
 
 Pour chaque scénario :
@@ -168,12 +187,14 @@ Le scénario recommandé doit être celui qui crée le meilleur pont entre le bl
 """.strip()
 
         response = client.chat.completions.create(
-            model="gpt-5",
+            model=_choose_model(),
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
+            temperature=0.35,
+            max_tokens=1800,
         )
 
         content = response.choices[0].message.content
@@ -211,7 +232,7 @@ Le scénario recommandé doit être celui qui crée le meilleur pont entre le bl
 
         normalized_scenarios = []
 
-        for index, scenario in enumerate(scenarios[:5], start=1):
+        for index, scenario in enumerate(scenarios[:3], start=1):
             if not isinstance(scenario, dict):
                 raise ValueError(f"Réponse IA invalide : scénario {index} n'est pas un objet.")
 

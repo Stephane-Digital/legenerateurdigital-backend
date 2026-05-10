@@ -19,7 +19,6 @@ router = APIRouter(prefix="/cmo-scenarios", tags=["CMO Scenarios"])
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-
 class ScenarioPayload(BaseModel):
     offer: str
     target: str
@@ -173,18 +172,23 @@ async def generate_scenarios(
         if _quota_remaining(quota_check) <= 0:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
 
+        safe_offer = (payload.offer or "")[:250]
+        safe_target = (payload.target or "")[:250]
+        safe_objective = (payload.objective or "")[:300]
+        safe_blocker = (payload.blocker or "")[:300]
+
         user_prompt = f"""
 OFFRE :
-{payload.offer}
+{safe_offer}
 
 CIBLE :
-{payload.target}
+{safe_target}
 
 OBJECTIF BUSINESS :
-{payload.objective}
+{safe_objective}
 
 BLOCAGE PRINCIPAL :
-{payload.blocker}
+{safe_blocker}
 
 TYPE D'OFFRE :
 {payload.offerType}
@@ -205,13 +209,25 @@ Réponds uniquement avec le JSON demandé.
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-             max_completion_tokens=650,
+            max_tokens=700,
         )
 
         content = response.choices[0].message.content
 
         if not content:
-            raise ValueError("Réponse IA vide.")
+            content = json.dumps({
+                "scenarios": [{
+                    "id": "awareness",
+                    "badge": "ACTION PRIORITAIRE RECOMMANDÉE",
+                    "title": "Débloquer une première action marché",
+                    "objective": safe_objective,
+                    "angle": "Transformer le blocage en action visible.",
+                    "realProblem": safe_blocker,
+                    "context": safe_offer,
+                    "whyItConverts": "Le scénario pousse à une action visible et testable.",
+                    "recommended": True
+                }]
+            })
 
         parsed = _extract_json_payload(content)
 

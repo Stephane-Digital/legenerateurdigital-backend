@@ -205,7 +205,7 @@ Réponds uniquement avec le JSON demandé.
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=650,
+             max_completion_tokens=650,
         )
 
         content = response.choices[0].message.content

@@ -66,7 +66,6 @@ def _quota_remaining(quota: Any) -> int:
     return 0
 
 
-
 SYSTEM_PROMPT = """
 Tu es le moteur stratégique premium du CMO IA LGD.
 
@@ -187,10 +186,6 @@ async def generate_scenarios(
         if _quota_remaining(quota_check) <= 0:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
 
-        quota = update_quota(db, user_id, 1_500, feature="global")
-        if quota is None:
-            raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
-
         user_prompt = f"""
 OFFRE :
 {payload.offer}
@@ -231,7 +226,7 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            max_completion_tokens=4000,
+            max_completion_tokens=1600,
         )
 
         content = response.choices[0].message.content
@@ -244,6 +239,10 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
         scenarios = parsed.get("scenarios")
         if not isinstance(scenarios, list) or len(scenarios) == 0:
             raise ValueError("Réponse IA invalide : clé scenarios absente ou vide.")
+
+        quota = update_quota(db, user_id, 1_500, feature="global")
+        if quota is None:
+            raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
 
         required_keys = {
             "id",

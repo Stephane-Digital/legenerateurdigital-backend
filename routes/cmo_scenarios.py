@@ -66,6 +66,36 @@ def _quota_remaining(quota: Any) -> int:
     return 0
 
 
+def _extract_json_payload(content: str) -> Dict[str, Any]:
+    """
+    LGD SAFE JSON PARSER
+    Récupère un JSON valide même si le modèle ajoute accidentellement
+    un court texte avant/après. Aucun quota n'est débité si le JSON reste invalide.
+    """
+    raw = str(content or "").strip()
+    if not raw:
+        raise ValueError("Réponse IA vide.")
+
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        candidate = raw[start : end + 1].strip()
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise ValueError("Réponse IA invalide : JSON impossible à analyser.")
+
+
 SYSTEM_PROMPT = """
 Tu es le moteur stratégique premium du CMO IA LGD.
 
@@ -108,7 +138,13 @@ FORMAT OBLIGATOIRE :
       "conversionMechanism": "...",
       "executionPlan": "...",
       "emailSequenceDirection": "...",
-      "whyNow": "..."
+      "whyNow": "...",
+      "emotional_pains": ["...", "...", "..."],
+      "hidden_frustrations": ["...", "...", "..."],
+      "daily_situations": ["...", "...", "..."],
+      "inner_dialogue": ["...", "...", "..."],
+      "false_beliefs": ["...", "...", "..."],
+      "conversion_triggers": ["...", "...", "..."]
     }
   ]
 }
@@ -132,6 +168,12 @@ CLÉS PREMIUM À AJOUTER À CHAQUE SCÉNARIO :
 - executionPlan : mini-plan d'action précis en 3 étapes courtes.
 - emailSequenceDirection : direction exploitable par Emailing IA pour transformer ce scénario en séquence.
 - whyNow : raison crédible d'agir maintenant, sans urgence artificielle.
+- emotional_pains : 3 douleurs émotionnelles précises du prospect.
+- hidden_frustrations : 3 frustrations silencieuses qu'il n'ose pas forcément dire.
+- daily_situations : 3 scènes de vie concrètes observables.
+- inner_dialogue : 3 phrases que le prospect se dit intérieurement.
+- false_beliefs : 3 croyances qui le maintiennent bloqué.
+- conversion_triggers : 3 déclencheurs qui peuvent le faire passer à l'action.
 
 RÈGLES STRICTES :
 - Génère exactement 1 scénario premium.
@@ -220,13 +262,12 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
 """.strip()
 
         response = client.chat.completions.create(
-            model=os.getenv("OPENAI_CMO_SCENARIO_MODEL", "").strip() or "gpt-4o-mini",
+            model="gpt-4o-mini",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.35,
             max_tokens=1600,
         )
 
@@ -235,7 +276,7 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
         if not content:
             raise ValueError("Réponse IA vide.")
 
-        parsed = json.loads(content)
+        parsed = _extract_json_payload(content)
 
         scenarios = parsed.get("scenarios")
         if not isinstance(scenarios, list) or len(scenarios) == 0:
@@ -265,6 +306,12 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
             "executionPlan",
             "emailSequenceDirection",
             "whyNow",
+            "emotional_pains",
+            "hidden_frustrations",
+            "daily_situations",
+            "inner_dialogue",
+            "false_beliefs",
+            "conversion_triggers",
         }
 
         normalized_scenarios = []
@@ -314,6 +361,54 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
                 "whyNow",
                 "Le meilleur moment n'est pas quand tout est parfait, mais quand le prospect peut enfin obtenir un premier signal réel du marché."
             )
+            scenario.setdefault(
+                "emotional_pains",
+                [
+                    "Il a investi dans des formations sans obtenir de vente concrète.",
+                    "Il se sent en retard quand il voit les résultats des autres.",
+                    "Il doute de sa capacité à transformer ce qu'il sait en revenu réel.",
+                ],
+            )
+            scenario.setdefault(
+                "hidden_frustrations",
+                [
+                    "Il prépare beaucoup mais publie peu.",
+                    "Il a peur que son offre soit jugée trop simple ou pas assez professionnelle.",
+                    "Il confond progression et accumulation de nouvelles méthodes.",
+                ],
+            )
+            scenario.setdefault(
+                "daily_situations",
+                [
+                    "Canva reste ouvert pendant des heures sans publication.",
+                    "Le tunnel Systeme.io est presque prêt mais le lien n'est pas envoyé.",
+                    "Les notes s'accumulent dans Notion pendant que l'offre reste invisible.",
+                ],
+            )
+            scenario.setdefault(
+                "inner_dialogue",
+                [
+                    "Il me manque encore une bonne stratégie.",
+                    "Je publierai quand ce sera plus propre.",
+                    "Si personne ne clique, ça voudra dire que je ne suis pas fait pour ça.",
+                ],
+            )
+            scenario.setdefault(
+                "false_beliefs",
+                [
+                    "Il faut être parfaitement prêt avant de vendre.",
+                    "Une formation de plus supprimera le blocage.",
+                    "Un tunnel imparfait ne peut pas générer de premier signal utile.",
+                ],
+            )
+            scenario.setdefault(
+                "conversion_triggers",
+                [
+                    "Une première page visible vaut mieux qu'un tunnel parfait caché.",
+                    "Un premier clic donne plus d'informations qu'une nouvelle vidéo.",
+                    "Le marché ne peut répondre qu'à ce qui lui est montré.",
+                ],
+            )
 
             missing = [key for key in required_keys if key not in scenario]
             if missing:
@@ -331,7 +426,11 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
                 )
 
             for key in premium_keys:
-                if not str(scenario.get(key) or "").strip():
+                value = scenario.get(key)
+                if isinstance(value, list):
+                    if not value:
+                        scenario[key] = ["À préciser par le CMO IA selon le contexte du scénario."]
+                elif not str(value or "").strip():
                     scenario[key] = "À préciser par le CMO IA selon le contexte du scénario."
 
             normalized_scenarios.append(scenario)

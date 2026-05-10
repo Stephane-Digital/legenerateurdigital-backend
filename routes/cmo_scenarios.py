@@ -19,6 +19,7 @@ router = APIRouter(prefix="/cmo-scenarios", tags=["CMO Scenarios"])
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+
 class ScenarioPayload(BaseModel):
     offer: str
     target: str

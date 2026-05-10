@@ -199,7 +199,7 @@ Réponds uniquement avec le JSON demandé.
 """.strip()
 
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-40-mini",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},

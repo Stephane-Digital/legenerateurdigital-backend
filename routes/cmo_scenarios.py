@@ -221,10 +221,18 @@ Le scénario doit créer le meilleur pont entre le blocage actuel et une action 
 
         response = client.chat.completions.create(
             model="gpt-5",
-            response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
+                {
+                    "role": "system",
+                    "content": (
+                        SYSTEM_PROMPT
+                        + "\n\nIMPORTANT : Réponds EXCLUSIVEMENT en JSON valide."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                },
             ],
             max_completion_tokens=1600,
         )

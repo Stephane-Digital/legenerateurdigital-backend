@@ -199,13 +199,13 @@ Réponds uniquement avec le JSON demandé.
 """.strip()
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=1100,
+            max_tokens=650,
         )
 
         content = response.choices[0].message.content

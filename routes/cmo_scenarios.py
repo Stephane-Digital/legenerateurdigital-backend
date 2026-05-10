@@ -74,7 +74,7 @@ def _extract_json_payload(content: str) -> Dict[str, Any]:
     """
     raw = str(content or "").strip()
     if not raw:
-        raise ValueError("Réponse IA vide.")
+        return {"scenarios": []}
 
     raw = raw.replace("```json", "").replace("```", "").strip()
 
@@ -97,65 +97,51 @@ def _extract_json_payload(content: str) -> Dict[str, Any]:
 
 
 SYSTEM_PROMPT = """
-Tu es le CMO IA premium de LGD, spécialisé marketing digital, MRR, infoproduits,
-business en ligne, Systeme.io et prospects bloqués par l'inaction.
+Tu es le CMO senior de LGD.
 
 MISSION :
-Génère exactement 1 scénario marketing premium, dense mais compact, en JSON valide.
-Le scénario doit nourrir directement Emailing IA avec un contexte psychologique exploitable.
+Créer EXACTEMENT 1 scénario marketing premium ultra-actionnable.
 
-RÉPONSE STRICTE :
-- JSON uniquement.
-- Aucun markdown.
-- Aucun texte hors JSON.
-- Aucun champ vide.
-- Phrases courtes, concrètes, humaines.
-- Ne pas écrire un roman.
+OBJECTIF :
+Créer le meilleur pont entre le blocage réel du prospect
+et une action commerciale visible.
 
-FORMAT EXACT :
+RÈGLES :
+- JSON valide uniquement
+- aucun texte hors JSON
+- concret, émotionnel, stratégique
+- zéro remplissage
+- phrases courtes
+- pensé pour nourrir Emailing IA
+
+FORMAT :
 {
-  "scenarios": [
-    {
-      "id": "awareness",
-      "badge": "ACTION PRIORITAIRE RECOMMANDÉE",
-      "title": "...",
-      "objective": "...",
-      "angle": "...",
-      "realProblem": "...",
-      "context": "...",
-      "whyItConverts": "...",
-      "recommended": true,
-      "psychologicalTension": "...",
-      "strategicMistake": "...",
-      "costOfInaction": "...",
-      "conversionMechanism": "...",
-      "executionPlan": "...",
-      "emailSequenceDirection": "...",
-      "whyNow": "...",
-      "emotional_pains": ["...", "...", "..."],
-      "hidden_frustrations": ["...", "...", "..."],
-      "daily_situations": ["...", "...", "..."],
-      "inner_dialogue": ["...", "...", "..."],
-      "false_beliefs": ["...", "...", "..."],
-      "conversion_triggers": ["...", "...", "..."]
-    }
-  ]
+ "scenarios":[
+   {
+    "id":"awareness",
+    "badge":"ACTION PRIORITAIRE RECOMMANDÉE",
+    "title":"",
+    "objective":"",
+    "angle":"",
+    "realProblem":"",
+    "context":"",
+    "whyItConverts":"",
+    "recommended":true,
+    "psychologicalTension":"",
+    "strategicMistake":"",
+    "costOfInaction":"",
+    "conversionMechanism":"",
+    "executionPlan":"",
+    "emailSequenceDirection":"",
+    "whyNow":""
+   }
+ ]
 }
 
-RÈGLES QUALITÉ :
-- Le scénario doit être spécifique à l'offre, la cible, l'objectif et le blocage fournis.
-- Pour MRR / business en ligne, montre la différence entre apprendre, préparer et exposer vraiment une offre au marché.
-- Utilise des scènes concrètes : brouillon, page visible, lien envoyé, premier clic, prospect réel, preuve marché.
-- Évite les phrases génériques comme “passer à l'action” sauf si elles sont reliées à une action visible.
-- Chaque champ doit ajouter une information nouvelle.
-- Pas de promesse irréaliste.
-- Ton : lucide, humain, stratégique, orienté conversion.
-
-TAILLE :
-- title : 8 à 14 mots.
-- objective, angle, realProblem, context, whyItConverts : 1 à 2 phrases.
-- champs premium : 1 phrase.
-- listes : 3 éléments courts.
+IMPORTANT :
+Le scénario doit être premium mais compact.
+Pas de roman.
+Pas de généralités.
 """.strip()
 
 
@@ -184,22 +170,22 @@ OFFRE :
 CIBLE :
 {safe_target}
 
-OBJECTIF BUSINESS :
+OBJECTIF :
 {safe_objective}
 
-BLOCAGE PRINCIPAL :
+BLOCAGE :
 {safe_blocker}
 
-TYPE D'OFFRE :
+TYPE :
 {payload.offerType}
 
-NIVEAU DU PROSPECT :
+NIVEAU :
 {payload.prospectLevel}
 
-MISSION PREMIUM :
-Génère 1 scénario marketing premium compact, directement exploitable par le CMO et Emailing IA.
-Le scénario doit relier le blocage à une action commerciale visible : page publiée, lien envoyé, premier clic ou test marché.
-Réponds uniquement avec le JSON demandé.
+MISSION :
+Créer 1 scénario premium directement exploitable
+par CMO + Emailing IA.
+Le scénario doit pousser vers une action visible.
 """.strip()
 
         response = client.chat.completions.create(
@@ -209,7 +195,7 @@ Réponds uniquement avec le JSON demandé.
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=700,
+            max_tokens=850,
         )
 
         content = response.choices[0].message.content
@@ -219,13 +205,20 @@ Réponds uniquement avec le JSON demandé.
                 "scenarios": [{
                     "id": "awareness",
                     "badge": "ACTION PRIORITAIRE RECOMMANDÉE",
-                    "title": "Débloquer une première action marché",
+                    "title": "Débloquer une première action visible",
                     "objective": safe_objective,
-                    "angle": "Transformer le blocage en action visible.",
+                    "angle": "Transformer le faux travail en action marché.",
                     "realProblem": safe_blocker,
                     "context": safe_offer,
-                    "whyItConverts": "Le scénario pousse à une action visible et testable.",
-                    "recommended": True
+                    "whyItConverts": "Le prospect passe enfin à une action visible.",
+                    "recommended": True,
+                    "psychologicalTension": "Le prospect prépare au lieu d'exposer.",
+                    "strategicMistake": "Perfectionner ce qui reste invisible.",
+                    "costOfInaction": "Chaque jour retarde les premiers signaux marché.",
+                    "conversionMechanism": "Publier, envoyer, tester.",
+                    "executionPlan": "Créer → publier → tester",
+                    "emailSequenceDirection": "Faire passer du brouillon à l'action.",
+                    "whyNow": "Le marché répond uniquement à ce qui est visible."
                 }]
             })
 
@@ -235,7 +228,7 @@ Réponds uniquement avec le JSON demandé.
         if not isinstance(scenarios, list) or len(scenarios) == 0:
             raise ValueError("Réponse IA invalide : clé scenarios absente ou vide.")
 
-        quota = update_quota(db, user_id, 1_200, feature="global")
+        quota = update_quota(db, user_id, 900, feature="global")
         if quota is None:
             raise HTTPException(status_code=402, detail="Quota IA journalier ou mensuel atteint")
 

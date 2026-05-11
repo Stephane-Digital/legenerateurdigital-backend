@@ -78,7 +78,7 @@ def _estimate_tokens(*parts: str) -> int:
 
 def _safe_max_length(value: Any) -> int:
     n = _to_int(value, 120)
-    return max(40, min(n, 1200))
+    return max(400, min(n, 3000))
 
 
 @router.post("/save-memory")

@@ -127,12 +127,29 @@ def generate(
     quota = get_or_create_quota(db, user_id, feature="global")
     snap = _quota_snapshot(quota)
     if _to_int(snap["tokens_limit"], 0) > 0 and _to_int(snap["remaining"], 0) <= 0:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Quota IA atteint pour le moment.",
+                "quota": snap,
+            },
+        )
 
-    reserved_tokens = max(2_500, min(_estimate_tokens(payload.goal, payload.brief, payload.emotional_style or "", payload.business_context or "") + 3_500, 8_000))
-    reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
-    if reserved_quota is None:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
+    # Coût volontairement réaliste et plafonné : Lead Engine ne doit pas bloquer
+    # un compte premium avec une réserve artificielle trop haute avant l'appel IA.
+    estimated_tokens = max(
+        900,
+        min(
+            _estimate_tokens(
+                payload.goal,
+                payload.brief,
+                payload.emotional_style or "",
+                payload.business_context or "",
+            )
+            + 1_600,
+            3_500,
+        ),
+    )
 
     memories = (
         db.query(LeadEngineMemory)
@@ -154,8 +171,17 @@ def generate(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"LEAD_ENGINE_AI_ERROR: {exc}") from exc
 
-    tokens_consumed = reserved_tokens
-    updated_quota = reserved_quota
+    updated_quota = update_quota(db, user_id, estimated_tokens, feature="global")
+    if updated_quota is None:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Quota IA atteint pour le moment.",
+                "quota": _quota_snapshot(get_or_create_quota(db, user_id, feature="global")),
+            },
+        )
+
+    tokens_consumed = estimated_tokens
 
     memory = LeadEngineMemory(
         user_id=user_id,

@@ -16,31 +16,28 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD économique V3
+# Version PROD V4 — économie + qualité landing
 # Objectif : conserver une réponse premium exploitable tout en divisant
 # fortement la consommation de tokens côté OpenAI et côté quotas LGD.
 # ============================================================
 
 SYSTEM_PROMPT = """
-Tu es LEAD ENGINE LGD, expert senior en marketing digital, landing pages,
+Tu es LEAD ENGINE LGD, expert senior en landing pages courtes, pages de vente SIO,
 lead magnets et conversion.
 
-Réponds en français, avec un style humain, direct, premium et concret.
-Priorité : produire un contenu immédiatement exploitable, sans blabla.
+Tu ne rédiges PAS un email complet.
+Tu ne recopies PAS le brief.
+Tu transformes le brief en blocs landing courts, directement injectables dans une page.
 
-Règles :
-- phrases courtes, naturelles, orientées bénéfices ;
-- pas de jargon inutile ;
-- pas de promesse magique ;
-- pas de Markdown lourd ;
-- pas de répétitions ;
-- privilégie la clarté, l'émotion et l'action.
+Style : français naturel, premium, direct, émotionnel mais maîtrisé.
+Objectif : clarté, conversion, action. Zéro remplissage.
 """.strip()
 
 
-MAX_BRIEF_CHARS = 1800
-MAX_MEMORY_ITEMS = 3
-MAX_MEMORY_CHARS = 420
+MAX_BRIEF_CHARS = 900
+MAX_MEMORY_ITEMS = 1
+MAX_MEMORY_CHARS = 220
+MAX_OUTPUT_CHARS = 3200
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -117,16 +114,18 @@ def _goal_instruction(goal: str) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
-        return "Fournis 8 hooks courts, puissants et différenciés. Puis recommande les 2 meilleurs."
+        return "Produit 6 hooks landing très courts. Format : Hook + intention. Maximum 12 mots par hook."
     if value == "cta":
-        return "Fournis 10 CTA courts, orientés passage à l'action, avec 3 niveaux d'intensité."
+        return "Produit 8 CTA courts classés doux / direct / urgent. Maximum 8 mots par CTA."
     if value == "benefits":
-        return "Fournis une liste claire de bénéfices : immédiats, émotionnels, business, puis objections traitées."
+        return "Produit 6 bénéfices courts : résultat concret + émotion débloquée. Pas de paragraphe."
     if value == "variants":
-        return "Fournis 3 angles A/B/C courts : promesse, accroche, preuve, CTA."
+        return "Produit 3 angles A/B/C ultra courts : promesse, douleur, CTA."
+    if value == "rewrite_landing":
+        return "Réécris le contenu en version landing plus courte, plus nette, sans ajouter de longueur."
 
     return (
-        "Fournis une landing complète mais compacte : hero, sous-promesse, bénéfices, "
+        "Produit une structure landing compacte : hero, sous-promesse, 5 bénéfices, "
         "mécanisme, preuve, objections, CTA, FAQ courte."
     )
 
@@ -159,11 +158,30 @@ Mémoire utile :
 Mission :
 {_goal_instruction(safe_goal)}
 
-Contraintes de sortie :
-- réponse structurée et directement copiable ;
-- pas d'introduction inutile ;
-- pas de conclusion longue ;
-- termine par : À utiliser en priorité : ...
+Contraintes de sortie obligatoires :
+- maximum 900 mots ;
+- jamais de pavé narratif ;
+- jamais d'email complet ;
+- ne recopie pas le brief ;
+- blocs courts directement utilisables dans la landing ;
+- format exact :
+  HERO
+  TITRE : ...
+  SOUS-TITRE : ...
+  CTA PRINCIPAL : ...
+  BENEFICES
+  - ...
+  MECANISME
+  ...
+  PREUVE / RASSURANCE
+  ...
+  OBJECTIONS
+  - ...
+  FAQ COURTE
+  Q: ...
+  R: ...
+  A UTILISER EN PRIORITE
+  ...
 """.strip()
 
 
@@ -215,7 +233,7 @@ def _text_from_responses_response(response: Any) -> str:
 def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]]) -> str:
     # Plafond volontairement bas : assez pour une sortie premium compacte,
     # pas assez pour brûler 7k à 15k tokens par génération.
-    max_out = 950
+    max_out = 520
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -260,7 +278,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
             model=model,
             instructions=SYSTEM_PROMPT,
             input=prompt,
-            max_output_tokens=950,
+            max_output_tokens=520,
         )
     except TypeError:
         response = client.responses.create(
@@ -269,12 +287,24 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_output_tokens=950,
+            max_output_tokens=520,
         )
     except Exception:
         return ""
 
     return _text_from_responses_response(response)
+
+
+def _compact_output(text: str) -> str:
+    cleaned = str(text or "").strip()
+    if len(cleaned) <= MAX_OUTPUT_CHARS:
+        return cleaned
+
+    cut = cleaned[:MAX_OUTPUT_CHARS].rstrip()
+    last_break = max(cut.rfind("\n\n"), cut.rfind("\n- "), cut.rfind("\nQ:"))
+    if last_break > 1800:
+        cut = cut[:last_break].rstrip()
+    return cut + "\n\nA UTILISER EN PRIORITE\nLa version courte ci-dessus pour éviter une landing trop longue."
 
 
 def generate_lead_content(
@@ -310,10 +340,10 @@ def generate_lead_content(
         try:
             content = _chat_completion(client, model=candidate_model, messages=messages)
             if content:
-                return content
+                return _compact_output(content)
             content = _responses_completion(client, model=candidate_model, prompt=prompt)
             if content:
-                return content
+                return _compact_output(content)
             errors.append(f"{candidate_model}: réponse vide")
         except Exception as exc:
             errors.append(f"{candidate_model}: {exc}")

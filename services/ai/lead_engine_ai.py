@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from typing import Any, Iterable, Optional
-import re
 
 try:
     from config.settings import settings  # type: ignore
@@ -17,42 +16,35 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V7 — Emotion Premium + coût maîtrisé
-# Objectif : renforcer le niveau émotionnel copywriting (Claude-like)
-# tout en gardant une sortie courte, structurée et rentable en tokens.
+# Version PROD V8.1 — Lead Magnet Blocks + plafond caractères réel
+# Objectif : respecter réellement les options Copilote, générer des blocs
+# courts injectables dans le canvas, et plafonner la sortie au max_length UI.
 # ============================================================
 
 SYSTEM_PROMPT = """
-Tu es LEAD ENGINE LGD, copywriter conversion senior spécialisé en landing pages premium,
+Tu es LEAD ENGINE LGD, copywriter conversion senior spécialisé en lead magnets,
 pages de capture, offres digitales, MRR, créateurs bloqués et marketing direct francophone.
 
-Ta mission n'est pas d'écrire beaucoup. Ta mission est de faire ressentir vite, clarifier vite et vendre juste.
-Tu transformes un brief brut en blocs landing courts, humains, émotionnels et positionnables.
+Priorité absolue : générer des blocs courts qui capturent des emails.
+Tu ne rédiges pas une page de vente complète quand l'objectif est de générer des leads.
+Tu ne vends pas directement la formation : tu vends l'envie de laisser son email pour obtenir
+une micro-transformation rapide, claire et crédible.
 
-Méthode interne obligatoire : HOOK → DOULEUR → IDENTIFICATION → TENSION → ESPOIR → MÉCANISME → PREUVE → CTA.
-Le lecteur doit penser : « ils parlent exactement de moi ».
-
-Style attendu : humain, premium, direct, empathique, concret, crédible, sans bullshit.
-Effet recherché : qualité rédactionnelle proche d'un très bon copywriter humain, avec tension émotionnelle maîtrisée.
-
-Interdits absolus :
-- recopier le brief ;
-- écrire un email ;
-- produire un pavé narratif ;
-- écrire deux versions ;
-- répéter la même idée ;
-- promettre des résultats irréalistes ;
-- utiliser un ton corporate froid ;
-- écrire comme une formation internet générique ;
-- utiliser des phrases creuses du type « libérez votre potentiel ».
+Règles obligatoires :
+- respecter les options du Copilote ;
+- écrire en blocs séparés, faciles à placer dans un canvas ;
+- faire court, humain, concret, émotionnel ;
+- éviter les pavés, les doublons, les slogans génériques et les promesses irréalistes ;
+- utiliser le vocabulaire exact de l'audience et de l'angle demandés ;
+- produire uniquement le contenu final, sans explication.
 """.strip()
 
 
 MAX_BRIEF_CHARS = 850
 MAX_MEMORY_ITEMS = 1
-MAX_MEMORY_CHARS = 180
-MAX_OUTPUT_CHARS_DEFAULT = 2400
-MAX_OUTPUT_CHARS_ABSOLUTE = 10000
+MAX_MEMORY_CHARS = 120
+DEFAULT_OUTPUT_CHARS = 1800
+MAX_OUTPUT_CHARS = 3000
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -76,19 +68,13 @@ def _get_client() -> "OpenAI":
 
 
 def _choose_model() -> str:
-    # Modèle économique par défaut : le Lead Engine doit rester rentable en PROD.
-    return (
-        _setting("OPENAI_LEAD_ENGINE_MODEL")
-        or "gpt-4o-mini"
-    )
+    return _setting("OPENAI_LEAD_ENGINE_MODEL") or "gpt-4o-mini"
 
 
 def _fallback_model(primary_model: str) -> str:
     configured = _setting("OPENAI_LEAD_ENGINE_FALLBACK_MODEL") or _setting("OPENAI_FALLBACK_MODEL")
     if configured and configured != primary_model:
         return configured
-    if primary_model.lower() != "gpt-4o-mini":
-        return "gpt-4o-mini"
     return "gpt-4o-mini"
 
 
@@ -99,35 +85,22 @@ def _clip(value: Optional[str], limit: int) -> str:
     return text[:limit].rstrip() + "…"
 
 
+def _norm(value: Optional[str]) -> str:
+    return str(value or "").strip().lower()
 
 
-def _target_chars(goal: str, business_context: Optional[str]) -> int:
-    """Déduit la longueur cible depuis le Copilote sans casser les anciens payloads."""
-    raw = f"{goal or ''} {business_context or ''}"
-    found = re.findall(r"(?:longueur\s*max\s*cible|max[_\s-]?length|target[_\s-]?chars|caract[eè]res?)\D{0,40}(\d{3,5})", raw, flags=re.I)
-    if found:
-        try:
-            value = int(found[-1])
-        except Exception:
-            value = 0
-    else:
-        value = 0
-
-    is_landing = str(goal or "").strip() in {"landing", "landing_complete"} or "landing complète" in raw.lower()
-    if value <= 0:
-        value = 6500 if is_landing else MAX_OUTPUT_CHARS_DEFAULT
-
-    if is_landing:
-        return max(2200, min(value, MAX_OUTPUT_CHARS_ABSOLUTE))
-    return max(600, min(value, 2400))
+def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
+    try:
+        n = int(value) if value is not None else default
+    except Exception:
+        n = default
+    return max(400, min(n, MAX_OUTPUT_CHARS))
 
 
-def _max_tokens_for_target_chars(goal: str, target_chars: int) -> int:
-    """Transforme la cible caractères en plafond OpenAI raisonnable."""
-    is_landing = str(goal or "").strip() in {"landing", "landing_complete"}
-    if is_landing:
-        return max(900, min(int(target_chars / 3.2) + 350, 3200))
-    return max(350, min(int(target_chars / 3.3) + 160, 900))
+def _target_output_tokens(char_limit: int) -> int:
+    # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
+    # On garde une marge pour éviter les sorties longues côté OpenAI.
+    return max(220, min(520, int(char_limit / 4) + 60))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -135,9 +108,9 @@ def _memory_block(memories: Iterable[dict]) -> str:
 
     for item in list(memories or [])[:MAX_MEMORY_ITEMS]:
         memory_type = str(item.get("memory_type") or "memoire")[:40]
-        goal = _clip(str(item.get("goal") or ""), 90)
+        goal = _clip(str(item.get("goal") or ""), 70)
         content = _clip(str(item.get("content") or ""), MAX_MEMORY_CHARS)
-        business = _clip(str(item.get("business_context") or ""), 110)
+        business = _clip(str(item.get("business_context") or ""), 80)
 
         if not content:
             continue
@@ -156,25 +129,135 @@ def _memory_block(memories: Iterable[dict]) -> str:
     return "\n".join(lines)
 
 
-def _goal_instruction(goal: str) -> str:
+def _infer_page_type(goal: str, objective: Optional[str], page_type: Optional[str]) -> str:
+    raw = " ".join([_norm(goal), _norm(objective), _norm(page_type)])
+
+    if any(word in raw for word in ["lead", "email", "capture", "prospect", "magnet"]):
+        return "lead_magnet"
+    if any(word in raw for word in ["webinar", "atelier", "masterclass"]):
+        return "webinar"
+    if any(word in raw for word in ["rdv", "rendez", "appel", "call", "diagnostic"]):
+        return "appointment"
+    if any(word in raw for word in ["bridge", "transition", "prévente", "prevente"]):
+        return "bridge"
+    if any(word in raw for word in ["vente", "vendre", "achat", "payer", "commande"]):
+        return "sales"
+    return "lead_magnet" if _norm(goal) == "landing_complete" else "modular"
+
+
+def _page_strategy(page_type: str) -> str:
+    if page_type == "lead_magnet":
+        return (
+            "TYPE : LEAD MAGNET / CAPTURE EMAIL. But unique : obtenir l'email. "
+            "Ne pas vendre directement l'offre principale. Promettre un résultat rapide, gratuit, crédible."
+        )
+    if page_type == "webinar":
+        return "TYPE : WEBINAR. But : inscription à une session avec prise de conscience forte."
+    if page_type == "appointment":
+        return "TYPE : RDV. But : réserver un diagnostic simple et rassurant."
+    if page_type == "bridge":
+        return "TYPE : BRIDGE PAGE. But : créer confiance et transition vers l'étape suivante."
+    if page_type == "sales":
+        return "TYPE : LANDING VENTE. But : désir + confiance + passage à l'achat, sans surpromesse."
+    return "TYPE : MODULE COURT. Répondre uniquement au bouton demandé."
+
+
+def _copilot_options_block(
+    *,
+    objective: Optional[str],
+    angle: Optional[str],
+    audience: Optional[str],
+    tone: Optional[str],
+    max_length: int,
+    cta_url: Optional[str],
+    page_type: str,
+) -> str:
+    return f"""
+OPTIONS COPILOTE À RESPECTER :
+Objectif : {_clip(objective, 90) or "Générer des leads"}
+Type de page : {page_type}
+Angle : {_clip(angle, 90) or "conversion claire"}
+Audience : {_clip(audience, 120) or "audience froide ou tiède"}
+Ton : {_clip(tone, 90) or "humain premium"}
+Longueur maximale totale : {max_length} caractères, tous blocs inclus
+URL CTA : {_clip(cta_url, 220) or "à renseigner"}
+""".strip()
+
+
+def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
-        return "Produit 6 hooks landing très courts. Format : Hook + intention. Maximum 12 mots par hook."
+        return "Produit 10 hooks courts. Aucun texte autour."
     if value == "cta":
-        return "Produit 8 CTA courts classés doux / direct / urgent. Maximum 8 mots par CTA."
+        return "Produit 10 CTA courts classés doux / direct / émotionnel. Aucun texte autour."
     if value == "benefits":
-        return "Produit 6 bénéfices courts : résultat concret + émotion débloquée. Pas de paragraphe."
+        return "Produit 8 bénéfices courts : résultat concret + émotion débloquée. Aucun paragraphe."
     if value == "variants":
-        return "Produit 3 angles A/B/C ultra courts : promesse, douleur, CTA."
+        return "Produit 3 variantes A/B/C : hook, micro-promesse, CTA. Très court."
     if value == "rewrite_landing":
-        return "Réécris le contenu en version landing plus courte, plus nette, sans ajouter de longueur."
+        return "Réécris le contenu fourni en blocs plus courts. Ne rajoute pas de longueur."
 
-    return (
-        "Produit UNE SEULE structure landing premium en blocs séparés : hook, hero, douleur, "
-        "identification, mécanisme, bénéfices, preuve, objections, FAQ courte et recommandation. "
-        "Chaque bloc doit pouvoir être placé visuellement dans l'éditeur. Aucun doublon."
-    )
+    if page_type == "lead_magnet":
+        return (
+            "Produit une structure Lead Magnet courte en blocs injectables. "
+            "Chaque bloc doit pouvoir devenir un calque texte distinct. "
+            "Objectif : capture email maximale, pas vente directe."
+        )
+
+    return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
+
+
+def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> str:
+    if page_type == "lead_magnet":
+        return f"""
+FORMAT EXACT À RESPECTER :
+BLOC 1 — HERO
+TITRE: 1 phrase courte
+SOUS-TITRE: 1 micro-promesse gratuite
+CTA: 1 appel à recevoir le guide
+URL CTA: {_clip(cta_url, 220) or "à renseigner"}
+
+BLOC 2 — IDENTIFICATION
+3 puces maximum, orientées douleur vécue.
+
+BLOC 3 — LEAD MAGNET
+3 puces maximum : ce que la personne reçoit gratuitement.
+
+BLOC 4 — POURQUOI ÇA AIDE
+2 lignes maximum : mécanisme simple et crédible.
+
+BLOC 5 — RÉASSURANCE
+3 puces maximum : pas besoin d'être expert, pas besoin d'audience, pas de promesse magique.
+
+BLOC 6 — CTA FINAL
+1 phrase + 1 CTA email.
+
+TOTAL MAXIMUM : {max_length} caractères. Si tu dépasses, supprime la FAQ et raccourcis les puces.
+""".strip()
+
+    return f"""
+FORMAT EXACT À RESPECTER :
+BLOC 1 — HERO
+TITRE: 1 phrase courte
+SOUS-TITRE: 1 promesse claire
+CTA: 1 CTA court
+URL CTA: {_clip(cta_url, 220) or "à renseigner"}
+
+BLOC 2 — DOULEUR
+3 puces maximum.
+
+BLOC 3 — PROMESSE
+3 puces maximum.
+
+BLOC 4 — MÉCANISME
+2 lignes maximum.
+
+BLOC 5 — CTA FINAL
+1 phrase + 1 CTA.
+
+TOTAL MAXIMUM : {max_length} caractères.
+""".strip()
 
 
 def build_lead_prompt(
@@ -184,69 +267,61 @@ def build_lead_prompt(
     emotional_style: Optional[str],
     business_context: Optional[str],
     memories: Iterable[dict],
-    target_chars: Optional[int] = None,
-) -> str:
+    objective: Optional[str] = None,
+    angle: Optional[str] = None,
+    audience: Optional[str] = None,
+    tone: Optional[str] = None,
+    max_length: Optional[int] = None,
+    cta_url: Optional[str] = None,
+    page_type: Optional[str] = None,
+) -> tuple[str, int, str]:
     safe_goal = _clip(goal, 80)
     safe_brief = _clip(brief, MAX_BRIEF_CHARS)
-    safe_style = _clip(emotional_style, 180) or "humain premium"
-    safe_context = _clip(business_context, 420) or "lead generation premium"
-    target = int(target_chars or _target_chars(safe_goal, safe_context))
-    is_landing = safe_goal in {"landing", "landing_complete"}
-    length_rule = (
-        f"maximum {target} caractères au total ; vise une landing complète de 7 à 8 blocs séparés"
-        if is_landing
-        else f"maximum {target} caractères au total"
-    )
+    safe_style = _clip(emotional_style, 140) or "humain premium"
+    safe_context = _clip(business_context, 200) or "lead generation premium"
+    safe_max_length = _safe_int(max_length, DEFAULT_OUTPUT_CHARS)
+    inferred_page_type = _infer_page_type(safe_goal, objective, page_type)
 
-    return f"""
-Objectif : {safe_goal}
+    prompt = f"""
+{_page_strategy(inferred_page_type)}
 
-Brief utilisateur :
+{_copilot_options_block(
+    objective=objective,
+    angle=angle,
+    audience=audience,
+    tone=tone,
+    max_length=safe_max_length,
+    cta_url=cta_url,
+    page_type=inferred_page_type,
+)}
+
+BRIEF UTILISATEUR :
 {safe_brief}
 
-Style : {safe_style}
-Contexte : {safe_context}
-
-Mémoire utile :
+STYLE COMPLÉMENTAIRE : {safe_style}
+CONTEXTE MÉTIER : {safe_context}
+MÉMOIRE UTILE :
 {_memory_block(memories)}
 
-Mission :
-{_goal_instruction(safe_goal)}
+MISSION :
+{_goal_instruction(safe_goal, inferred_page_type, safe_max_length)}
 
-Contraintes de sortie obligatoires :
-- {length_rule} ;
-- phrases courtes, concrètes, sans remplissage ;
-- chaque section doit devenir un bloc visuel séparé ;
-- une seule landing, jamais deux variantes dans la même réponse ;
-- aucune longue introduction ;
-- aucun email complet ;
-- ne recopie pas le brief : transforme-le ;
-- ne parle pas de toi ;
-- commence par une phrase qui arrête le scroll ;
-- parle d'abord de la situation vécue et de la douleur, puis seulement ensuite de l'offre ;
-- évite les slogans creux comme « révolutionner », « débloquer ton potentiel », « solution ultime » ;
-- privilégie les scènes concrètes, les émotions réelles, les verbes d'action et le bénéfice visible ;
-- format exact, sans markdown décoratif :
-  BLOC 1 — HERO
-  TITRE : 1 titre émotionnel mais clair
-  SOUS-TITRE : 1 phrase orientée résultat
-  CTA : 1 CTA court
-  URL CTA : reprendre l'URL CTA si elle est fournie dans le contexte
-  BLOC 2 — DOULEUR / IDENTIFICATION
-  3 à 5 lignes : situation réelle, frustration, blocage, désir de changement
-  BLOC 3 — PROMESSE LEAD MAGNET
-  explique ce que la personne obtient gratuitement et pourquoi ça l'aide maintenant
-  BLOC 4 — BENEFICES
-  - 5 à 7 puces maximum, résultat concret + émotion débloquée
-  BLOC 5 — MECANISME
-  3 à 5 lignes : comment le guide / ressource aide concrètement, sans magie
-  BLOC 6 — REASSURANCE
-  3 à 5 lignes : simple, accessible, pas besoin d'audience ni de technique
-  BLOC 7 — CTA FINAL
-  2 à 4 lignes + CTA + URL CTA si fournie
-  BLOC 8 — MICRO FAQ
-  3 questions/réponses courtes qui lèvent les objections
+CONTRAINTES STRICTES :
+- Respecte la longueur maximale totale : {safe_max_length} caractères, titres inclus.
+- Réponds uniquement avec les blocs demandés, sans introduction ni commentaire.
+- N'écris pas une page de vente si l'objectif est de générer des leads.
+- Ne parle pas d'achat direct dans le HERO d'un lead magnet.
+- Chaque bloc doit être court et positionnable séparément dans le canvas.
+- Utilise l'angle, l'audience et le ton fournis.
+- Si l'angle mentionne MRR : parle de formations achetées, dispersion, inaction, première vente.
+- Si le ton est storytelling : ajoute une micro-scène concrète, mais très courte.
+- Ne répète pas le même bloc sous deux formes.
+- Pas de markdown décoratif, pas de tableau, pas de guillemets.
+
+{_format_rules(inferred_page_type, safe_max_length, cta_url)}
 """.strip()
+
+    return prompt, safe_max_length, inferred_page_type
 
 
 def _text_from_chat_response(response: Any) -> str:
@@ -294,8 +369,8 @@ def _text_from_responses_response(response: Any) -> str:
     return "\n".join(parts).strip()
 
 
-def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]], max_out: int) -> str:
-    # Plafond dynamique : court pour hooks/CTA, plus large pour Landing complète multi-blocs.
+def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]], char_limit: int) -> str:
+    max_out = _target_output_tokens(char_limit)
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -308,7 +383,7 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]],
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.55,
+                temperature=0.45,
                 max_tokens=max_out,
             )
     except TypeError:
@@ -331,9 +406,11 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]],
     return _text_from_chat_response(response)
 
 
-def _responses_completion(client: Any, *, model: str, prompt: str, max_out: int) -> str:
+def _responses_completion(client: Any, *, model: str, prompt: str, char_limit: int) -> str:
     if not hasattr(client, "responses"):
         return ""
+
+    max_out = _target_output_tokens(char_limit)
 
     try:
         response = client.responses.create(
@@ -371,17 +448,35 @@ def _dedupe_near_lines(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _compact_output(text: str, max_chars: int = MAX_OUTPUT_CHARS_DEFAULT) -> str:
+def _trim_to_char_limit(text: str, char_limit: int) -> str:
     cleaned = _dedupe_near_lines(str(text or "").strip())
-    limit = max(600, min(int(max_chars or MAX_OUTPUT_CHARS_DEFAULT), MAX_OUTPUT_CHARS_ABSOLUTE))
-    if len(cleaned) <= limit:
+    if len(cleaned) <= char_limit:
         return cleaned
 
-    cut = cleaned[:limit].rstrip()
-    last_break = max(cut.rfind("\n\n"), cut.rfind("\n- "), cut.rfind("\nQ:"))
-    if last_break > int(limit * 0.65):
+    cut = cleaned[:char_limit].rstrip()
+    break_points = [cut.rfind("\n\nBLOC"), cut.rfind("\nBLOC"), cut.rfind("\n- "), cut.rfind("\n")]
+    last_break = max(break_points)
+    if last_break > int(char_limit * 0.65):
         cut = cut[:last_break].rstrip()
-    return cut + "\n\nA UTILISER EN PRIORITE\nLa version courte ci-dessus pour éviter une landing trop longue."
+    return cut.rstrip()
+
+
+def _compact_output(text: str, *, char_limit: int, page_type: str) -> str:
+    hard_limit = _safe_int(char_limit, DEFAULT_OUTPUT_CHARS)
+    cleaned = _trim_to_char_limit(text, hard_limit)
+
+    # Sécurité anti-page-de-vente trop longue : si un lead magnet dépasse encore,
+    # on retire les blocs secondaires au lieu de renvoyer un pavé.
+    if page_type == "lead_magnet" and len(cleaned) > hard_limit:
+        parts = cleaned.split("\n\nBLOC")
+        cleaned = parts[0]
+        for part in parts[1:5]:
+            candidate = cleaned + "\n\nBLOC" + part
+            if len(candidate) > hard_limit:
+                break
+            cleaned = candidate
+
+    return cleaned.strip()
 
 
 def generate_lead_content(
@@ -391,18 +486,28 @@ def generate_lead_content(
     emotional_style: Optional[str] = None,
     business_context: Optional[str] = None,
     memories: Optional[Iterable[dict]] = None,
+    objective: Optional[str] = None,
+    angle: Optional[str] = None,
+    audience: Optional[str] = None,
+    tone: Optional[str] = None,
+    max_length: Optional[int] = None,
+    cta_url: Optional[str] = None,
+    page_type: Optional[str] = None,
 ) -> str:
     client = _get_client()
-    target_chars = _target_chars(goal, business_context)
-    max_out = _max_tokens_for_target_chars(goal, target_chars)
-
-    prompt = build_lead_prompt(
+    prompt, char_limit, inferred_page_type = build_lead_prompt(
         goal=goal,
         brief=brief,
         emotional_style=emotional_style,
         business_context=business_context,
         memories=list(memories or [])[:MAX_MEMORY_ITEMS],
-        target_chars=target_chars,
+        objective=objective,
+        angle=angle,
+        audience=audience,
+        tone=tone,
+        max_length=max_length,
+        cta_url=cta_url,
+        page_type=page_type,
     )
 
     model = _choose_model()
@@ -419,12 +524,12 @@ def generate_lead_content(
 
     for candidate_model in candidate_models:
         try:
-            content = _chat_completion(client, model=candidate_model, messages=messages, max_out=max_out)
+            content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
             if content:
-                return _compact_output(content, target_chars)
-            content = _responses_completion(client, model=candidate_model, prompt=prompt, max_out=max_out)
+                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
+            content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
             if content:
-                return _compact_output(content, target_chars)
+                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
             errors.append(f"{candidate_model}: réponse vide")
         except Exception as exc:
             errors.append(f"{candidate_model}: {exc}")

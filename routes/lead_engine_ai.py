@@ -135,20 +135,14 @@ def generate(
             },
         )
 
-    # Coût LGD volontairement plafonné : le coût réel OpenAI est optimisé
-    # côté service (prompt court + sortie limitée). Le quota utilisateur doit
-    # protéger LGD sans créer une frustration quotidienne excessive.
+    # V4 : quota utilisateur volontairement doux.
+    # Le Lead Engine ne doit pas bloquer un utilisateur Ultime après quelques essais.
+    # Le coût est plafonné côté OpenAI par le service : prompt court + sortie courte.
     estimated_tokens = max(
-        450,
+        220,
         min(
-            _estimate_tokens(
-                payload.goal,
-                payload.brief,
-                payload.emotional_style or "",
-                payload.business_context or "",
-            )
-            + 650,
-            1_600,
+            _estimate_tokens(payload.goal, payload.brief, payload.emotional_style or "") + 260,
+            850,
         ),
     )
 
@@ -156,10 +150,10 @@ def generate(
         db.query(LeadEngineMemory)
         .filter(LeadEngineMemory.user_id == user_id)
         .order_by(LeadEngineMemory.created_at.desc(), LeadEngineMemory.id.desc())
-        .limit(3)
+        .limit(1)
         .all()
     )
-    serialized_memories = [_serialize_memory(row) for row in memories]
+    serialized_memories = [] if payload.goal == "rewrite_landing" else [_serialize_memory(row) for row in memories]
 
     try:
         content = generate_lead_content(

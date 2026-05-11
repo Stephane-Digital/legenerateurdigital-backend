@@ -14,34 +14,33 @@ except Exception:  # pragma: no cover
     OpenAI = None  # type: ignore
 
 
-SYSTEM_PROMPT = '''
-Tu es LEAD ENGINE V2, l'IA premium de LGD.
+# ============================================================
+# LGD — Lead Engine IA
+# Version PROD économique V3
+# Objectif : conserver une réponse premium exploitable tout en divisant
+# fortement la consommation de tokens côté OpenAI et côté quotas LGD.
+# ============================================================
 
-Rôle : stratège funnel, copywriter direct-response, expert lead magnet, landing page,
-offre irrésistible, psychologie d'achat et conversion.
+SYSTEM_PROMPT = """
+Tu es LEAD ENGINE LGD, expert senior en marketing digital, landing pages,
+lead magnets et conversion.
 
-Ta mission : transformer un brief utilisateur souvent flou en contenu exploitable,
-plus clair, plus désirable, plus crédible et plus orienté action qu'une IA générique.
+Réponds en français, avec un style humain, direct, premium et concret.
+Priorité : produire un contenu immédiatement exploitable, sans blabla.
 
-Méthode invisible avant réponse :
-1. clarifier la cible,
-2. identifier douleur, désir, objection, urgence et niveau de conscience,
-3. choisir l'angle marketing le plus fort,
-4. structurer promesse, bénéfices, preuve, CTA,
-5. produire une sortie directement utilisable.
+Règles :
+- phrases courtes, naturelles, orientées bénéfices ;
+- pas de jargon inutile ;
+- pas de promesse magique ;
+- pas de Markdown lourd ;
+- pas de répétitions ;
+- privilégie la clarté, l'émotion et l'action.
+""".strip()
 
-Règles absolues :
-- voix humaine, jamais robotique ;
-- concret > abstrait ;
-- bénéfices spécifiques > slogans ;
-- crédible > promesse magique ;
-- émotion + clarté + action ;
-- jamais de copie mot à mot d'un contenu fourni ;
-- si le brief est faible, enrichis-le avec des hypothèses raisonnables clairement utiles ;
-- propose des variantes A/B quand cela augmente la conversion ;
-- ajoute systématiquement un angle principal recommandé et explique brièvement pourquoi il est prioritaire ;
-- si possible, propose une version "simple débutant" et une version "premium avancée".
-'''.strip()
+
+MAX_BRIEF_CHARS = 1800
+MAX_MEMORY_ITEMS = 3
+MAX_MEMORY_CHARS = 420
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -65,9 +64,9 @@ def _get_client() -> "OpenAI":
 
 
 def _choose_model() -> str:
+    # Modèle économique par défaut : le Lead Engine doit rester rentable en PROD.
     return (
         _setting("OPENAI_LEAD_ENGINE_MODEL")
-        or _setting("OPENAI_MODEL")
         or "gpt-4o-mini"
     )
 
@@ -78,35 +77,58 @@ def _fallback_model(primary_model: str) -> str:
         return configured
     if primary_model.lower() != "gpt-4o-mini":
         return "gpt-4o-mini"
-    return "gpt-4o"
+    return "gpt-4o-mini"
+
+
+def _clip(value: Optional[str], limit: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "…"
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
-    lines = []
-    for item in memories:
-        memory_type = str(item.get("memory_type") or "memoire")
-        goal = str(item.get("goal") or "").strip()
-        content = str(item.get("content") or "").strip()
-        emotional = str(item.get("emotional_profile") or "").strip()
-        business = str(item.get("business_context") or "").strip()
+    lines: list[str] = []
+
+    for item in list(memories or [])[:MAX_MEMORY_ITEMS]:
+        memory_type = str(item.get("memory_type") or "memoire")[:40]
+        goal = _clip(str(item.get("goal") or ""), 90)
+        content = _clip(str(item.get("content") or ""), MAX_MEMORY_CHARS)
+        business = _clip(str(item.get("business_context") or ""), 110)
 
         if not content:
             continue
 
-        line = f"- type={memory_type}"
+        line = f"- {memory_type}"
         if goal:
             line += f" | objectif={goal}"
-        if emotional:
-            line += f" | emotion={emotional}"
         if business:
             line += f" | contexte={business}"
         line += f" | contenu={content}"
         lines.append(line)
 
     if not lines:
-        return "Aucune mémoire exploitable pour le moment."
+        return "Aucune mémoire utile."
 
     return "\n".join(lines)
+
+
+def _goal_instruction(goal: str) -> str:
+    value = str(goal or "landing_complete")
+
+    if value == "hooks":
+        return "Fournis 8 hooks courts, puissants et différenciés. Puis recommande les 2 meilleurs."
+    if value == "cta":
+        return "Fournis 10 CTA courts, orientés passage à l'action, avec 3 niveaux d'intensité."
+    if value == "benefits":
+        return "Fournis une liste claire de bénéfices : immédiats, émotionnels, business, puis objections traitées."
+    if value == "variants":
+        return "Fournis 3 angles A/B/C courts : promesse, accroche, preuve, CTA."
+
+    return (
+        "Fournis une landing complète mais compacte : hero, sous-promesse, bénéfices, "
+        "mécanisme, preuve, objections, CTA, FAQ courte."
+    )
 
 
 def build_lead_prompt(
@@ -117,38 +139,32 @@ def build_lead_prompt(
     business_context: Optional[str],
     memories: Iterable[dict],
 ) -> str:
-    return f'''
-OBJECTIF DEMANDÉ
-{goal}
+    safe_goal = _clip(goal, 80)
+    safe_brief = _clip(brief, MAX_BRIEF_CHARS)
+    safe_style = _clip(emotional_style, 180) or "humain premium"
+    safe_context = _clip(business_context, 240) or "lead generation premium"
 
-BRIEF UTILISATEUR
-{brief}
+    return f"""
+Objectif : {safe_goal}
 
-STYLE ÉMOTIONNEL ATTENDU
-{emotional_style or 'humain premium'}
+Brief utilisateur :
+{safe_brief}
 
-CONTEXTE BUSINESS COURANT
-{business_context or 'non précisé'}
+Style : {safe_style}
+Contexte : {safe_context}
 
-MÉMOIRE UTILISATEUR À PRENDRE EN COMPTE
+Mémoire utile :
 {_memory_block(memories)}
 
-CADRE STRATÉGIQUE À APPLIQUER
-- Déduis la cible réelle, le niveau de conscience, la douleur dominante et le désir principal.
-- Identifie l'objection qui bloque le passage à l'action.
-- Transforme l'idée en angle de conversion clair.
-- Garde une écriture simple, premium, humaine et orientée résultat.
-- Ne copie jamais un exemple fourni : extrais la mécanique et reformule complètement.
+Mission :
+{_goal_instruction(safe_goal)}
 
-INSTRUCTIONS DE SORTIE
-- Réponds en français.
-- Donne une réponse directement exploitable dans Lead Engine.
-- Si l'objectif est une landing, structure : hero, promesse, sous-promesse, bénéfices, mécanisme, preuve, objections, CTA, FAQ.
-- Si l'objectif est un lead magnet, fournis : titre, promesse, plan, bénéfices, hook, CTA, angle différenciant.
-- Si l'objectif est hooks/CTA, fournis des variantes A/B/C fortes et différenciées.
-- Termine par une recommandation courte : "À utiliser en priorité : ...".
-- Ajoute une mini-section "Pourquoi cet angle peut convertir" en 2 lignes maximum.
-'''.strip()
+Contraintes de sortie :
+- réponse structurée et directement copiable ;
+- pas d'introduction inutile ;
+- pas de conclusion longue ;
+- termine par : À utiliser en priorité : ...
+""".strip()
 
 
 def _text_from_chat_response(response: Any) -> str:
@@ -197,25 +213,29 @@ def _text_from_responses_response(response: Any) -> str:
 
 
 def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]]) -> str:
+    # Plafond volontairement bas : assez pour une sortie premium compacte,
+    # pas assez pour brûler 7k à 15k tokens par génération.
+    max_out = 950
+
     try:
         if model.lower().startswith("gpt-5"):
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_completion_tokens=4200,
+                max_completion_tokens=max_out,
             )
         else:
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.62,
-                max_tokens=2200,
+                temperature=0.55,
+                max_tokens=max_out,
             )
     except TypeError:
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=2200,
+            max_tokens=max_out,
         )
     except Exception as exc:
         error_text = str(exc).lower()
@@ -223,7 +243,7 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]])
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_completion_tokens=4200,
+                max_completion_tokens=max_out,
             )
         else:
             raise
@@ -240,7 +260,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
             model=model,
             instructions=SYSTEM_PROMPT,
             input=prompt,
-            max_output_tokens=2600,
+            max_output_tokens=950,
         )
     except TypeError:
         response = client.responses.create(
@@ -249,7 +269,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_output_tokens=2600,
+            max_output_tokens=950,
         )
     except Exception:
         return ""
@@ -271,7 +291,7 @@ def generate_lead_content(
         brief=brief,
         emotional_style=emotional_style,
         business_context=business_context,
-        memories=list(memories or []),
+        memories=list(memories or [])[:MAX_MEMORY_ITEMS],
     )
 
     model = _choose_model()
@@ -281,8 +301,12 @@ def generate_lead_content(
     ]
 
     errors: list[str] = []
+    candidate_models = [model]
+    fallback = _fallback_model(model)
+    if fallback not in candidate_models:
+        candidate_models.append(fallback)
 
-    for candidate_model in [model, _fallback_model(model)]:
+    for candidate_model in candidate_models:
         try:
             content = _chat_completion(client, model=candidate_model, messages=messages)
             if content:

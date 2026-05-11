@@ -26,7 +26,7 @@ class LeadGenerateRequest(BaseModel):
     angle: Optional[str] = Field(default=None, max_length=120)
     audience: Optional[str] = Field(default=None, max_length=160)
     tone: Optional[str] = Field(default=None, max_length=120)
-    max_length: Optional[int] = Field(default=None, ge=40, le=1200)
+    max_length: Optional[int] = Field(default=None, ge=400, le=3000)
     cta_url: Optional[str] = Field(default=None, max_length=600)
     page_type: Optional[str] = Field(default=None, max_length=120)
 

@@ -76,6 +76,11 @@ def _estimate_tokens(*parts: str) -> int:
     return max(1, int(len(text) / 4))
 
 
+def _safe_max_length(value: Any) -> int:
+    n = _to_int(value, 120)
+    return max(40, min(n, 1200))
+
+
 @router.post("/save-memory")
 def save_memory(
     payload: LeadMemoryCreate,
@@ -135,14 +140,26 @@ def generate(
             },
         )
 
-    # V4 : quota utilisateur volontairement doux.
-    # Le Lead Engine ne doit pas bloquer un utilisateur Ultime après quelques essais.
-    # Le coût est plafonné côté OpenAI par le service : prompt court + sortie courte.
+    max_length = _safe_max_length(payload.max_length)
+
+    # LGD V8 : estimation douce mais alignée avec les options réelles du Copilote.
+    # Le coût OpenAI reste plafonné dans le service ; ici on décrémente sans punir l'utilisateur.
     estimated_tokens = max(
-        220,
+        180,
         min(
-            _estimate_tokens(payload.goal, payload.brief, payload.emotional_style or "") + 260,
-            850,
+            _estimate_tokens(
+                payload.goal,
+                payload.brief,
+                payload.emotional_style or "",
+                payload.business_context or "",
+                payload.objective or "",
+                payload.angle or "",
+                payload.audience or "",
+                payload.tone or "",
+                payload.page_type or "",
+            )
+            + 220,
+            780,
         ),
     )
 
@@ -162,6 +179,13 @@ def generate(
             emotional_style=payload.emotional_style,
             business_context=payload.business_context,
             memories=serialized_memories,
+            objective=payload.objective,
+            angle=payload.angle,
+            audience=payload.audience,
+            tone=payload.tone,
+            max_length=max_length,
+            cta_url=payload.cta_url,
+            page_type=payload.page_type,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"LEAD_ENGINE_AI_ERROR: {exc}") from exc
@@ -176,15 +200,25 @@ def generate(
             },
         )
 
-    tokens_consumed = estimated_tokens
-
     memory = LeadEngineMemory(
         user_id=user_id,
         memory_type="generation",
         goal=payload.goal,
         content=content,
         emotional_profile=payload.emotional_style,
-        business_context=payload.business_context,
+        business_context=" | ".join(
+            part
+            for part in [
+                payload.business_context,
+                f"objective={payload.objective}" if payload.objective else "",
+                f"angle={payload.angle}" if payload.angle else "",
+                f"audience={payload.audience}" if payload.audience else "",
+                f"tone={payload.tone}" if payload.tone else "",
+                f"page_type={payload.page_type}" if payload.page_type else "",
+                f"max_length={max_length}" if max_length else "",
+            ]
+            if str(part or "").strip()
+        ),
     )
     db.add(memory)
     db.commit()
@@ -192,7 +226,6 @@ def generate(
     return {
         "content": content,
         "memory_items_used": len(serialized_memories),
-        "tokens_consumed": tokens_consumed,
+        "tokens_consumed": estimated_tokens,
         "quota": _quota_snapshot(updated_quota),
     }
-

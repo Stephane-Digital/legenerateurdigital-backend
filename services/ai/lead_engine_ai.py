@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 try:
     from config.settings import settings  # type: ignore
@@ -38,8 +38,8 @@ Règles absolues :
 - émotion + clarté + action ;
 - jamais de copie mot à mot d'un contenu fourni ;
 - si le brief est faible, enrichis-le avec des hypothèses raisonnables clairement utiles ;
-- propose des variantes A/B quand cela augmente la conversion.
-- ajoute systématiquement un angle principal recommandé et explique brièvement pourquoi il est prioritaire.
+- propose des variantes A/B quand cela augmente la conversion ;
+- ajoute systématiquement un angle principal recommandé et explique brièvement pourquoi il est prioritaire ;
 - si possible, propose une version "simple débutant" et une version "premium avancée".
 '''.strip()
 
@@ -68,8 +68,17 @@ def _choose_model() -> str:
     return (
         _setting("OPENAI_LEAD_ENGINE_MODEL")
         or _setting("OPENAI_MODEL")
-        or "gpt-5"
+        or "gpt-4o-mini"
     )
+
+
+def _fallback_model(primary_model: str) -> str:
+    configured = _setting("OPENAI_LEAD_ENGINE_FALLBACK_MODEL") or _setting("OPENAI_FALLBACK_MODEL")
+    if configured and configured != primary_model:
+        return configured
+    if primary_model.lower() != "gpt-4o-mini":
+        return "gpt-4o-mini"
+    return "gpt-4o"
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -142,6 +151,112 @@ INSTRUCTIONS DE SORTIE
 '''.strip()
 
 
+def _text_from_chat_response(response: Any) -> str:
+    try:
+        if not getattr(response, "choices", None):
+            return ""
+        message = response.choices[0].message
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    value = item.get("text") or item.get("content") or ""
+                    if isinstance(value, dict):
+                        value = value.get("value") or value.get("text") or ""
+                    if value:
+                        parts.append(str(value))
+                else:
+                    value = getattr(item, "text", None) or getattr(item, "content", None) or ""
+                    if value:
+                        parts.append(str(value))
+            return "\n".join(parts).strip()
+    except Exception:
+        return ""
+    return ""
+
+
+def _text_from_responses_response(response: Any) -> str:
+    direct = getattr(response, "output_text", None)
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+
+    parts: list[str] = []
+    try:
+        for output in getattr(response, "output", []) or []:
+            for content in getattr(output, "content", []) or []:
+                text = getattr(content, "text", None)
+                if text:
+                    parts.append(str(text))
+    except Exception:
+        pass
+
+    return "\n".join(parts).strip()
+
+
+def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]]) -> str:
+    try:
+        if model.lower().startswith("gpt-5"):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=4200,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.62,
+                max_tokens=2200,
+            )
+    except TypeError:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=2200,
+        )
+    except Exception as exc:
+        error_text = str(exc).lower()
+        if "max_tokens" in error_text or "temperature" in error_text or "unsupported" in error_text:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=4200,
+            )
+        else:
+            raise
+
+    return _text_from_chat_response(response)
+
+
+def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
+    if not hasattr(client, "responses"):
+        return ""
+
+    try:
+        response = client.responses.create(
+            model=model,
+            instructions=SYSTEM_PROMPT,
+            input=prompt,
+            max_output_tokens=2600,
+        )
+    except TypeError:
+        response = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            max_output_tokens=2600,
+        )
+    except Exception:
+        return ""
+
+    return _text_from_responses_response(response)
+
+
 def generate_lead_content(
     *,
     goal: str,
@@ -165,39 +280,18 @@ def generate_lead_content(
         {"role": "user", "content": prompt},
     ]
 
-    try:
-        if model.lower().startswith("gpt-5"):
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_completion_tokens=1800,
-            )
-        else:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.62,
-                max_tokens=1800,
-            )
-    except TypeError:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=1800,
-        )
-    except Exception as exc:
-        error_text = str(exc)
-        if "max_tokens" in error_text or "temperature" in error_text or "unsupported" in error_text.lower():
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_completion_tokens=1800,
-            )
-        else:
-            raise
+    errors: list[str] = []
 
-    content = response.choices[0].message.content if response.choices else ""
-    content = (content or "").strip()
-    if not content:
-        raise RuntimeError("Réponse OpenAI vide pour Lead Engine.")
-    return content
+    for candidate_model in [model, _fallback_model(model)]:
+        try:
+            content = _chat_completion(client, model=candidate_model, messages=messages)
+            if content:
+                return content
+            content = _responses_completion(client, model=candidate_model, prompt=prompt)
+            if content:
+                return content
+            errors.append(f"{candidate_model}: réponse vide")
+        except Exception as exc:
+            errors.append(f"{candidate_model}: {exc}")
+
+    raise RuntimeError("Réponse OpenAI vide pour Lead Engine. " + " | ".join(errors))

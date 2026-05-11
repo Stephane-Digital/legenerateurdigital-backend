@@ -37,7 +37,7 @@ Objectif : clarté, conversion, action. Zéro remplissage.
 MAX_BRIEF_CHARS = 900
 MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 220
-MAX_OUTPUT_CHARS = 3200
+MAX_OUTPUT_CHARS = 2400
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -125,8 +125,8 @@ def _goal_instruction(goal: str) -> str:
         return "Réécris le contenu en version landing plus courte, plus nette, sans ajouter de longueur."
 
     return (
-        "Produit une structure landing compacte : hero, sous-promesse, 5 bénéfices, "
-        "mécanisme, preuve, objections, CTA, FAQ courte."
+        "Produit UNE SEULE structure landing en blocs séparés : hero, 5 bénéfices, "
+        "mécanisme, preuve, objections, CTA, FAQ courte. Aucun doublon."
     )
 
 
@@ -159,29 +159,31 @@ Mission :
 {_goal_instruction(safe_goal)}
 
 Contraintes de sortie obligatoires :
-- maximum 900 mots ;
+- maximum 450 mots ;
+- chaque section doit pouvoir devenir un bloc visuel séparé ;
+- jamais deux versions de la même landing ;
 - jamais de pavé narratif ;
 - jamais d'email complet ;
 - ne recopie pas le brief ;
 - blocs courts directement utilisables dans la landing ;
 - format exact :
   HERO
-  TITRE : ...
-  SOUS-TITRE : ...
-  CTA PRINCIPAL : ...
+  TITRE : 1 titre court et puissant
+  SOUS-TITRE : 1 phrase claire
+  CTA PRINCIPAL : 1 CTA court
   BENEFICES
-  - ...
+  - 5 puces maximum
   MECANISME
-  ...
+  3 à 5 lignes maximum
   PREUVE / RASSURANCE
-  ...
+  3 à 4 lignes maximum
   OBJECTIONS
-  - ...
+  - 4 objections + réponses courtes maximum
   FAQ COURTE
-  Q: ...
-  R: ...
+  Q: question courte
+  R: réponse courte
   A UTILISER EN PRIORITE
-  ...
+  1 recommandation courte
 """.strip()
 
 
@@ -233,7 +235,7 @@ def _text_from_responses_response(response: Any) -> str:
 def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]]) -> str:
     # Plafond volontairement bas : assez pour une sortie premium compacte,
     # pas assez pour brûler 7k à 15k tokens par génération.
-    max_out = 520
+    max_out = 360
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -278,7 +280,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
             model=model,
             instructions=SYSTEM_PROMPT,
             input=prompt,
-            max_output_tokens=520,
+            max_output_tokens=360,
         )
     except TypeError:
         response = client.responses.create(
@@ -287,7 +289,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_output_tokens=520,
+            max_output_tokens=360,
         )
     except Exception:
         return ""

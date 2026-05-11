@@ -16,36 +16,51 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V6 — qualité copywriting Claude-like + coût maîtrisé
-# Objectif : obtenir une sortie plus humaine, premium et exploitable en blocs
-# sans multiplier les appels IA ni augmenter fortement les tokens.
+# Version PROD V8 — Copilote réellement branché
+# Objectif : utiliser enfin objective / angle / audience / tone /
+# max_length / cta_url / page_type pour générer des blocs Lead Magnet
+# ou Landing selon l'intention réelle, sans exploser les tokens.
 # ============================================================
 
 SYSTEM_PROMPT = """
-Tu es LEAD ENGINE LGD, copywriter conversion senior spécialisé en landing pages SIO,
-pages de capture, offres digitales, MRR, créateurs bloqués et marketing direct.
+Tu es LEAD ENGINE LGD, copywriter conversion senior spécialisé en lead magnets,
+pages de capture, landing pages premium, offres digitales, MRR, créateurs bloqués
+et marketing direct francophone.
 
-Ta mission n'est pas d'écrire beaucoup. Ta mission est de clarifier, condenser et vendre.
-Tu transformes un brief brut en blocs landing courts, humains et positionnables.
+Ta mission n'est pas d'écrire beaucoup. Ta mission est de faire ressentir vite,
+clarifier vite et déclencher une action mesurable.
 
-Style attendu : naturel, premium, humain, concret, tendu vers l'action.
-Effet recherché : qualité rédactionnelle proche d'un très bon copywriter humain.
+Règle stratégique majeure :
+- si l'objectif est de générer des leads, tu écris une page de capture / lead magnet ;
+- tu ne vends pas directement la formation ;
+- tu vends l'envie de laisser son email pour obtenir une micro-transformation rapide ;
+- si l'objectif est vente, webinar, rendez-vous ou bridge page, tu adaptes la structure.
+
+Méthode interne : HOOK → DOULEUR → IDENTIFICATION → CURIOSITÉ → MICRO-PROMESSE →
+MÉCANISME SIMPLE → RÉASSURANCE → CTA EMAIL.
+Le lecteur doit penser : « ils parlent exactement de moi » puis « je veux recevoir ça ».
+
+Style attendu : humain, premium, direct, empathique, concret, crédible, sans bullshit.
 
 Interdits absolus :
+- ignorer les options du Copilote ;
 - recopier le brief ;
 - écrire un email ;
 - produire un pavé narratif ;
 - écrire deux versions ;
 - répéter la même idée ;
 - promettre des résultats irréalistes ;
-- utiliser un ton corporate froid.
+- vendre agressivement une formation quand l'objectif est la capture email ;
+- utiliser un ton corporate froid ;
+- écrire comme une formation internet générique ;
+- utiliser des slogans creux du type « libérez votre potentiel ».
 """.strip()
 
 
-MAX_BRIEF_CHARS = 850
+MAX_BRIEF_CHARS = 950
 MAX_MEMORY_ITEMS = 1
-MAX_MEMORY_CHARS = 180
-MAX_OUTPUT_CHARS = 2200
+MAX_MEMORY_CHARS = 140
+MAX_OUTPUT_CHARS = 2600
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -69,11 +84,7 @@ def _get_client() -> "OpenAI":
 
 
 def _choose_model() -> str:
-    # Modèle économique par défaut : le Lead Engine doit rester rentable en PROD.
-    return (
-        _setting("OPENAI_LEAD_ENGINE_MODEL")
-        or "gpt-4o-mini"
-    )
+    return _setting("OPENAI_LEAD_ENGINE_MODEL") or "gpt-4o-mini"
 
 
 def _fallback_model(primary_model: str) -> str:
@@ -92,14 +103,26 @@ def _clip(value: Optional[str], limit: int) -> str:
     return text[:limit].rstrip() + "…"
 
 
+def _norm(value: Optional[str]) -> str:
+    return str(value or "").strip().lower()
+
+
+def _safe_int(value: Optional[int], default: int = 120) -> int:
+    try:
+        n = int(value) if value is not None else default
+    except Exception:
+        n = default
+    return max(40, min(n, 1200))
+
+
 def _memory_block(memories: Iterable[dict]) -> str:
     lines: list[str] = []
 
     for item in list(memories or [])[:MAX_MEMORY_ITEMS]:
         memory_type = str(item.get("memory_type") or "memoire")[:40]
-        goal = _clip(str(item.get("goal") or ""), 90)
+        goal = _clip(str(item.get("goal") or ""), 70)
         content = _clip(str(item.get("content") or ""), MAX_MEMORY_CHARS)
-        business = _clip(str(item.get("business_context") or ""), 110)
+        business = _clip(str(item.get("business_context") or ""), 80)
 
         if not content:
             continue
@@ -118,25 +141,178 @@ def _memory_block(memories: Iterable[dict]) -> str:
     return "\n".join(lines)
 
 
-def _goal_instruction(goal: str) -> str:
+def _infer_page_type(goal: str, objective: Optional[str], page_type: Optional[str]) -> str:
+    raw = " ".join([_norm(goal), _norm(objective), _norm(page_type)])
+
+    if any(word in raw for word in ["lead", "email", "capture", "prospect", "magnet"]):
+        return "lead_magnet"
+    if any(word in raw for word in ["webinar", "atelier", "masterclass"]):
+        return "webinar"
+    if any(word in raw for word in ["rdv", "rendez", "appel", "call", "diagnostic"]):
+        return "appointment"
+    if any(word in raw for word in ["bridge", "transition", "prévente", "prevente"]):
+        return "bridge"
+    if any(word in raw for word in ["vente", "vendre", "achat", "payer", "commande"]):
+        return "sales"
+    return "lead_magnet" if _norm(goal) == "landing_complete" else "modular"
+
+
+def _page_strategy(page_type: str) -> str:
+    if page_type == "lead_magnet":
+        return (
+            "TYPE DE PAGE : LEAD MAGNET / CAPTURE EMAIL. Priorité absolue : récupérer l'email. "
+            "Ne cherche pas à vendre directement l'offre principale. Crée de la curiosité, une micro-promesse "
+            "rapide, une faible friction et un CTA d'inscription."
+        )
+    if page_type == "webinar":
+        return (
+            "TYPE DE PAGE : WEBINAR / MASTERCLASS. Priorité : inscription. Promets une prise de conscience forte, "
+            "un apprentissage concret et une raison claire d'assister."
+        )
+    if page_type == "appointment":
+        return (
+            "TYPE DE PAGE : PRISE DE RENDEZ-VOUS. Priorité : réserver un diagnostic. Rassure, qualifie, "
+            "montre le bénéfice de l'appel et limite la friction."
+        )
+    if page_type == "bridge":
+        return (
+            "TYPE DE PAGE : BRIDGE PAGE. Priorité : faire passer d'une prise de conscience à l'étape suivante. "
+            "Crée confiance, contexte et transition."
+        )
+    if page_type == "sales":
+        return (
+            "TYPE DE PAGE : LANDING DE VENTE. Priorité : désir + confiance + passage à l'achat. "
+            "Reste crédible, sans promesses irréalistes."
+        )
+    return "TYPE DE SORTIE : MODULE COURT. Réponds uniquement au bouton demandé."
+
+
+def _copilot_options_block(
+    *,
+    objective: Optional[str],
+    angle: Optional[str],
+    audience: Optional[str],
+    tone: Optional[str],
+    max_length: int,
+    cta_url: Optional[str],
+    page_type: str,
+) -> str:
+    return f"""
+OPTIONS COPILOTE À RESPECTER STRICTEMENT :
+- Objectif sélectionné : {_clip(objective, 90) or "Générer des leads"}
+- Type de page déduit : {page_type}
+- Angle sélectionné : {_clip(angle, 90) or "Angle conversion clair"}
+- Audience sélectionnée : {_clip(audience, 120) or "Audience froide ou tiède"}
+- Ton / style sélectionné : {_clip(tone, 90) or "Humain premium"}
+- Longueur max UI : {max_length}
+- URL CTA : {_clip(cta_url, 220) or "Non fournie"}
+
+Ces options ne sont pas décoratives : elles doivent piloter le vocabulaire, le niveau d'émotion,
+le type de promesse, la longueur et le CTA final.
+""".strip()
+
+
+def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
-        return "Produit 6 hooks landing très courts. Format : Hook + intention. Maximum 12 mots par hook."
+        return (
+            f"Produit 10 hooks pour {page_type}. Chaque hook doit faire {min(max_length, 120)} caractères maximum. "
+            "Format : HOOK 1: ..."
+        )
     if value == "cta":
-        return "Produit 8 CTA courts classés doux / direct / urgent. Maximum 8 mots par CTA."
+        return (
+            f"Produit 10 CTA courts pour {page_type}. Chaque CTA doit faire {min(max_length, 80)} caractères maximum. "
+            "Classe-les en doux / direct / émotionnel."
+        )
     if value == "benefits":
-        return "Produit 6 bénéfices courts : résultat concret + émotion débloquée. Pas de paragraphe."
+        return (
+            "Produit 8 bénéfices courts. Chaque bénéfice = résultat concret + émotion débloquée. "
+            f"Maximum {min(max_length, 140)} caractères par puce."
+        )
     if value == "variants":
-        return "Produit 3 angles A/B/C ultra courts : promesse, douleur, CTA."
+        return (
+            f"Produit 3 variantes A/B/C pour {page_type}. Pour chaque variante : hook, micro-promesse, CTA. "
+            f"Maximum {min(max_length, 180)} caractères par ligne."
+        )
     if value == "rewrite_landing":
-        return "Réécris le contenu en version landing plus courte, plus nette, sans ajouter de longueur."
+        return (
+            "Réécris le contenu fourni en blocs plus courts, mieux structurés, plus orientés capture email si l'objectif est lead. "
+            "Ne rajoute pas de longueur."
+        )
+
+    if page_type == "lead_magnet":
+        return (
+            "Produit UNE structure Lead Magnet en blocs séparés et injectables dans le canvas. "
+            "Objectif : inscription email maximale, pas vente directe."
+        )
 
     return (
-        "Produit UNE SEULE structure landing claire en blocs séparés : hero, bénéfices, "
-        "mécanisme, preuve, objections, FAQ courte et recommandation. "
-        "Chaque bloc doit pouvoir être placé visuellement dans l'éditeur. Aucun doublon."
+        f"Produit UNE structure {page_type} premium en blocs séparés et injectables dans le canvas. "
+        "Aucun doublon, aucun pavé."
     )
+
+
+def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> str:
+    line_limit = min(max_length, 160)
+
+    if page_type == "lead_magnet":
+        return f"""
+FORMAT EXACT OBLIGATOIRE, SANS MARKDOWN DÉCORATIF :
+BLOC 1 — HERO
+TITRE: 1 phrase émotionnelle, {line_limit} caractères max
+SOUS-TITRE: micro-promesse gratuite, {line_limit} caractères max
+CTA: appel à laisser son email, 70 caractères max
+URL CTA: {_clip(cta_url, 220) or "à renseigner"}
+
+BLOC 2 — IDENTIFICATION
+3 puces maximum : situation vécue, frustration, envie de changement
+
+BLOC 3 — CE QUE TU VAS RECEVOIR
+4 puces maximum : contenu gratuit, résultat rapide, clarté gagnée, prochaine action
+
+BLOC 4 — POURQUOI ÇA DÉBLOQUE
+3 lignes maximum : mécanisme simple, pas de magie, action concrète
+
+BLOC 5 — RÉASSURANCE
+3 puces maximum : pas besoin d'audience, pas besoin d'être expert, pas de promesse fake
+
+BLOC 6 — CTA FINAL
+1 phrase courte de transition + 1 CTA email
+
+BLOC 7 — MICRO FAQ
+2 questions / réponses maximum
+
+BLOC PRIORITAIRE À INJECTER
+Indique le bloc qui doit être placé au-dessus de la ligne de flottaison.
+""".strip()
+
+    return f"""
+FORMAT EXACT OBLIGATOIRE, SANS MARKDOWN DÉCORATIF :
+BLOC 1 — HERO
+TITRE: {line_limit} caractères max
+SOUS-TITRE: {line_limit} caractères max
+CTA: 70 caractères max
+URL CTA: {_clip(cta_url, 220) or "à renseigner"}
+
+BLOC 2 — DOULEUR
+3 puces maximum
+
+BLOC 3 — PROMESSE
+3 puces maximum
+
+BLOC 4 — MÉCANISME
+3 lignes maximum
+
+BLOC 5 — PREUVE / RASSURANCE
+3 puces maximum
+
+BLOC 6 — CTA FINAL
+1 phrase + 1 CTA
+
+BLOC PRIORITAIRE À INJECTER
+1 recommandation courte.
+""".strip()
 
 
 def build_lead_prompt(
@@ -146,56 +322,66 @@ def build_lead_prompt(
     emotional_style: Optional[str],
     business_context: Optional[str],
     memories: Iterable[dict],
+    objective: Optional[str] = None,
+    angle: Optional[str] = None,
+    audience: Optional[str] = None,
+    tone: Optional[str] = None,
+    max_length: Optional[int] = None,
+    cta_url: Optional[str] = None,
+    page_type: Optional[str] = None,
 ) -> str:
     safe_goal = _clip(goal, 80)
     safe_brief = _clip(brief, MAX_BRIEF_CHARS)
-    safe_style = _clip(emotional_style, 180) or "humain premium"
-    safe_context = _clip(business_context, 240) or "lead generation premium"
+    safe_style = _clip(emotional_style, 160) or "humain premium"
+    safe_context = _clip(business_context, 220) or "lead generation premium"
+    safe_max_length = _safe_int(max_length, 120)
+    inferred_page_type = _infer_page_type(safe_goal, objective, page_type)
 
     return f"""
-Objectif : {safe_goal}
+Objectif interne : {safe_goal}
+
+{_page_strategy(inferred_page_type)}
+
+{_copilot_options_block(
+    objective=objective,
+    angle=angle,
+    audience=audience,
+    tone=tone,
+    max_length=safe_max_length,
+    cta_url=cta_url,
+    page_type=inferred_page_type,
+)}
 
 Brief utilisateur :
 {safe_brief}
 
-Style : {safe_style}
-Contexte : {safe_context}
+Style complémentaire : {safe_style}
+Contexte métier : {safe_context}
 
 Mémoire utile :
 {_memory_block(memories)}
 
 Mission :
-{_goal_instruction(safe_goal)}
+{_goal_instruction(safe_goal, inferred_page_type, safe_max_length)}
 
 Contraintes de sortie obligatoires :
-- maximum 420 mots ;
-- phrases courtes, concrètes, sans remplissage ;
-- chaque section doit devenir un bloc visuel séparé ;
-- une seule landing, jamais deux variantes dans la même réponse ;
+- respecte strictement objectif, angle, audience, ton, longueur et URL CTA ;
+- si Objectif = générer des leads, écris pour capturer un email, pas pour vendre directement ;
+- chaque section doit être un bloc visuel séparé positionnable dans l'éditeur ;
+- pas de pavé ;
+- phrases courtes ;
+- une seule version ;
 - aucune longue introduction ;
-- aucun email complet ;
 - ne recopie pas le brief : transforme-le ;
 - ne parle pas de toi ;
-- évite les slogans creux comme « révolutionner », « débloquer ton potentiel », « solution ultime » ;
-- privilégie les verbes d'action, la situation réelle, le bénéfice visible ;
-- format exact, sans markdown décoratif :
-  HERO
-  TITRE : 1 titre émotionnel mais clair, 12 mots maximum
-  SOUS-TITRE : 1 phrase orientée résultat, 24 mots maximum
-  CTA PRINCIPAL : 1 CTA court, 6 mots maximum
-  BENEFICES
-  - 5 puces maximum, chacune en résultat concret
-  MECANISME
-  3 lignes maximum : comment LGD aide concrètement
-  PREUVE / RASSURANCE
-  3 lignes maximum : crédibilité, simplicité, passage à l'action
-  OBJECTIONS
-  - 4 objections maximum, réponse courte après →
-  FAQ COURTE
-  Q: question courte
-  R: réponse courte
-  A UTILISER EN PRIORITE
-  1 recommandation courte pour le bloc le plus fort à mettre au-dessus de la ligne de flottaison
+- commence par une phrase qui arrête le scroll ;
+- parle d'abord de la situation vécue et de la douleur, puis de la micro-promesse ;
+- évite « révolutionner », « libérez votre potentiel », « solution ultime » ;
+- utilise le vocabulaire de l'audience sélectionnée ;
+- si l'angle mentionne MRR, parle de formations achetées, d'inaction, de première vente, de dispersion, sans caricature ;
+- si le ton est storytelling, ajoute une micro-scène concrète sans allonger.
+
+{_format_rules(inferred_page_type, safe_max_length, cta_url)}
 """.strip()
 
 
@@ -245,9 +431,7 @@ def _text_from_responses_response(response: Any) -> str:
 
 
 def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]]) -> str:
-    # Plafond volontairement bas : assez pour une sortie premium compacte,
-    # pas assez pour brûler 7k à 15k tokens par génération.
-    max_out = 420
+    max_out = 520
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -260,7 +444,7 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]])
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.55,
+                temperature=0.52,
                 max_tokens=max_out,
             )
     except TypeError:
@@ -292,7 +476,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
             model=model,
             instructions=SYSTEM_PROMPT,
             input=prompt,
-            max_output_tokens=420,
+            max_output_tokens=520,
         )
     except TypeError:
         response = client.responses.create(
@@ -301,7 +485,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_output_tokens=420,
+            max_output_tokens=520,
         )
     except Exception:
         return ""
@@ -329,10 +513,10 @@ def _compact_output(text: str) -> str:
         return cleaned
 
     cut = cleaned[:MAX_OUTPUT_CHARS].rstrip()
-    last_break = max(cut.rfind("\n\n"), cut.rfind("\n- "), cut.rfind("\nQ:"))
-    if last_break > 1800:
+    last_break = max(cut.rfind("\n\nBLOC"), cut.rfind("\nBLOC"), cut.rfind("\n- "))
+    if last_break > 1700:
         cut = cut[:last_break].rstrip()
-    return cut + "\n\nA UTILISER EN PRIORITE\nLa version courte ci-dessus pour éviter une landing trop longue."
+    return cut + "\n\nBLOC PRIORITAIRE À INJECTER\nConserve la version courte ci-dessus pour éviter une page trop longue."
 
 
 def generate_lead_content(
@@ -342,6 +526,13 @@ def generate_lead_content(
     emotional_style: Optional[str] = None,
     business_context: Optional[str] = None,
     memories: Optional[Iterable[dict]] = None,
+    objective: Optional[str] = None,
+    angle: Optional[str] = None,
+    audience: Optional[str] = None,
+    tone: Optional[str] = None,
+    max_length: Optional[int] = None,
+    cta_url: Optional[str] = None,
+    page_type: Optional[str] = None,
 ) -> str:
     client = _get_client()
     prompt = build_lead_prompt(
@@ -350,6 +541,13 @@ def generate_lead_content(
         emotional_style=emotional_style,
         business_context=business_context,
         memories=list(memories or [])[:MAX_MEMORY_ITEMS],
+        objective=objective,
+        angle=angle,
+        audience=audience,
+        tone=tone,
+        max_length=max_length,
+        cta_url=cta_url,
+        page_type=page_type,
     )
 
     model = _choose_model()

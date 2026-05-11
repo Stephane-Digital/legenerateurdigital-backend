@@ -159,15 +159,42 @@ def generate_lead_content(
         memories=list(memories or []),
     )
 
-    response = client.chat.completions.create(
-        model=_choose_model(),
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.62,
-        max_tokens=1400,
-    )
+    model = _choose_model()
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    try:
+        if model.lower().startswith("gpt-5"):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=1800,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.62,
+                max_tokens=1800,
+            )
+    except TypeError:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=1800,
+        )
+    except Exception as exc:
+        error_text = str(exc)
+        if "max_tokens" in error_text or "temperature" in error_text or "unsupported" in error_text.lower():
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=1800,
+            )
+        else:
+            raise
 
     content = response.choices[0].message.content if response.choices else ""
     content = (content or "").strip()

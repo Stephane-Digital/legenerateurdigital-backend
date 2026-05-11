@@ -16,7 +16,7 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V8.1 — Lead Magnet Blocks + plafond caractères réel
+# Version PROD V8.8 — Lead Magnet Blocks + plafond caractères 10k réel
 # Objectif : respecter réellement les options Copilote, générer des blocs
 # courts injectables dans le canvas, et plafonner la sortie au max_length UI.
 # ============================================================
@@ -44,7 +44,7 @@ MAX_BRIEF_CHARS = 850
 MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 120
 DEFAULT_OUTPUT_CHARS = 1800
-MAX_OUTPUT_CHARS = 3000
+MAX_OUTPUT_CHARS = 10000
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -100,7 +100,7 @@ def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
 def _target_output_tokens(char_limit: int) -> int:
     # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
     # On garde une marge pour éviter les sorties longues côté OpenAI.
-    return max(220, min(520, int(char_limit / 4) + 60))
+    return max(220, min(1800, int(char_limit / 4) + 60))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:

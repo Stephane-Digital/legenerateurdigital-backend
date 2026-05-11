@@ -97,7 +97,7 @@ def _quota_plan_key(quota) -> str | None:
 
 def _effective_plan_key(db: Session, user) -> str:
     try:
-        quota = get_or_create_quota(db, _user_id(user), feature="coach")
+        quota = get_or_create_quota(db, _user_id(user), feature="global")
         qp = _quota_plan_key(quota)
         if qp:
             return str(qp)
@@ -213,7 +213,7 @@ def _get_display_quota(db: Session, user):
     effective_key = _effective_plan_key(db, user)
 
     try:
-        quota = get_or_create_quota(db, _user_id(user), feature="coach")
+        quota = get_or_create_quota(db, _user_id(user), feature="global")
         data = serialize_quota(quota, plan_key_override=effective_key, feature_override="global")
 
         min_limit = _limit_for_plan(effective_key)
@@ -246,7 +246,7 @@ def get_quota_global(db: Session = Depends(get_db), user=Depends(get_current_use
 @router.post("/consume")
 def consume_quota(amount: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     try:
-        quota = update_quota(db, _user_id(user), amount, feature="coach")
+        quota = update_quota(db, _user_id(user), amount, feature="global")
         if quota is None:
             raise HTTPException(status_code=400, detail="Quota insuffisant")
         effective_key = _effective_plan_key(db, user)

@@ -20,6 +20,16 @@ class LeadGenerateRequest(BaseModel):
     emotional_style: Optional[str] = Field(default="humain, authentique, expert")
     business_context: Optional[str] = None
 
+    # LGD V8 — branchement réel du Copilote IA.
+    # Ces champs sont optionnels pour ne pas casser les anciens appels frontend.
+    objective: Optional[str] = Field(default=None, max_length=120)
+    angle: Optional[str] = Field(default=None, max_length=120)
+    audience: Optional[str] = Field(default=None, max_length=160)
+    tone: Optional[str] = Field(default=None, max_length=120)
+    max_length: Optional[int] = Field(default=None, ge=40, le=1200)
+    cta_url: Optional[str] = Field(default=None, max_length=600)
+    page_type: Optional[str] = Field(default=None, max_length=120)
+
 
 class LeadMemoryOut(BaseModel):
     id: int

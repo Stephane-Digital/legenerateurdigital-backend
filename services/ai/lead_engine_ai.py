@@ -16,28 +16,36 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V4 — économie + qualité landing
-# Objectif : conserver une réponse premium exploitable tout en divisant
-# fortement la consommation de tokens côté OpenAI et côté quotas LGD.
+# Version PROD V6 — qualité copywriting Claude-like + coût maîtrisé
+# Objectif : obtenir une sortie plus humaine, premium et exploitable en blocs
+# sans multiplier les appels IA ni augmenter fortement les tokens.
 # ============================================================
 
 SYSTEM_PROMPT = """
-Tu es LEAD ENGINE LGD, expert senior en landing pages courtes, pages de vente SIO,
-lead magnets et conversion.
+Tu es LEAD ENGINE LGD, copywriter conversion senior spécialisé en landing pages SIO,
+pages de capture, offres digitales, MRR, créateurs bloqués et marketing direct.
 
-Tu ne rédiges PAS un email complet.
-Tu ne recopies PAS le brief.
-Tu transformes le brief en blocs landing courts, directement injectables dans une page.
+Ta mission n'est pas d'écrire beaucoup. Ta mission est de clarifier, condenser et vendre.
+Tu transformes un brief brut en blocs landing courts, humains et positionnables.
 
-Style : français naturel, premium, direct, émotionnel mais maîtrisé.
-Objectif : clarté, conversion, action. Zéro remplissage.
+Style attendu : naturel, premium, humain, concret, tendu vers l'action.
+Effet recherché : qualité rédactionnelle proche d'un très bon copywriter humain.
+
+Interdits absolus :
+- recopier le brief ;
+- écrire un email ;
+- produire un pavé narratif ;
+- écrire deux versions ;
+- répéter la même idée ;
+- promettre des résultats irréalistes ;
+- utiliser un ton corporate froid.
 """.strip()
 
 
-MAX_BRIEF_CHARS = 900
+MAX_BRIEF_CHARS = 850
 MAX_MEMORY_ITEMS = 1
-MAX_MEMORY_CHARS = 220
-MAX_OUTPUT_CHARS = 2400
+MAX_MEMORY_CHARS = 180
+MAX_OUTPUT_CHARS = 2200
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -125,8 +133,9 @@ def _goal_instruction(goal: str) -> str:
         return "Réécris le contenu en version landing plus courte, plus nette, sans ajouter de longueur."
 
     return (
-        "Produit UNE SEULE structure landing en blocs séparés : hero, 5 bénéfices, "
-        "mécanisme, preuve, objections, CTA, FAQ courte. Aucun doublon."
+        "Produit UNE SEULE structure landing claire en blocs séparés : hero, bénéfices, "
+        "mécanisme, preuve, objections, FAQ courte et recommandation. "
+        "Chaque bloc doit pouvoir être placé visuellement dans l'éditeur. Aucun doublon."
     )
 
 
@@ -159,31 +168,34 @@ Mission :
 {_goal_instruction(safe_goal)}
 
 Contraintes de sortie obligatoires :
-- maximum 450 mots ;
-- chaque section doit pouvoir devenir un bloc visuel séparé ;
-- jamais deux versions de la même landing ;
-- jamais de pavé narratif ;
-- jamais d'email complet ;
-- ne recopie pas le brief ;
-- blocs courts directement utilisables dans la landing ;
-- format exact :
+- maximum 420 mots ;
+- phrases courtes, concrètes, sans remplissage ;
+- chaque section doit devenir un bloc visuel séparé ;
+- une seule landing, jamais deux variantes dans la même réponse ;
+- aucune longue introduction ;
+- aucun email complet ;
+- ne recopie pas le brief : transforme-le ;
+- ne parle pas de toi ;
+- évite les slogans creux comme « révolutionner », « débloquer ton potentiel », « solution ultime » ;
+- privilégie les verbes d'action, la situation réelle, le bénéfice visible ;
+- format exact, sans markdown décoratif :
   HERO
-  TITRE : 1 titre court et puissant
-  SOUS-TITRE : 1 phrase claire
-  CTA PRINCIPAL : 1 CTA court
+  TITRE : 1 titre émotionnel mais clair, 12 mots maximum
+  SOUS-TITRE : 1 phrase orientée résultat, 24 mots maximum
+  CTA PRINCIPAL : 1 CTA court, 6 mots maximum
   BENEFICES
-  - 5 puces maximum
+  - 5 puces maximum, chacune en résultat concret
   MECANISME
-  3 à 5 lignes maximum
+  3 lignes maximum : comment LGD aide concrètement
   PREUVE / RASSURANCE
-  3 à 4 lignes maximum
+  3 lignes maximum : crédibilité, simplicité, passage à l'action
   OBJECTIONS
-  - 4 objections + réponses courtes maximum
+  - 4 objections maximum, réponse courte après →
   FAQ COURTE
   Q: question courte
   R: réponse courte
   A UTILISER EN PRIORITE
-  1 recommandation courte
+  1 recommandation courte pour le bloc le plus fort à mettre au-dessus de la ligne de flottaison
 """.strip()
 
 
@@ -235,7 +247,7 @@ def _text_from_responses_response(response: Any) -> str:
 def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]]) -> str:
     # Plafond volontairement bas : assez pour une sortie premium compacte,
     # pas assez pour brûler 7k à 15k tokens par génération.
-    max_out = 360
+    max_out = 420
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -280,7 +292,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
             model=model,
             instructions=SYSTEM_PROMPT,
             input=prompt,
-            max_output_tokens=360,
+            max_output_tokens=420,
         )
     except TypeError:
         response = client.responses.create(
@@ -289,7 +301,7 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_output_tokens=360,
+            max_output_tokens=420,
         )
     except Exception:
         return ""
@@ -297,8 +309,22 @@ def _responses_completion(client: Any, *, model: str, prompt: str) -> str:
     return _text_from_responses_response(response)
 
 
+def _dedupe_near_lines(text: str) -> str:
+    seen: set[str] = set()
+    lines: list[str] = []
+    for raw in str(text or "").splitlines():
+        line = raw.rstrip()
+        key = line.lower().strip(" -•:;.!?")
+        if key and len(key) > 24:
+            if key in seen:
+                continue
+            seen.add(key)
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
 def _compact_output(text: str) -> str:
-    cleaned = str(text or "").strip()
+    cleaned = _dedupe_near_lines(str(text or "").strip())
     if len(cleaned) <= MAX_OUTPUT_CHARS:
         return cleaned
 

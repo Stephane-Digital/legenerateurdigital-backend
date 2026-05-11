@@ -135,10 +135,11 @@ def generate(
             },
         )
 
-    # Coût volontairement réaliste et plafonné : Lead Engine ne doit pas bloquer
-    # un compte premium avec une réserve artificielle trop haute avant l'appel IA.
+    # Coût LGD volontairement plafonné : le coût réel OpenAI est optimisé
+    # côté service (prompt court + sortie limitée). Le quota utilisateur doit
+    # protéger LGD sans créer une frustration quotidienne excessive.
     estimated_tokens = max(
-        900,
+        450,
         min(
             _estimate_tokens(
                 payload.goal,
@@ -146,8 +147,8 @@ def generate(
                 payload.emotional_style or "",
                 payload.business_context or "",
             )
-            + 1_600,
-            3_500,
+            + 650,
+            1_600,
         ),
     )
 
@@ -155,7 +156,7 @@ def generate(
         db.query(LeadEngineMemory)
         .filter(LeadEngineMemory.user_id == user_id)
         .order_by(LeadEngineMemory.created_at.desc(), LeadEngineMemory.id.desc())
-        .limit(20)
+        .limit(3)
         .all()
     )
     serialized_memories = [_serialize_memory(row) for row in memories]

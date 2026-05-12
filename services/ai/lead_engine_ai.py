@@ -360,6 +360,21 @@ C’est pensé pour les débutants, les personnes qui manquent de temps et celle
 Laissez votre email et recevez le guide pour arrêter de tourner en rond et poser la première brique de votre système de prospects.{url_line}
 """.strip()
 
+
+
+def _is_strong_landing_output(text: str) -> bool:
+    raw = str(text or "")
+    marker_count = raw.count("[[LGD_BLOCK:")
+    visible = _sanitize_done_for_you_output(raw).strip()
+    forbidden = ("voici la structure", "clarifie", "renforce", "augmente", "tu peux", "vous pouvez", "conseil")
+    if any(word in visible.lower() for word in forbidden):
+        return False
+    return marker_count >= 6 and len(visible) >= 900
+
+
+def _landing_needs_strict_retry(goal: str, page_type: str, content: str) -> bool:
+    return _norm(goal) == "landing_complete" and page_type == "lead_magnet" and not _is_strong_landing_output(content)
+
 def build_lead_prompt(
     *,
     goal: str,
@@ -568,9 +583,6 @@ def _compact_output(text: str, *, char_limit: int, page_type: str, brief: str = 
     hard_limit = _safe_int(char_limit, DEFAULT_OUTPUT_CHARS)
     cleaned = _sanitize_done_for_you_output(_trim_to_char_limit(text, hard_limit))
 
-    if page_type == "lead_magnet" and cleaned.count("[[LGD_BLOCK:") < 6:
-        cleaned = _fallback_landing_blocks(brief=brief, cta_url=cta_url)
-
     # Sécurité anti-page-de-vente trop longue : si un lead magnet dépasse encore,
     # on retire les blocs secondaires au lieu de renvoyer un pavé.
     if page_type == "lead_magnet" and len(cleaned) > hard_limit:
@@ -632,10 +644,28 @@ def generate_lead_content(
         try:
             content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
             if content:
-                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                if _landing_needs_strict_retry(goal, inferred_page_type, compact):
+                    strict_prompt = prompt + "\n\nCORRECTION OBLIGATOIRE : ta réponse précédente était trop courte ou pas assez structurée. Génère maintenant une vraie landing complète DONE FOR YOU avec au moins 8 marqueurs [[LGD_BLOCK:...]], du texte final visible, aucun conseil, aucun label technique visible, aucune phrase méta."
+                    strict_messages = [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": strict_prompt},
+                    ]
+                    retry = _chat_completion(client, model=candidate_model, messages=strict_messages, char_limit=max(char_limit, 7200))
+                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 7200), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
+                    if _is_strong_landing_output(retry_compact):
+                        return retry_compact
+                return compact
             content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
             if content:
-                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                if _landing_needs_strict_retry(goal, inferred_page_type, compact):
+                    strict_prompt = prompt + "\n\nCORRECTION OBLIGATOIRE : génère une vraie landing complète DONE FOR YOU avec au moins 8 marqueurs [[LGD_BLOCK:...]], du texte final visible, aucun conseil, aucun label technique visible, aucune phrase méta."
+                    retry = _responses_completion(client, model=candidate_model, prompt=strict_prompt, char_limit=max(char_limit, 7200))
+                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 7200), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
+                    if _is_strong_landing_output(retry_compact):
+                        return retry_compact
+                return compact
             errors.append(f"{candidate_model}: réponse vide")
         except Exception as exc:
             errors.append(f"{candidate_model}: {exc}")

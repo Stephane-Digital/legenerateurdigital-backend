@@ -16,34 +16,40 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V9.2 — Expert Lead Magnet Auto Length
+# Version PROD V9 — Expert Lead Magnet
 # Objectif : produire un vrai lead magnet de copywriter senior,
-# multi-blocs, orienté capture email, sans frein UI de caractères.
+# multi-blocs, orienté capture email, sans casser le plafond caractères UI.
 # ============================================================
 
 SYSTEM_PROMPT = """
-Tu es LEAD ENGINE LGD, copywriter conversion senior et stratège lead magnet premium.
-Tu maîtrises le marketing digital, les offres MRR, les entrepreneurs bloqués, la capture email,
-le copywriting direct response, la psychologie d'achat et les tunnels lead magnet → email → vente.
+Tu es LEAD ENGINE LGD, copywriter conversion senior et stratège marketing digital premium.
+Tu ne donnes pas de conseils. Tu ne proposes pas une méthode à suivre. Tu fais le travail à la place de l'utilisateur.
 
-Mission : transformer un brief brut en une vraie page de capture d'email digne d'un expert marketing.
-Le but n'est PAS de vendre l'offre principale directement. Le but est de rendre l'opt-in irrésistible :
-la personne doit se dire « ils ont compris mon problème, je veux recevoir ça maintenant ».
+Mission : transformer un brief brut en contenu final prêt à injecter dans une page ou un lead magnet.
+Le résultat doit être rédigé comme si un expert marketing digital avait déjà construit la page.
+
+Mode obligatoire : DONE FOR YOU.
+Interdits absolus :
+- "voici une structure" ;
+- "tu peux" ;
+- "il faudrait" ;
+- "clarifie" ;
+- "renforce" ;
+- "à adapter" ;
+- donner des conseils au lieu d'écrire le contenu final ;
+- afficher des labels techniques dans le texte final visible ;
+- produire un email ;
+- générer une page de vente si l'objectif est de générer des leads.
+
+Pour une landing complète, tu dois produire une vraie page finale cohérente, pas un plan.
+Le format BLOC 1, BLOC 2, etc. est uniquement un repère technique pour le parser frontend.
+Dans chaque bloc, écris directement le contenu final propre, sans préfixes visibles comme TITRE:, CTA:, DOULEUR:, BÉNÉFICES:.
+
+Si l'objectif est de générer des leads : crée un lead magnet qui maximise l'opt-in email.
+Si l'objectif est de vendre : crée une page de vente courte, persuasive et crédible.
 
 Niveau attendu : humain, premium, précis, émotionnel, crédible, Claude-like, jamais robotique.
-Tu écris avec tension psychologique, scènes concrètes, bénéfice clair, mécanisme crédible et CTA fort.
-
-Règles absolues :
-- respecter les options Copilote : objectif, angle, audience, ton, URL CTA ;
-- générer plusieurs blocs séparés et injectables dans le canvas ;
-- minimum 5 blocs pour une landing complète, idéalement 7 à 8 blocs si la longueur le permet ;
-- chaque bloc doit avoir une fonction marketing claire ;
-- l'URL CTA doit apparaître dans le bloc HERO et/ou CTA final si elle est fournie ;
-- écrire comme un marketeur senior, pas comme un assistant générique ;
-- ne pas recopier le brief ;
-- ne pas produire d'email ;
-- ne pas faire une page de vente si l'objectif est génération de leads ;
-- ne pas utiliser de promesses irréalistes, ni de slogans creux.
+Chaque bloc doit faire avancer le lecteur : attention → identification → désir → confiance → action.
 """.strip()
 
 
@@ -52,24 +58,6 @@ MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 120
 DEFAULT_OUTPUT_CHARS = 1800
 MAX_OUTPUT_CHARS = 10000
-
-AUTO_OUTPUT_CHARS_BY_GOAL = {
-    "hooks": 1400,
-    "cta": 900,
-    "benefits": 1600,
-    "variants": 2200,
-    "rewrite_landing": 3500,
-    "landing_complete": 7000,
-}
-
-AUTO_OUTPUT_CHARS_BY_PAGE_TYPE = {
-    "lead_magnet": 7000,
-    "sales": 7000,
-    "webinar": 6200,
-    "appointment": 5200,
-    "bridge": 5200,
-    "modular": 1800,
-}
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -122,19 +110,10 @@ def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
     return max(400, min(n, MAX_OUTPUT_CHARS))
 
 
-def _auto_output_chars(goal: str, page_type: str) -> int:
-    value = str(goal or "landing_complete").strip()
-    if value in AUTO_OUTPUT_CHARS_BY_GOAL:
-        return AUTO_OUTPUT_CHARS_BY_GOAL[value]
-    return AUTO_OUTPUT_CHARS_BY_PAGE_TYPE.get(page_type, DEFAULT_OUTPUT_CHARS)
-
-
-def _target_output_tokens(char_limit: int, goal: str = "landing_complete", page_type: str = "lead_magnet") -> int:
-    # Longueur pilotée par le besoin marketing, pas par un champ utilisateur.
-    # Landing complète premium : assez d'espace pour 6 à 8 blocs réels.
-    if goal == "landing_complete" or page_type in {"lead_magnet", "sales", "webinar"}:
-        return max(1200, min(2200, int(char_limit / 3.2) + 220))
-    return max(220, min(900, int(char_limit / 3.5) + 120))
+def _target_output_tokens(char_limit: int) -> int:
+    # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
+    # On garde une marge pour éviter les sorties longues côté OpenAI.
+    return max(220, min(1800, int(char_limit / 4) + 60))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -184,6 +163,7 @@ def _page_strategy(page_type: str) -> str:
         return (
             "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
             "Ne vends pas l'offre principale. Vends la micro-transformation gratuite qui donne envie de laisser son email. "
+            "Écris la page finale en mode DONE FOR YOU : aucun conseil, aucun plan, aucun texte à compléter. "
             "Structure la page comme un vrai tunnel psychologique : accroche, identification, promesse du guide, contenu, mécanisme, réassurance, objection killer, CTA."
         )
     if page_type == "webinar":
@@ -203,7 +183,7 @@ def _copilot_options_block(
     angle: Optional[str],
     audience: Optional[str],
     tone: Optional[str],
-    auto_length: int,
+    max_length: int,
     cta_url: Optional[str],
     page_type: str,
 ) -> str:
@@ -214,12 +194,12 @@ Type de page : {page_type}
 Angle : {_clip(angle, 90) or "conversion claire"}
 Audience : {_clip(audience, 120) or "audience froide ou tiède"}
 Ton : {_clip(tone, 90) or "humain premium"}
-Profil de génération automatique : {auto_length} caractères cible backend, sans champ utilisateur bloquant
+Longueur automatique recommandée : {max_length} caractères maximum de sécurité, tous blocs inclus
 URL CTA : {_clip(cta_url, 220) or "à renseigner"}
 """.strip()
 
 
-def _goal_instruction(goal: str, page_type: str, auto_length: int) -> str:
+def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
@@ -235,59 +215,54 @@ def _goal_instruction(goal: str, page_type: str, auto_length: int) -> str:
 
     if page_type == "lead_magnet":
         return (
-            "Produit une structure Lead Magnet Expert en blocs injectables. "
-            "Chaque bloc doit pouvoir devenir un calque texte distinct. "
+            "Rédige un Lead Magnet Expert final, prêt à injecter, en blocs techniques séparés. "
+            "Chaque bloc doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
             "Objectif : capture email maximale, pas vente directe. "
-            "Minimum 6 blocs. Cible 7 à 8 blocs pour une landing complète. "
-            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme et CTA."
+            "Minimum 6 blocs. Cible 8 blocs. "
+            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA."
         )
 
     return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
 
 
-def _format_rules(page_type: str, auto_length: int, cta_url: Optional[str]) -> str:
+def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> str:
     if page_type == "lead_magnet":
         return f"""
-FORMAT EXACT À RESPECTER :
-BLOC 1 — HERO / PATTERN INTERRUPT
-TITRE: 1 phrase forte qui arrête le scroll et nomme la douleur réelle
-SOUS-TITRE: 1 promesse gratuite claire, orientée capture email
-CTA: 1 CTA court orienté opt-in
-URL CTA: {_clip(cta_url, 220) or "à renseigner"}
+FORMAT TECHNIQUE À RESPECTER POUR LE PARSER :
+BLOC 1 — HERO
+Une accroche finale forte qui nomme la situation réelle du prospect, suivie d'une promesse gratuite claire et d'un appel à recevoir le lead magnet.
+Si une URL CTA est fournie, ajoute-la naturellement à la fin du bloc : {_clip(cta_url, 220) or "à renseigner"}.
 
 BLOC 2 — IDENTIFICATION
-3 à 4 lignes ou puces : situation vécue, frustration, fatigue, dispersion, envie de débloquer quelque chose.
-Le lecteur doit penser : « c'est exactement moi ».
+Un texte court et humain qui fait penser : « c'est exactement moi ». Parle de la frustration, de la fatigue, de la dispersion ou du blocage concret.
 
-BLOC 3 — MICRO-TRANSFORMATION PROMISE
-Explique le résultat rapide que le lead magnet aide à obtenir, sans promettre de richesse ni de miracle.
-Maximum 3 puces.
+BLOC 3 — MICRO-TRANSFORMATION
+Explique le petit résultat immédiat que le prospect peut obtenir en laissant son email. Pas de miracle, pas de richesse rapide.
 
-BLOC 4 — CE QUE TU VAS DÉCOUVRIR
-4 à 5 puces désirables, concrètes, orientées action immédiate.
-Chaque puce doit donner envie de laisser son email.
+BLOC 4 — CE QUE LA PERSONNE REÇOIT
+4 à 5 lignes désirables qui donnent envie de télécharger le lead magnet. Chaque ligne doit être concrète et orientée action.
 
-BLOC 5 — MÉCANISME SIMPLE
-2 à 4 lignes : pourquoi ce lead magnet aide là où les formations génériques échouent.
-Concret, crédible, orienté méthode.
+BLOC 5 — MÉCANISME
+Explique pourquoi ce lead magnet aide là où les formations génériques échouent. Concret, crédible, orienté méthode.
 
 BLOC 6 — OBJECTION KILLER
-3 objections maximum avec réponse courte après →
-Exemples : pas le temps, déjà essayé, pas d'audience, peur d'encore échouer.
+Réponds directement aux objections majeures : déjà essayé, pas le temps, pas d'audience, peur d'encore échouer.
 
-BLOC 7 — RÉASSURANCE / PREUVE
-3 puces maximum : simple, réaliste, pas besoin d'être expert, pas besoin d'audience, pas de promesse magique.
+BLOC 7 — RÉASSURANCE
+Rassure sans vendre du rêve : simple, réaliste, progressif, sans besoin d'être expert.
 
-BLOC 8 — CTA FINAL EMAIL
-1 phrase émotionnelle + 1 CTA clair + URL CTA si fournie.
+BLOC 8 — CTA FINAL
+Une phrase émotionnelle + un CTA clair pour laisser son email. Ajoute l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
 
-BLOC 9 — MICRO FAQ
-2 questions/réponses maximum. À supprimer uniquement si la limite de caractères est trop basse.
-
-OBJECTIF DE DENSITÉ : produire une page complète lisible, 6 à 8 blocs utiles.
-Ne renvoie jamais un seul bloc pour Landing complète.
-Si tu dois raccourcir, garde au minimum les blocs 1, 2, 3, 4, 6 et 8.
+RÈGLES IMPORTANTES :
+- Les mots BLOC 1, BLOC 2, etc. sont autorisés uniquement comme séparateurs techniques.
+- Dans le contenu de chaque bloc, n'écris jamais TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, PROMESSE:, QUESTION:, RÉPONSE:.
+- N'écris jamais des conseils. Écris le contenu final utilisable.
+- Ne renvoie jamais un seul bloc pour Landing complète.
+- Minimum obligatoire : 6 blocs.
+TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
+
 
     return f"""
 FORMAT EXACT À RESPECTER :
@@ -309,7 +284,7 @@ BLOC 4 — MÉCANISME
 BLOC 5 — CTA FINAL
 1 phrase + 1 CTA.
 
-OBJECTIF DE DENSITÉ : page courte mais complète, sans pavé inutile.
+TOTAL MAXIMUM : {max_length} caractères.
 """.strip()
 
 
@@ -332,8 +307,8 @@ def build_lead_prompt(
     safe_brief = _clip(brief, MAX_BRIEF_CHARS)
     safe_style = _clip(emotional_style, 140) or "humain premium"
     safe_context = _clip(business_context, 200) or "lead generation premium"
+    safe_max_length = _safe_int(max_length, DEFAULT_OUTPUT_CHARS)
     inferred_page_type = _infer_page_type(safe_goal, objective, page_type)
-    safe_max_length = _auto_output_chars(safe_goal, inferred_page_type)
 
     prompt = f"""
 {_page_strategy(inferred_page_type)}
@@ -343,7 +318,7 @@ def build_lead_prompt(
     angle=angle,
     audience=audience,
     tone=tone,
-    auto_length=safe_max_length,
+    max_length=safe_max_length,
     cta_url=cta_url,
     page_type=inferred_page_type,
 )}
@@ -360,14 +335,15 @@ MISSION :
 {_goal_instruction(safe_goal, inferred_page_type, safe_max_length)}
 
 CONTRAINTES STRICTES :
-- Génère une réponse complète mais utile : pas de pavé, pas de bloc vide, pas de raccourci paresseux.
-- Réponds uniquement avec les blocs demandés, sans introduction ni commentaire.
+- Longueur automatique : utilise assez de texte pour produire une vraie page complète, sans dépasser {safe_max_length} caractères.
+- Réponds uniquement avec le contenu final demandé, sans introduction ni commentaire.
 - N'écris pas une page de vente si l'objectif est de générer des leads.
 - Ne parle pas d'achat direct dans le HERO d'un lead magnet.
 - Chaque bloc doit être court et positionnable séparément dans le canvas.
 - Utilise l'angle, l'audience et le ton fournis.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
+- Interdiction absolue de donner des conseils : le texte doit être final, prêt à utiliser.
 - Si le ton est storytelling : ajoute une micro-scène concrète, mais sans transformer la page en récit long.
 - Chaque bloc doit apporter une nouvelle raison de laisser son email.
 - Ne répète pas le même bloc sous deux formes.
@@ -424,8 +400,8 @@ def _text_from_responses_response(response: Any) -> str:
     return "\n".join(parts).strip()
 
 
-def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]], char_limit: int, goal: str, page_type: str) -> str:
-    max_out = _target_output_tokens(char_limit, goal=goal, page_type=page_type)
+def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]], char_limit: int) -> str:
+    max_out = _target_output_tokens(char_limit)
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -461,11 +437,11 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]],
     return _text_from_chat_response(response)
 
 
-def _responses_completion(client: Any, *, model: str, prompt: str, char_limit: int, goal: str, page_type: str) -> str:
+def _responses_completion(client: Any, *, model: str, prompt: str, char_limit: int) -> str:
     if not hasattr(client, "responses"):
         return ""
 
-    max_out = _target_output_tokens(char_limit, goal=goal, page_type=page_type)
+    max_out = _target_output_tokens(char_limit)
 
     try:
         response = client.responses.create(
@@ -579,10 +555,10 @@ def generate_lead_content(
 
     for candidate_model in candidate_models:
         try:
-            content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit, goal=goal, page_type=inferred_page_type)
+            content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
             if content:
                 return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
-            content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit, goal=goal, page_type=inferred_page_type)
+            content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
             if content:
                 return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
             errors.append(f"{candidate_model}: réponse vide")

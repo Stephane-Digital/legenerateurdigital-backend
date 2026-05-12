@@ -16,7 +16,7 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V9 — Expert Lead Magnet
+# Version PROD V10.5 — Done For You Lead Engine
 # Objectif : produire un vrai lead magnet de copywriter senior,
 # multi-blocs, orienté capture email, sans casser le plafond caractères UI.
 # ============================================================
@@ -46,6 +46,7 @@ Si l'objectif est de vendre : crée une page de vente courte, persuasive et cré
 
 Niveau attendu : humain, premium, précis, émotionnel, crédible, expert marketing digital, jamais robotique.
 Chaque section doit faire avancer le lecteur : attention → identification → désir → confiance → action.
+Tu ne copies jamais les consignes de format dans la réponse. Tu remplaces toujours les consignes par du texte final concret.
 """.strip()
 
 
@@ -228,37 +229,37 @@ FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
 Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
 
 [[LGD_BLOCK:HERO]]
-Une accroche émotionnelle forte + une micro-promesse gratuite + un CTA d'opt-in. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+Rédige directement le hero final visible : une accroche émotionnelle, une micro-promesse gratuite et un CTA d'opt-in. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
 
 [[LGD_BLOCK:IDENTIFICATION]]
-Une scène ou une situation vécue qui fait penser au prospect : « c'est moi ». Parle de blocage, surcharge, frustration, temps perdu ou envie de liberté selon l'audience.
+Rédige directement la scène d'identification finale. Le prospect doit se reconnaître sans lire une consigne.
 
 [[LGD_BLOCK:AGITATION]]
-Le coût concret de rester bloqué : temps perdu, formations accumulées, sentiment de tourner en rond, peur de ne jamais passer à l'action.
+Rédige directement l'agitation finale : le coût concret de rester bloqué, sans conseil ni analyse.
 
 [[LGD_BLOCK:MICRO_TRANSFORMATION]]
-Le petit résultat désirable que le guide gratuit promet : comprendre quoi faire en premier, retrouver une direction, éviter les erreurs, enclencher une action simple.
+Rédige directement la micro-transformation promise par le lead magnet.
 
 [[LGD_BLOCK:CE_QUE_TU_RECOIS]]
-4 à 5 lignes finales, concrètes et désirables sur ce que le prospect reçoit dans le guide. Chaque ligne doit donner envie de laisser son email.
+Rédige directement 4 à 5 lignes finales sur ce que le prospect reçoit dans le guide.
 
 [[LGD_BLOCK:MECANISME]]
-Pourquoi ce lead magnet aide vraiment : une méthode simple, un chemin clair, moins de dispersion, plus d'action. Pas de promesse magique.
+Rédige directement le mécanisme final : pourquoi ce lead magnet aide vraiment, sans promesse magique.
 
 [[LGD_BLOCK:OBJECTION_KILLER]]
-Réponses courtes aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
+Rédige directement les réponses finales aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
 
 [[LGD_BLOCK:REASSURANCE]]
-Rassurance finale : débutant accepté, pas besoin d'être influenceur, pas besoin d'être technique, progression réaliste.
+Rédige directement la réassurance finale : débutant accepté, pas besoin d'être influenceur, progression réaliste.
 
 [[LGD_BLOCK:CTA_FINAL]]
-Une phrase émotionnelle + un CTA clair pour laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+Rédige directement le CTA final : une phrase émotionnelle + un appel clair à laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
 
 RÈGLES NON NÉGOCIABLES :
 - Minimum obligatoire : 8 marqueurs [[LGD_BLOCK:...]].
 - N'écris jamais BLOC 1, TITRE:, SOUS-TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, QUESTION:, RÉPONSE: dans le contenu visible.
 - N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
-- N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier ».
+- N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier », « rédige », « directement », « final visible », « consigne ».
 - Ne renvoie jamais une seule section pour Landing complète.
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()

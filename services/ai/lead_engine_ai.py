@@ -16,9 +16,9 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V9 — Expert Lead Magnet
+# Version PROD V9.2 — Expert Lead Magnet Auto Length
 # Objectif : produire un vrai lead magnet de copywriter senior,
-# multi-blocs, orienté capture email, sans casser le plafond caractères UI.
+# multi-blocs, orienté capture email, sans frein UI de caractères.
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -34,7 +34,7 @@ Niveau attendu : humain, premium, précis, émotionnel, crédible, Claude-like, 
 Tu écris avec tension psychologique, scènes concrètes, bénéfice clair, mécanisme crédible et CTA fort.
 
 Règles absolues :
-- respecter les options Copilote : objectif, angle, audience, ton, longueur, URL CTA ;
+- respecter les options Copilote : objectif, angle, audience, ton, URL CTA ;
 - générer plusieurs blocs séparés et injectables dans le canvas ;
 - minimum 5 blocs pour une landing complète, idéalement 7 à 8 blocs si la longueur le permet ;
 - chaque bloc doit avoir une fonction marketing claire ;
@@ -52,6 +52,24 @@ MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 120
 DEFAULT_OUTPUT_CHARS = 1800
 MAX_OUTPUT_CHARS = 10000
+
+AUTO_OUTPUT_CHARS_BY_GOAL = {
+    "hooks": 1400,
+    "cta": 900,
+    "benefits": 1600,
+    "variants": 2200,
+    "rewrite_landing": 3500,
+    "landing_complete": 7000,
+}
+
+AUTO_OUTPUT_CHARS_BY_PAGE_TYPE = {
+    "lead_magnet": 7000,
+    "sales": 7000,
+    "webinar": 6200,
+    "appointment": 5200,
+    "bridge": 5200,
+    "modular": 1800,
+}
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -104,10 +122,19 @@ def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
     return max(400, min(n, MAX_OUTPUT_CHARS))
 
 
-def _target_output_tokens(char_limit: int) -> int:
-    # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
-    # On garde une marge pour éviter les sorties longues côté OpenAI.
-    return max(220, min(1800, int(char_limit / 4) + 60))
+def _auto_output_chars(goal: str, page_type: str) -> int:
+    value = str(goal or "landing_complete").strip()
+    if value in AUTO_OUTPUT_CHARS_BY_GOAL:
+        return AUTO_OUTPUT_CHARS_BY_GOAL[value]
+    return AUTO_OUTPUT_CHARS_BY_PAGE_TYPE.get(page_type, DEFAULT_OUTPUT_CHARS)
+
+
+def _target_output_tokens(char_limit: int, goal: str = "landing_complete", page_type: str = "lead_magnet") -> int:
+    # Longueur pilotée par le besoin marketing, pas par un champ utilisateur.
+    # Landing complète premium : assez d'espace pour 6 à 8 blocs réels.
+    if goal == "landing_complete" or page_type in {"lead_magnet", "sales", "webinar"}:
+        return max(1200, min(2200, int(char_limit / 3.2) + 220))
+    return max(220, min(900, int(char_limit / 3.5) + 120))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -176,7 +203,7 @@ def _copilot_options_block(
     angle: Optional[str],
     audience: Optional[str],
     tone: Optional[str],
-    max_length: int,
+    auto_length: int,
     cta_url: Optional[str],
     page_type: str,
 ) -> str:
@@ -187,12 +214,12 @@ Type de page : {page_type}
 Angle : {_clip(angle, 90) or "conversion claire"}
 Audience : {_clip(audience, 120) or "audience froide ou tiède"}
 Ton : {_clip(tone, 90) or "humain premium"}
-Longueur maximale totale : {max_length} caractères, tous blocs inclus
+Profil de génération automatique : {auto_length} caractères cible backend, sans champ utilisateur bloquant
 URL CTA : {_clip(cta_url, 220) or "à renseigner"}
 """.strip()
 
 
-def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
+def _goal_instruction(goal: str, page_type: str, auto_length: int) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
@@ -211,14 +238,14 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
             "Produit une structure Lead Magnet Expert en blocs injectables. "
             "Chaque bloc doit pouvoir devenir un calque texte distinct. "
             "Objectif : capture email maximale, pas vente directe. "
-            "Minimum 5 blocs. Cible 7 à 8 blocs si la longueur maximale le permet. "
+            "Minimum 6 blocs. Cible 7 à 8 blocs pour une landing complète. "
             "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme et CTA."
         )
 
     return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
 
 
-def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> str:
+def _format_rules(page_type: str, auto_length: int, cta_url: Optional[str]) -> str:
     if page_type == "lead_magnet":
         return f"""
 FORMAT EXACT À RESPECTER :
@@ -257,9 +284,9 @@ BLOC 8 — CTA FINAL EMAIL
 BLOC 9 — MICRO FAQ
 2 questions/réponses maximum. À supprimer uniquement si la limite de caractères est trop basse.
 
-TOTAL MAXIMUM : {max_length} caractères.
-Si la limite est courte, garde au minimum les blocs 1, 2, 3, 4, 6 et 8.
+OBJECTIF DE DENSITÉ : produire une page complète lisible, 6 à 8 blocs utiles.
 Ne renvoie jamais un seul bloc pour Landing complète.
+Si tu dois raccourcir, garde au minimum les blocs 1, 2, 3, 4, 6 et 8.
 """.strip()
 
     return f"""
@@ -282,7 +309,7 @@ BLOC 4 — MÉCANISME
 BLOC 5 — CTA FINAL
 1 phrase + 1 CTA.
 
-TOTAL MAXIMUM : {max_length} caractères.
+OBJECTIF DE DENSITÉ : page courte mais complète, sans pavé inutile.
 """.strip()
 
 
@@ -305,8 +332,8 @@ def build_lead_prompt(
     safe_brief = _clip(brief, MAX_BRIEF_CHARS)
     safe_style = _clip(emotional_style, 140) or "humain premium"
     safe_context = _clip(business_context, 200) or "lead generation premium"
-    safe_max_length = _safe_int(max_length, DEFAULT_OUTPUT_CHARS)
     inferred_page_type = _infer_page_type(safe_goal, objective, page_type)
+    safe_max_length = _auto_output_chars(safe_goal, inferred_page_type)
 
     prompt = f"""
 {_page_strategy(inferred_page_type)}
@@ -316,7 +343,7 @@ def build_lead_prompt(
     angle=angle,
     audience=audience,
     tone=tone,
-    max_length=safe_max_length,
+    auto_length=safe_max_length,
     cta_url=cta_url,
     page_type=inferred_page_type,
 )}
@@ -333,7 +360,7 @@ MISSION :
 {_goal_instruction(safe_goal, inferred_page_type, safe_max_length)}
 
 CONTRAINTES STRICTES :
-- Respecte la longueur maximale totale : {safe_max_length} caractères, titres inclus.
+- Génère une réponse complète mais utile : pas de pavé, pas de bloc vide, pas de raccourci paresseux.
 - Réponds uniquement avec les blocs demandés, sans introduction ni commentaire.
 - N'écris pas une page de vente si l'objectif est de générer des leads.
 - Ne parle pas d'achat direct dans le HERO d'un lead magnet.
@@ -397,8 +424,8 @@ def _text_from_responses_response(response: Any) -> str:
     return "\n".join(parts).strip()
 
 
-def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]], char_limit: int) -> str:
-    max_out = _target_output_tokens(char_limit)
+def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]], char_limit: int, goal: str, page_type: str) -> str:
+    max_out = _target_output_tokens(char_limit, goal=goal, page_type=page_type)
 
     try:
         if model.lower().startswith("gpt-5"):
@@ -434,11 +461,11 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]],
     return _text_from_chat_response(response)
 
 
-def _responses_completion(client: Any, *, model: str, prompt: str, char_limit: int) -> str:
+def _responses_completion(client: Any, *, model: str, prompt: str, char_limit: int, goal: str, page_type: str) -> str:
     if not hasattr(client, "responses"):
         return ""
 
-    max_out = _target_output_tokens(char_limit)
+    max_out = _target_output_tokens(char_limit, goal=goal, page_type=page_type)
 
     try:
         response = client.responses.create(
@@ -552,10 +579,10 @@ def generate_lead_content(
 
     for candidate_model in candidate_models:
         try:
-            content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
+            content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit, goal=goal, page_type=inferred_page_type)
             if content:
                 return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
-            content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
+            content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit, goal=goal, page_type=inferred_page_type)
             if content:
                 return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
             errors.append(f"{candidate_model}: réponse vide")

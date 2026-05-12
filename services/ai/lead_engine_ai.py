@@ -56,7 +56,7 @@ Chaque bloc doit faire avancer le lecteur : attention → identification → dé
 MAX_BRIEF_CHARS = 850
 MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 120
-DEFAULT_OUTPUT_CHARS = 1800
+DEFAULT_OUTPUT_CHARS = 7200
 MAX_OUTPUT_CHARS = 10000
 
 
@@ -218,7 +218,7 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
             "Rédige un Lead Magnet Expert final, prêt à injecter, en blocs techniques séparés. "
             "Chaque bloc doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
             "Objectif : capture email maximale, pas vente directe. "
-            "Minimum 6 blocs. Cible 8 blocs. "
+            "Minimum 8 blocs obligatoires pour landing_complete. "
             "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA."
         )
 
@@ -259,32 +259,30 @@ RÈGLES IMPORTANTES :
 - Dans le contenu de chaque bloc, n'écris jamais TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, PROMESSE:, QUESTION:, RÉPONSE:.
 - N'écris jamais des conseils. Écris le contenu final utilisable.
 - Ne renvoie jamais un seul bloc pour Landing complète.
-- Minimum obligatoire : 6 blocs.
+- Minimum obligatoire : 8 blocs.
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
 
 
     return f"""
-FORMAT EXACT À RESPECTER :
+FORMAT TECHNIQUE À RESPECTER POUR LE PARSER :
 BLOC 1 — HERO
-TITRE: 1 phrase courte
-SOUS-TITRE: 1 promesse claire
-CTA: 1 CTA court
-URL CTA: {_clip(cta_url, 220) or "à renseigner"}
+Écris le texte final du hero, sans préfixe TITRE:.
 
 BLOC 2 — DOULEUR
-3 puces maximum.
+Écris le texte final de la douleur, sans préfixe DOULEUR:.
 
 BLOC 3 — PROMESSE
-3 puces maximum.
+Écris le texte final de la promesse, sans préfixe PROMESSE:.
 
 BLOC 4 — MÉCANISME
-2 lignes maximum.
+Écris le texte final du mécanisme, sans préfixe MÉCANISME:.
 
 BLOC 5 — CTA FINAL
-1 phrase + 1 CTA.
+Écris le texte final du CTA, sans préfixe CTA:.
+Ajoute l'URL CTA si fournie : {_clip(cta_url, 220) or "à renseigner"}
 
-TOTAL MAXIMUM : {max_length} caractères.
+TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
 
 
@@ -336,14 +334,14 @@ MISSION :
 
 CONTRAINTES STRICTES :
 - Longueur automatique : utilise assez de texte pour produire une vraie page complète, sans dépasser {safe_max_length} caractères.
-- Réponds uniquement avec le contenu final demandé, sans introduction ni commentaire.
+- Réponds uniquement avec le contenu final demandé, sans introduction, commentaire, conseil ni phrase méta.
 - N'écris pas une page de vente si l'objectif est de générer des leads.
 - Ne parle pas d'achat direct dans le HERO d'un lead magnet.
-- Chaque bloc doit être court et positionnable séparément dans le canvas.
+- Chaque bloc doit être propre, finalisé, positionnable séparément dans le canvas, et ne jamais être une consigne.
 - Utilise l'angle, l'audience et le ton fournis.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
-- Interdiction absolue de donner des conseils : le texte doit être final, prêt à utiliser.
+- Interdiction absolue de donner des conseils : le texte doit être final, prêt à utiliser. Ne jamais écrire « voici », « clarifie », « renforce », « augmente », « structure », « à modifier ».
 - Si le ton est storytelling : ajoute une micro-scène concrète, mais sans transformer la page en récit long.
 - Chaque bloc doit apporter une nouvelle raison de laisser son email.
 - Ne répète pas le même bloc sous deux formes.

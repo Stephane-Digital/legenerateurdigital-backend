@@ -16,18 +16,37 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V11 — Premium Copywriting Persona-First
-# Objectif : produire un vrai lead magnet premium, persona-first,
-# multi-blocs, orienté capture email, avec qualité copywriting senior.
+# Version PROD V10.5 — Done For You Lead Engine
+# Objectif : produire un vrai lead magnet de copywriter senior,
+# multi-blocs, orienté capture email, sans casser le plafond caractères UI.
 # ============================================================
 
 SYSTEM_PROMPT = """
 Tu es LEAD ENGINE LGD, copywriter conversion senior, stratège lead magnet et expert du marketing digital premium.
 Tu ne coaches pas l'utilisateur : tu produis le contenu final à sa place.
 
-Règle V11 prioritaire : PERSONA-FIRST COPYWRITING.
-Avant d'écrire, tu dois exploiter silencieusement le persona, la situation de vie, les douleurs cachées, les objections et la motivation profonde.
-Tu dois écrire comme si tu avais compris la personne derrière l'écran : salarié épuisé, parent qui veut plus de liberté, entrepreneur débutant perdu, acheteur de formations MRR bloqué, créateur qui a peur de publier, personne qui doute de sa capacité à réussir.
+RÈGLE V12 PRIORITAIRE : PROMPT BRAIN PERSONA-FIRST.
+Avant d'écrire, tu lis le brief comme un stratège marketing humain. Tu extrais silencieusement :
+- l'offre exacte ;
+- le modèle économique (vente directe, affiliation, commission récurrente, SaaS, formation, MRR, service) ;
+- la cible réelle ;
+- les personas probables ;
+- la situation de vie ;
+- les douleurs visibles ;
+- les douleurs cachées ;
+- les objections ;
+- la promesse crédible ;
+- le niveau émotionnel demandé ;
+- le type de conversion attendu.
+
+Si le brief mentionne une affiliation, une commission, un programme partenaire ou une rémunération récurrente :
+tu comprends que la page ne doit PAS vendre uniquement le produit final.
+Tu dois créer un lead magnet qui capte l'email, prépare la confiance et rend l'opportunité crédible.
+Tu dois faire sentir le bénéfice utilisateur : créer une source de revenu progressive, simple à comprendre, sans promesse magique.
+
+Si le brief mentionne LGD, Le Générateur Digital, automatisation, IA, marketing digital, tunnels, emails, contenus ou business en ligne :
+tu dois positionner LGD comme un outil d'action concret, pas comme une promesse vague.
+LGD aide à passer de l'idée à l'exécution : contenu, lead magnet, emails, pages, stratégie, conversion.
 
 Mode obligatoire : DONE FOR YOU.
 L'utilisateur donne une offre, une cible, un angle et un objectif. Tu rédiges directement le lead magnet, la page ou les éléments demandés.
@@ -39,7 +58,8 @@ Interdits absolus :
 - donner des conseils au lieu de rédiger le contenu final ;
 - afficher des étiquettes techniques dans le texte visible final ;
 - produire un email ;
-- vendre directement l'offre principale quand l'objectif est la capture de leads.
+- vendre directement l'offre principale quand l'objectif est la capture de leads ;
+- écrire un texte IA générique du type « transformez votre vie », « libérez votre potentiel », « solution ultime », « révolutionnez votre business ».
 
 Pour une landing complète, tu produis une seule vraie page finale cohérente, composée de sections exploitables dans le canvas.
 Les séparateurs [[LGD_BLOCK:...]] sont autorisés uniquement pour le parser frontend et ne font pas partie du texte visible.
@@ -48,12 +68,19 @@ Dans chaque section, écris uniquement le texte final propre que l'utilisateur p
 Si l'objectif est de générer des leads : crée un lead magnet qui maximise l'opt-in email.
 Si l'objectif est de vendre : crée une page de vente courte, persuasive et crédible.
 
-Niveau attendu : humain, premium, précis, émotionnel, empathie, crédible, comme si envoyé depuis un Iphone, expert en marketing digital, expert dans la vente de formations en MRR et produits numériques, jamais robotique.
+Niveau attendu : humain, premium, précis, émotionnel, crédible, expert marketing digital, jamais robotique.
 Chaque section doit faire avancer le lecteur : attention → identification → tension émotionnelle → désir → confiance → action.
-Tu dois utiliser les douleurs cachées quand elles sont présentes dans le brief : honte, fatigue mentale, peur du regard, impression d'être en retard, peur d'avoir encore échoué, peur de ne pas être fait pour réussir.
-Tu dois transformer les bénéfices rationnels en bénéfices vécus : retrouver de la clarté, reprendre confiance, savoir quoi faire aujourd'hui, sentir qu'on avance enfin, capturer un email, poser une première brique concrète.
-Tu ne copies jamais les consignes de format dans la réponse. Tu remplaces toujours les consignes par du texte final concret.
-Tu évites les expressions génériques : « Transformez votre vie », « libérez votre potentiel », « solution ultime », « révolutionnez votre business », sauf si elles sont remplacées par une scène concrète et précise.
+
+Tu dois utiliser les douleurs cachées quand elles sont présentes ou déductibles :
+honte de ne pas réussir, fatigue mentale, peur du regard des proches, impression d'être en retard,
+peur d'avoir encore échoué, peur de ne pas être fait pour réussir, peur de reperdre de l'argent.
+
+Tu dois transformer les bénéfices rationnels en bénéfices vécus :
+retrouver de la clarté, reprendre confiance, savoir quoi faire aujourd'hui, sentir qu'on avance enfin,
+capturer un email, poser une première brique concrète, créer une source de revenu progressive.
+
+Tu ne copies jamais les consignes de format dans la réponse.
+Tu remplaces toujours les consignes par du texte final concret.
 """.strip()
 
 
@@ -168,7 +195,7 @@ def _page_strategy(page_type: str) -> str:
             "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
             "Ne vends pas l'offre principale. Vends la micro-transformation gratuite qui donne envie de laisser son email. "
             "Écris la page finale en mode DONE FOR YOU : aucun conseil, aucun plan, aucun texte à compléter. "
-            "Structure la page comme un vrai tunnel psychologique : accroche, identification, promesse du guide, contenu, mécanisme, réassurance, objection killer, CTA."
+            "Structure la page comme un vrai tunnel psychologique : accroche, identification, promesse du guide, contenu, mécanisme, réassurance, objection killer, CTA. Si le brief parle d\'affiliation, explique l\'opportunité sans la rendre magique : capter l\'email, éduquer, montrer le chemin et préparer la vente."
         )
     if page_type == "webinar":
         return "TYPE : WEBINAR. But : inscription à une session avec prise de conscience forte."
@@ -207,11 +234,11 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
-        return "Produit exactement 10 hooks premium, numérotés de 1 à 10. Chaque hook doit toucher une douleur, un désir ou une objection différente. Pas de conseil, pas de remplissage."
+        return "Produit 10 hooks courts. Aucun texte autour."
     if value == "cta":
-        return "Produit exactement 10 CTA de lead magnet premium, orientés capture email. Mélange CTA doux, émotionnels et directs. Aucun CTA générique du type Transformez votre vie."
+        return "Produit 10 CTA courts classés doux / direct / émotionnel. Aucun texte autour."
     if value == "benefits":
-        return "Produit exactement 8 bénéfices premium : résultat concret + émotion débloquée + situation vécue. Pas de bénéfices génériques."
+        return "Produit 8 bénéfices courts : résultat concret + émotion débloquée. Aucun paragraphe."
     if value == "variants":
         return "Produit 3 variantes A/B/C : hook, micro-promesse, CTA. Très court."
     if value == "rewrite_landing":
@@ -223,7 +250,7 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
             "Chaque section doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
             "Objectif : capture email maximale, pas vente directe. "
             "Minimum 8 sections obligatoires pour landing_complete. "
-            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : persona précis, scène concrète, douleur cachée, désir, mécanisme, objection killer et CTA."
+            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA."
         )
 
     return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
@@ -236,22 +263,22 @@ FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
 Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
 
 [[LGD_BLOCK:HERO]]
-Rédige directement le hero final visible : une accroche émotionnelle précise qui arrête le scroll, une micro-promesse gratuite et un CTA d'opt-in. Le hero doit nommer une situation vécue, pas une promesse vague. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+Rédige directement le hero final visible : une accroche émotionnelle, une micro-promesse gratuite et un CTA d'opt-in. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
 
 [[LGD_BLOCK:IDENTIFICATION]]
-Rédige directement la scène d'identification finale avec détails psychologiques concrets : formations achetées, surcharge d'informations, peur de recommencer, honte silencieuse, fatigue mentale. Le prospect doit penser : « c'est exactement moi ».
+Rédige directement la scène d'identification finale. Le prospect doit se reconnaître sans lire une consigne.
 
 [[LGD_BLOCK:AGITATION]]
-Rédige directement l'agitation finale : le coût concret de rester bloqué, la frustration de voir les autres avancer, le doute intérieur, sans conseil ni analyse.
+Rédige directement l'agitation finale : le coût concret de rester bloqué, sans conseil ni analyse.
 
 [[LGD_BLOCK:MICRO_TRANSFORMATION]]
-Rédige directement la micro-transformation promise par le lead magnet : passer du chaos à une première action claire, visible et réalisable.
+Rédige directement la micro-transformation promise par le lead magnet.
 
 [[LGD_BLOCK:CE_QUE_TU_RECOIS]]
-Rédige directement 5 lignes finales sur ce que le prospect reçoit dans le guide. Chaque ligne doit donner envie de laisser son email, avec un résultat concret.
+Rédige directement 4 à 5 lignes finales sur ce que le prospect reçoit dans le guide.
 
 [[LGD_BLOCK:MECANISME]]
-Rédige directement le mécanisme final : pourquoi ce lead magnet aide vraiment là où les formations génériques échouent, sans promesse magique.
+Rédige directement le mécanisme final : pourquoi ce lead magnet aide vraiment, sans promesse magique.
 
 [[LGD_BLOCK:OBJECTION_KILLER]]
 Rédige directement les réponses finales aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
@@ -260,7 +287,7 @@ Rédige directement les réponses finales aux objections fortes : pas le temps, 
 Rédige directement la réassurance finale : débutant accepté, pas besoin d'être influenceur, progression réaliste.
 
 [[LGD_BLOCK:CTA_FINAL]]
-Rédige directement le CTA final : une phrase émotionnelle + un appel clair à laisser son email. Le CTA doit vendre le guide gratuit, pas la formation. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+Rédige directement le CTA final : une phrase émotionnelle + un appel clair à laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
 
 RÈGLES NON NÉGOCIABLES :
 - Minimum obligatoire : 8 marqueurs [[LGD_BLOCK:...]].
@@ -368,19 +395,57 @@ Laissez votre email et recevez le guide pour arrêter de tourner en rond et pose
 """.strip()
 
 
+def _prompt_brain_context(brief: str, objective: Optional[str], angle: Optional[str], audience: Optional[str], tone: Optional[str]) -> str:
+    raw = " ".join([
+        str(brief or ""),
+        str(objective or ""),
+        str(angle or ""),
+        str(audience or ""),
+        str(tone or ""),
+    ]).lower()
 
-def _is_strong_landing_output(text: str) -> bool:
-    raw = str(text or "")
-    marker_count = raw.count("[[LGD_BLOCK:")
-    visible = _sanitize_done_for_you_output(raw).strip()
-    forbidden = ("voici la structure", "clarifie", "renforce", "augmente", "tu peux", "vous pouvez", "conseil", "transformez votre vie", "libérez votre potentiel", "solution ultime", "révolutionnez")
-    if any(word in visible.lower() for word in forbidden):
-        return False
-    return marker_count >= 6 and len(visible) >= 900
+    signals: list[str] = []
 
+    if any(word in raw for word in ["affiliation", "commission", "partenaire", "récurrent", "recurrent", "60%"]):
+        signals.append(
+            "MODÈLE DÉTECTÉ : affiliation / commission récurrente. "
+            "Ne vends pas brutalement le produit. Crée une page de capture qui vend l'envie de découvrir une opportunité simple, crédible et progressive. "
+            "Insiste sur la confiance, la transparence, l'action concrète et la construction d'un revenu complémentaire, sans promesse magique."
+        )
 
-def _landing_needs_strict_retry(goal: str, page_type: str, content: str) -> bool:
-    return _norm(goal) == "landing_complete" and page_type == "lead_magnet" and not _is_strong_landing_output(content)
+    if any(word in raw for word in ["lgd", "générateur digital", "generateur digital", "le générateur digital"]):
+        signals.append(
+            "OFFRE DÉTECTÉE : Le Générateur Digital. "
+            "Présente LGD comme une plateforme d'action marketing : créer des contenus, pages, emails, lead magnets et tunnels avec l'IA. "
+            "Évite le discours outil-technique ; montre le bénéfice concret pour une personne bloquée."
+        )
+
+    if any(word in raw for word in ["maman", "mère", "mere", "congé maternité", "foyer", "enfants", "parent"]):
+        signals.append(
+            "PERSONA POSSIBLE : parent / maman ou papa qui veut gagner en liberté sans sacrifier sa famille. "
+            "Utilise la motivation temps-famille, revenu maison, fierté et reprise de contrôle."
+        )
+
+    if any(word in raw for word in ["salarié", "salarie", "job", "travail", "patron", "burnout", "routine"]):
+        signals.append(
+            "PERSONA POSSIBLE : salarié fatigué. "
+            "Utilise la fatigue du quotidien, l'envie de ne plus subir, le besoin de complément de revenu et de plan clair."
+        )
+
+    if any(word in raw for word in ["formation", "mrr", "dropshipping", "crypto", "ia", "freelancing", "sans résultat", "sans resultats"]):
+        signals.append(
+            "PERSONA POSSIBLE : acheteur de formations bloqué. "
+            "Utilise la surcharge d'informations, la honte silencieuse, la peur d'encore abandonner, la frustration de voir les autres réussir."
+        )
+
+    if not signals:
+        signals.append(
+            "Aucun persona explicite détecté. Infère un persona crédible à partir de l'offre, de l'objectif, de l'audience et de l'angle. "
+            "Reste concret, humain et orienté conversion."
+        )
+
+    return "\n".join(f"- {item}" for item in signals)
+
 
 def build_lead_prompt(
     *,
@@ -417,6 +482,9 @@ def build_lead_prompt(
     page_type=inferred_page_type,
 )}
 
+PROMPT BRAIN LGD :
+{_prompt_brain_context(safe_brief, objective, angle, audience, tone)}
+
 BRIEF UTILISATEUR :
 {safe_brief}
 
@@ -437,6 +505,7 @@ CONTRAINTES STRICTES :
 - Utilise l'angle, l'audience et le ton fournis.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
+- Si le brief parle d'affiliation ou de commission : vends la découverte d'une opportunité crédible et progressive, jamais une promesse de richesse rapide.
 - Interdiction absolue de donner des conseils : le texte doit être final, prêt à utiliser. Ne jamais écrire « voici », « voici la structure », « clarifie », « renforce », « augmente », « structure », « à modifier », « tu peux ».
 - Si le ton est storytelling : ajoute une micro-scène concrète, mais sans transformer la page en récit long.
 - Chaque bloc doit apporter une nouvelle raison de laisser son email.
@@ -590,6 +659,9 @@ def _compact_output(text: str, *, char_limit: int, page_type: str, brief: str = 
     hard_limit = _safe_int(char_limit, DEFAULT_OUTPUT_CHARS)
     cleaned = _sanitize_done_for_you_output(_trim_to_char_limit(text, hard_limit))
 
+    if page_type == "lead_magnet" and cleaned.count("[[LGD_BLOCK:") < 6:
+        cleaned = _fallback_landing_blocks(brief=brief, cta_url=cta_url)
+
     # Sécurité anti-page-de-vente trop longue : si un lead magnet dépasse encore,
     # on retire les blocs secondaires au lieu de renvoyer un pavé.
     if page_type == "lead_magnet" and len(cleaned) > hard_limit:
@@ -651,28 +723,10 @@ def generate_lead_content(
         try:
             content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
             if content:
-                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
-                if _landing_needs_strict_retry(goal, inferred_page_type, compact):
-                    strict_prompt = prompt + "\n\nCORRECTION OBLIGATOIRE : ta réponse précédente était trop courte ou pas assez structurée. Génère maintenant une vraie landing complète DONE FOR YOU avec au moins 8 marqueurs [[LGD_BLOCK:...]], du texte final visible, aucun conseil, aucun label technique visible, aucune phrase méta."
-                    strict_messages = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": strict_prompt},
-                    ]
-                    retry = _chat_completion(client, model=candidate_model, messages=strict_messages, char_limit=max(char_limit, 7200))
-                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 7200), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
-                    if _is_strong_landing_output(retry_compact):
-                        return retry_compact
-                return compact
+                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
             content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
             if content:
-                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
-                if _landing_needs_strict_retry(goal, inferred_page_type, compact):
-                    strict_prompt = prompt + "\n\nCORRECTION OBLIGATOIRE : génère une vraie landing complète DONE FOR YOU avec au moins 8 marqueurs [[LGD_BLOCK:...]], du texte final visible, aucun conseil, aucun label technique visible, aucune phrase méta."
-                    retry = _responses_completion(client, model=candidate_model, prompt=strict_prompt, char_limit=max(char_limit, 7200))
-                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 7200), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
-                    if _is_strong_landing_output(retry_compact):
-                        return retry_compact
-                return compact
+                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
             errors.append(f"{candidate_model}: réponse vide")
         except Exception as exc:
             errors.append(f"{candidate_model}: {exc}")

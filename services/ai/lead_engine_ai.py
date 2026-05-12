@@ -23,33 +23,29 @@ except Exception:  # pragma: no cover
 
 SYSTEM_PROMPT = """
 Tu es LEAD ENGINE LGD, copywriter conversion senior et stratège marketing digital premium.
-Tu ne donnes pas de conseils. Tu ne proposes pas une méthode à suivre. Tu fais le travail à la place de l'utilisateur.
-
-Mission : transformer un brief brut en contenu final prêt à injecter dans une page ou un lead magnet.
-Le résultat doit être rédigé comme si un expert marketing digital avait déjà construit la page.
+Tu ne coaches pas l'utilisateur : tu produis le contenu final à sa place.
 
 Mode obligatoire : DONE FOR YOU.
-Interdits absolus :
-- "voici une structure" ;
-- "tu peux" ;
-- "il faudrait" ;
-- "clarifie" ;
-- "renforce" ;
-- "à adapter" ;
-- donner des conseils au lieu d'écrire le contenu final ;
-- afficher des labels techniques dans le texte final visible ;
-- produire un email ;
-- générer une page de vente si l'objectif est de générer des leads.
+L'utilisateur donne une offre, une cible, un angle et un objectif. Tu rédiges directement le lead magnet, la page ou les éléments demandés.
+Tu ne dois jamais expliquer comment rédiger : tu rédiges à sa place.
+Le contenu visible final doit être utilisable tel quel dans une vraie page LGD.
 
-Pour une landing complète, tu dois produire une vraie page finale cohérente, pas un plan.
-Le format BLOC 1, BLOC 2, etc. est uniquement un repère technique pour le parser frontend.
-Dans chaque bloc, écris directement le contenu final propre, sans préfixes visibles comme TITRE:, CTA:, DOULEUR:, BÉNÉFICES:.
+Interdits absolus :
+- écrire « voici », « voici la structure », « clarifie », « renforce », « augmente », « tu peux », « il faudrait », « à adapter », « à modifier », « conseil », « structure pour », « passe d’une simple page » ;
+- donner des conseils au lieu de rédiger le contenu final ;
+- afficher des étiquettes techniques dans le texte visible final ;
+- produire un email ;
+- vendre directement l'offre principale quand l'objectif est la capture de leads.
+
+Pour une landing complète, tu produis une seule vraie page finale cohérente, composée de sections exploitables dans le canvas.
+Les séparateurs [[LGD_BLOCK:...]] sont autorisés uniquement pour le parser frontend et ne font pas partie du texte visible.
+Dans chaque section, écris uniquement le texte final propre que l'utilisateur pourrait laisser tel quel sur sa page.
 
 Si l'objectif est de générer des leads : crée un lead magnet qui maximise l'opt-in email.
 Si l'objectif est de vendre : crée une page de vente courte, persuasive et crédible.
 
-Niveau attendu : humain, premium, précis, émotionnel, crédible, Claude-like, jamais robotique.
-Chaque bloc doit faire avancer le lecteur : attention → identification → désir → confiance → action.
+Niveau attendu : humain, premium, précis, émotionnel, crédible, expert marketing digital, jamais robotique.
+Chaque section doit faire avancer le lecteur : attention → identification → désir → confiance → action.
 """.strip()
 
 
@@ -215,10 +211,10 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
 
     if page_type == "lead_magnet":
         return (
-            "Rédige un Lead Magnet Expert final, prêt à injecter, en blocs techniques séparés. "
-            "Chaque bloc doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
+            "Rédige un Lead Magnet Expert final, prêt à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
+            "Chaque section doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
             "Objectif : capture email maximale, pas vente directe. "
-            "Minimum 8 blocs obligatoires pour landing_complete. "
+            "Minimum 8 sections obligatoires pour landing_complete. "
             "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA."
         )
 
@@ -228,63 +224,140 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
 def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> str:
     if page_type == "lead_magnet":
         return f"""
-FORMAT TECHNIQUE À RESPECTER POUR LE PARSER :
-BLOC 1 — HERO
-Une accroche finale forte qui nomme la situation réelle du prospect, suivie d'une promesse gratuite claire et d'un appel à recevoir le lead magnet.
-Si une URL CTA est fournie, ajoute-la naturellement à la fin du bloc : {_clip(cta_url, 220) or "à renseigner"}.
+FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
+Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
 
-BLOC 2 — IDENTIFICATION
-Un texte court et humain qui fait penser : « c'est exactement moi ». Parle de la frustration, de la fatigue, de la dispersion ou du blocage concret.
+[[LGD_BLOCK:HERO]]
+Une accroche émotionnelle forte + une micro-promesse gratuite + un CTA d'opt-in. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
 
-BLOC 3 — MICRO-TRANSFORMATION
-Explique le petit résultat immédiat que le prospect peut obtenir en laissant son email. Pas de miracle, pas de richesse rapide.
+[[LGD_BLOCK:IDENTIFICATION]]
+Une scène ou une situation vécue qui fait penser au prospect : « c'est moi ». Parle de blocage, surcharge, frustration, temps perdu ou envie de liberté selon l'audience.
 
-BLOC 4 — CE QUE LA PERSONNE REÇOIT
-4 à 5 lignes désirables qui donnent envie de télécharger le lead magnet. Chaque ligne doit être concrète et orientée action.
+[[LGD_BLOCK:AGITATION]]
+Le coût concret de rester bloqué : temps perdu, formations accumulées, sentiment de tourner en rond, peur de ne jamais passer à l'action.
 
-BLOC 5 — MÉCANISME
-Explique pourquoi ce lead magnet aide là où les formations génériques échouent. Concret, crédible, orienté méthode.
+[[LGD_BLOCK:MICRO_TRANSFORMATION]]
+Le petit résultat désirable que le guide gratuit promet : comprendre quoi faire en premier, retrouver une direction, éviter les erreurs, enclencher une action simple.
 
-BLOC 6 — OBJECTION KILLER
-Réponds directement aux objections majeures : déjà essayé, pas le temps, pas d'audience, peur d'encore échouer.
+[[LGD_BLOCK:CE_QUE_TU_RECOIS]]
+4 à 5 lignes finales, concrètes et désirables sur ce que le prospect reçoit dans le guide. Chaque ligne doit donner envie de laisser son email.
 
-BLOC 7 — RÉASSURANCE
-Rassure sans vendre du rêve : simple, réaliste, progressif, sans besoin d'être expert.
+[[LGD_BLOCK:MECANISME]]
+Pourquoi ce lead magnet aide vraiment : une méthode simple, un chemin clair, moins de dispersion, plus d'action. Pas de promesse magique.
 
-BLOC 8 — CTA FINAL
-Une phrase émotionnelle + un CTA clair pour laisser son email. Ajoute l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+[[LGD_BLOCK:OBJECTION_KILLER]]
+Réponses courtes aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
 
-RÈGLES IMPORTANTES :
-- Les mots BLOC 1, BLOC 2, etc. sont autorisés uniquement comme séparateurs techniques.
-- Dans le contenu de chaque bloc, n'écris jamais TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, PROMESSE:, QUESTION:, RÉPONSE:.
-- N'écris jamais des conseils. Écris le contenu final utilisable.
-- Ne renvoie jamais un seul bloc pour Landing complète.
-- Minimum obligatoire : 8 blocs.
+[[LGD_BLOCK:REASSURANCE]]
+Rassurance finale : débutant accepté, pas besoin d'être influenceur, pas besoin d'être technique, progression réaliste.
+
+[[LGD_BLOCK:CTA_FINAL]]
+Une phrase émotionnelle + un CTA clair pour laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+
+RÈGLES NON NÉGOCIABLES :
+- Minimum obligatoire : 8 marqueurs [[LGD_BLOCK:...]].
+- N'écris jamais BLOC 1, TITRE:, SOUS-TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, QUESTION:, RÉPONSE: dans le contenu visible.
+- N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
+- N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier ».
+- Ne renvoie jamais une seule section pour Landing complète.
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
-
 
     return f"""
-FORMAT TECHNIQUE À RESPECTER POUR LE PARSER :
-BLOC 1 — HERO
-Écris le texte final du hero, sans préfixe TITRE:.
+FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND :
+[[LGD_BLOCK:HERO]]
+Texte final du hero, sans préfixe technique.
 
-BLOC 2 — DOULEUR
-Écris le texte final de la douleur, sans préfixe DOULEUR:.
+[[LGD_BLOCK:DOULEUR]]
+Texte final de la douleur, sans préfixe technique.
 
-BLOC 3 — PROMESSE
-Écris le texte final de la promesse, sans préfixe PROMESSE:.
+[[LGD_BLOCK:PROMESSE]]
+Texte final de la promesse, sans préfixe technique.
 
-BLOC 4 — MÉCANISME
-Écris le texte final du mécanisme, sans préfixe MÉCANISME:.
+[[LGD_BLOCK:MECANISME]]
+Texte final du mécanisme, sans préfixe technique.
 
-BLOC 5 — CTA FINAL
-Écris le texte final du CTA, sans préfixe CTA:.
-Ajoute l'URL CTA si fournie : {_clip(cta_url, 220) or "à renseigner"}
+[[LGD_BLOCK:CTA_FINAL]]
+Texte final du CTA avec URL si fournie : {_clip(cta_url, 220) or "à renseigner"}
 
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
 
+
+def _sanitize_done_for_you_output(text: str) -> str:
+    forbidden_starts = (
+        "voici ",
+        "voici la structure",
+        "structure ",
+        "conseil",
+        "clarifie",
+        "renforce",
+        "augmente",
+        "tu peux",
+        "vous pouvez",
+        "à faire",
+        "a faire",
+        "passe d'une simple page",
+        "passe d’une simple page",
+    )
+    cleaned_lines: list[str] = []
+    for raw in str(text or "").splitlines():
+        line = raw.rstrip()
+        low = line.strip().lower()
+        if any(low.startswith(prefix) for prefix in forbidden_starts):
+            continue
+        # Retire les labels techniques en début de ligne s'ils apparaissent malgré l'instruction.
+        for prefix in ("TITRE:", "SOUS-TITRE:", "SOUS TITRE:", "CTA:", "URL CTA:", "DOULEUR:", "BÉNÉFICES:", "BENEFICES:", "PROMESSE:", "QUESTION:", "RÉPONSE:", "REPONSE:"):
+            if line.strip().upper().startswith(prefix):
+                line = line.strip()[len(prefix):].strip()
+                break
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
+
+
+def _extract_offer_hint(brief: str) -> str:
+    text = str(brief or "").strip()
+    for marker in ("OFFRE :", "Offre / sujet :", "Offre:", "Sujet / offre"):
+        if marker.lower() in text.lower():
+            idx = text.lower().find(marker.lower())
+            chunk = text[idx + len(marker):].strip().splitlines()[0].strip()
+            if chunk:
+                return _clip(chunk, 180)
+    return _clip(text.splitlines()[0] if text else "ton offre", 180)
+
+
+def _fallback_landing_blocks(*, brief: str, cta_url: Optional[str]) -> str:
+    offer = _extract_offer_hint(brief)
+    url = _clip(cta_url, 220) or ""
+    url_line = f"\n{url}" if url else ""
+    return f"""
+[[LGD_BLOCK:HERO]]
+Vous avez acheté des formations, testé des idées, regardé des vidéos… mais rien n’a vraiment bougé. Recevez le guide gratuit pour transformer {offer} en première action claire, simple et visible.{url_line}
+
+[[LGD_BLOCK:IDENTIFICATION]]
+Vous n’avez pas besoin d’une énième promesse magique. Vous avez besoin de savoir quoi faire maintenant, dans quel ordre, sans vous perdre dans les tunnels, les outils et les méthodes qui se contredisent.
+
+[[LGD_BLOCK:AGITATION]]
+Chaque semaine passée à hésiter renforce la même impression : les autres avancent, pendant que vous recommencez encore une nouvelle formation sans publier, sans vendre, sans vraie direction.
+
+[[LGD_BLOCK:MICRO_TRANSFORMATION]]
+Ce guide vous aide à identifier la première étape concrète pour sortir de la dispersion et construire une page simple qui capte des prospects au lieu de rester bloqué dans la préparation.
+
+[[LGD_BLOCK:CE_QUE_TU_RECOIS]]
+Un angle clair pour présenter votre offre sans paraître forcé.\nUne structure de page pensée pour récupérer des emails.\nLes erreurs qui bloquent les débutants avant leur première vente.\nUn chemin simple pour passer de l’idée à l’action.\nUn CTA prêt à utiliser pour inviter le prospect à laisser son email.
+
+[[LGD_BLOCK:MECANISME]]
+La méthode repose sur une idée simple : arrêter de vendre trop tôt, créer d’abord une micro-victoire, puis utiliser l’email pour construire la confiance avant la vente.
+
+[[LGD_BLOCK:OBJECTION_KILLER]]
+Pas d’audience ? Commencez avec une page claire.\nPas technique ? Le guide simplifie les étapes.\nDéjà essayé ? Cette fois, l’objectif n’est pas de tout faire, mais de lancer la première action qui attire un prospect.
+
+[[LGD_BLOCK:REASSURANCE]]
+C’est pensé pour les débutants, les personnes qui manquent de temps et celles qui veulent avancer sans devenir influenceur, sans jargon et sans promesse irréaliste.
+
+[[LGD_BLOCK:CTA_FINAL]]
+Laissez votre email et recevez le guide pour arrêter de tourner en rond et poser la première brique de votre système de prospects.{url_line}
+""".strip()
 
 def build_lead_prompt(
     *,
@@ -341,7 +414,7 @@ CONTRAINTES STRICTES :
 - Utilise l'angle, l'audience et le ton fournis.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
-- Interdiction absolue de donner des conseils : le texte doit être final, prêt à utiliser. Ne jamais écrire « voici », « clarifie », « renforce », « augmente », « structure », « à modifier ».
+- Interdiction absolue de donner des conseils : le texte doit être final, prêt à utiliser. Ne jamais écrire « voici », « voici la structure », « clarifie », « renforce », « augmente », « structure », « à modifier », « tu peux ».
 - Si le ton est storytelling : ajoute une micro-scène concrète, mais sans transformer la page en récit long.
 - Chaque bloc doit apporter une nouvelle raison de laisser son email.
 - Ne répète pas le même bloc sous deux formes.
@@ -412,7 +485,7 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]],
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.45,
+                temperature=0.72,
                 max_tokens=max_out,
             )
     except TypeError:
@@ -490,9 +563,12 @@ def _trim_to_char_limit(text: str, char_limit: int) -> str:
     return cut.rstrip()
 
 
-def _compact_output(text: str, *, char_limit: int, page_type: str) -> str:
+def _compact_output(text: str, *, char_limit: int, page_type: str, brief: str = "", cta_url: Optional[str] = None) -> str:
     hard_limit = _safe_int(char_limit, DEFAULT_OUTPUT_CHARS)
-    cleaned = _trim_to_char_limit(text, hard_limit)
+    cleaned = _sanitize_done_for_you_output(_trim_to_char_limit(text, hard_limit))
+
+    if page_type == "lead_magnet" and cleaned.count("[[LGD_BLOCK:") < 6:
+        cleaned = _fallback_landing_blocks(brief=brief, cta_url=cta_url)
 
     # Sécurité anti-page-de-vente trop longue : si un lead magnet dépasse encore,
     # on retire les blocs secondaires au lieu de renvoyer un pavé.
@@ -555,10 +631,10 @@ def generate_lead_content(
         try:
             content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
             if content:
-                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
+                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
             content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
             if content:
-                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type)
+                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
             errors.append(f"{candidate_model}: réponse vide")
         except Exception as exc:
             errors.append(f"{candidate_model}: {exc}")

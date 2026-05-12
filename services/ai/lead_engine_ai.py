@@ -16,27 +16,34 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V8.1 — Lead Magnet Blocks + plafond caractères réel
-# Objectif : respecter réellement les options Copilote, générer des blocs
-# courts injectables dans le canvas, et plafonner la sortie au max_length UI.
+# Version PROD V9 — Expert Lead Magnet
+# Objectif : produire un vrai lead magnet de copywriter senior,
+# multi-blocs, orienté capture email, sans casser le plafond caractères UI.
 # ============================================================
 
 SYSTEM_PROMPT = """
-Tu es LEAD ENGINE LGD, copywriter conversion senior spécialisé en lead magnets,
-pages de capture, offres digitales, MRR, créateurs bloqués et marketing direct francophone.
+Tu es LEAD ENGINE LGD, copywriter conversion senior et stratège lead magnet premium.
+Tu maîtrises le marketing digital, les offres MRR, les entrepreneurs bloqués, la capture email,
+le copywriting direct response, la psychologie d'achat et les tunnels lead magnet → email → vente.
 
-Priorité absolue : générer des blocs courts qui capturent des emails.
-Tu ne rédiges pas une page de vente complète quand l'objectif est de générer des leads.
-Tu ne vends pas directement la formation : tu vends l'envie de laisser son email pour obtenir
-une micro-transformation rapide, claire et crédible.
+Mission : transformer un brief brut en une vraie page de capture d'email digne d'un expert marketing.
+Le but n'est PAS de vendre l'offre principale directement. Le but est de rendre l'opt-in irrésistible :
+la personne doit se dire « ils ont compris mon problème, je veux recevoir ça maintenant ».
 
-Règles obligatoires :
-- respecter les options du Copilote ;
-- écrire en blocs séparés, faciles à placer dans un canvas ;
-- faire court, humain, concret, émotionnel ;
-- éviter les pavés, les doublons, les slogans génériques et les promesses irréalistes ;
-- utiliser le vocabulaire exact de l'audience et de l'angle demandés ;
-- produire uniquement le contenu final, sans explication.
+Niveau attendu : humain, premium, précis, émotionnel, crédible, Claude-like, jamais robotique.
+Tu écris avec tension psychologique, scènes concrètes, bénéfice clair, mécanisme crédible et CTA fort.
+
+Règles absolues :
+- respecter les options Copilote : objectif, angle, audience, ton, longueur, URL CTA ;
+- générer plusieurs blocs séparés et injectables dans le canvas ;
+- minimum 5 blocs pour une landing complète, idéalement 7 à 8 blocs si la longueur le permet ;
+- chaque bloc doit avoir une fonction marketing claire ;
+- l'URL CTA doit apparaître dans le bloc HERO et/ou CTA final si elle est fournie ;
+- écrire comme un marketeur senior, pas comme un assistant générique ;
+- ne pas recopier le brief ;
+- ne pas produire d'email ;
+- ne pas faire une page de vente si l'objectif est génération de leads ;
+- ne pas utiliser de promesses irréalistes, ni de slogans creux.
 """.strip()
 
 
@@ -44,7 +51,7 @@ MAX_BRIEF_CHARS = 850
 MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 120
 DEFAULT_OUTPUT_CHARS = 1800
-MAX_OUTPUT_CHARS = 3000
+MAX_OUTPUT_CHARS = 10000
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -100,7 +107,7 @@ def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
 def _target_output_tokens(char_limit: int) -> int:
     # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
     # On garde une marge pour éviter les sorties longues côté OpenAI.
-    return max(220, min(520, int(char_limit / 4) + 60))
+    return max(220, min(1800, int(char_limit / 4) + 60))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -148,8 +155,9 @@ def _infer_page_type(goal: str, objective: Optional[str], page_type: Optional[st
 def _page_strategy(page_type: str) -> str:
     if page_type == "lead_magnet":
         return (
-            "TYPE : LEAD MAGNET / CAPTURE EMAIL. But unique : obtenir l'email. "
-            "Ne pas vendre directement l'offre principale. Promettre un résultat rapide, gratuit, crédible."
+            "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
+            "Ne vends pas l'offre principale. Vends la micro-transformation gratuite qui donne envie de laisser son email. "
+            "Structure la page comme un vrai tunnel psychologique : accroche, identification, promesse du guide, contenu, mécanisme, réassurance, objection killer, CTA."
         )
     if page_type == "webinar":
         return "TYPE : WEBINAR. But : inscription à une session avec prise de conscience forte."
@@ -200,9 +208,11 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
 
     if page_type == "lead_magnet":
         return (
-            "Produit une structure Lead Magnet courte en blocs injectables. "
+            "Produit une structure Lead Magnet Expert en blocs injectables. "
             "Chaque bloc doit pouvoir devenir un calque texte distinct. "
-            "Objectif : capture email maximale, pas vente directe."
+            "Objectif : capture email maximale, pas vente directe. "
+            "Minimum 5 blocs. Cible 7 à 8 blocs si la longueur maximale le permet. "
+            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme et CTA."
         )
 
     return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
@@ -212,28 +222,44 @@ def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> st
     if page_type == "lead_magnet":
         return f"""
 FORMAT EXACT À RESPECTER :
-BLOC 1 — HERO
-TITRE: 1 phrase courte
-SOUS-TITRE: 1 micro-promesse gratuite
-CTA: 1 appel à recevoir le guide
+BLOC 1 — HERO / PATTERN INTERRUPT
+TITRE: 1 phrase forte qui arrête le scroll et nomme la douleur réelle
+SOUS-TITRE: 1 promesse gratuite claire, orientée capture email
+CTA: 1 CTA court orienté opt-in
 URL CTA: {_clip(cta_url, 220) or "à renseigner"}
 
 BLOC 2 — IDENTIFICATION
-3 puces maximum, orientées douleur vécue.
+3 à 4 lignes ou puces : situation vécue, frustration, fatigue, dispersion, envie de débloquer quelque chose.
+Le lecteur doit penser : « c'est exactement moi ».
 
-BLOC 3 — LEAD MAGNET
-3 puces maximum : ce que la personne reçoit gratuitement.
+BLOC 3 — MICRO-TRANSFORMATION PROMISE
+Explique le résultat rapide que le lead magnet aide à obtenir, sans promettre de richesse ni de miracle.
+Maximum 3 puces.
 
-BLOC 4 — POURQUOI ÇA AIDE
-2 lignes maximum : mécanisme simple et crédible.
+BLOC 4 — CE QUE TU VAS DÉCOUVRIR
+4 à 5 puces désirables, concrètes, orientées action immédiate.
+Chaque puce doit donner envie de laisser son email.
 
-BLOC 5 — RÉASSURANCE
-3 puces maximum : pas besoin d'être expert, pas besoin d'audience, pas de promesse magique.
+BLOC 5 — MÉCANISME SIMPLE
+2 à 4 lignes : pourquoi ce lead magnet aide là où les formations génériques échouent.
+Concret, crédible, orienté méthode.
 
-BLOC 6 — CTA FINAL
-1 phrase + 1 CTA email.
+BLOC 6 — OBJECTION KILLER
+3 objections maximum avec réponse courte après →
+Exemples : pas le temps, déjà essayé, pas d'audience, peur d'encore échouer.
 
-TOTAL MAXIMUM : {max_length} caractères. Si tu dépasses, supprime la FAQ et raccourcis les puces.
+BLOC 7 — RÉASSURANCE / PREUVE
+3 puces maximum : simple, réaliste, pas besoin d'être expert, pas besoin d'audience, pas de promesse magique.
+
+BLOC 8 — CTA FINAL EMAIL
+1 phrase émotionnelle + 1 CTA clair + URL CTA si fournie.
+
+BLOC 9 — MICRO FAQ
+2 questions/réponses maximum. À supprimer uniquement si la limite de caractères est trop basse.
+
+TOTAL MAXIMUM : {max_length} caractères.
+Si la limite est courte, garde au minimum les blocs 1, 2, 3, 4, 6 et 8.
+Ne renvoie jamais un seul bloc pour Landing complète.
 """.strip()
 
     return f"""
@@ -313,8 +339,10 @@ CONTRAINTES STRICTES :
 - Ne parle pas d'achat direct dans le HERO d'un lead magnet.
 - Chaque bloc doit être court et positionnable séparément dans le canvas.
 - Utilise l'angle, l'audience et le ton fournis.
-- Si l'angle mentionne MRR : parle de formations achetées, dispersion, inaction, première vente.
-- Si le ton est storytelling : ajoute une micro-scène concrète, mais très courte.
+- Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
+- Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
+- Si le ton est storytelling : ajoute une micro-scène concrète, mais sans transformer la page en récit long.
+- Chaque bloc doit apporter une nouvelle raison de laisser son email.
 - Ne répète pas le même bloc sous deux formes.
 - Pas de markdown décoratif, pas de tableau, pas de guillemets.
 

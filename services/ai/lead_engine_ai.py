@@ -84,7 +84,7 @@ Tu remplaces toujours les consignes par du texte final concret.
 """.strip()
 
 
-MAX_BRIEF_CHARS = 850
+MAX_BRIEF_CHARS = 4500
 MAX_MEMORY_ITEMS = 1
 MAX_MEMORY_CHARS = 120
 DEFAULT_OUTPUT_CHARS = 7200
@@ -144,7 +144,7 @@ def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
 def _target_output_tokens(char_limit: int) -> int:
     # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
     # On garde une marge pour éviter les sorties longues côté OpenAI.
-    return max(220, min(1800, int(char_limit / 4) + 60))
+    return max(420, min(2600, int(char_limit / 3.6) + 160))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -234,11 +234,22 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
-        return "Produit 10 hooks courts. Aucun texte autour."
+        return (
+            "Produit exactement 10 hooks premium numérotés de 1 à 10. "
+            "Chaque hook doit cibler une douleur ou un désir différent : argent, temps, famille, honte silencieuse, surcharge d\'infos, peur d\'échouer, envie de liberté, besoin de première action. "
+            "Aucun conseil, aucun remplissage, aucun hook générique. Chaque hook doit pouvoir être utilisé tel quel sur une landing. "
+        )
     if value == "cta":
-        return "Produit 10 CTA courts classés doux / direct / émotionnel. Aucun texte autour."
+        return (
+            "Produit exactement 10 CTA premium pour capture email, numérotés de 1 à 10. "
+            "Ils doivent donner envie de recevoir le guide maintenant, sans vendre directement l\'offre principale. "
+            "Mélange : CTA doux, CTA émotionnels, CTA directs, CTA curiosité. Aucun CTA générique. "
+        )
     if value == "benefits":
-        return "Produit 8 bénéfices courts : résultat concret + émotion débloquée. Aucun paragraphe."
+        return (
+            "Produit exactement 8 bénéfices premium numérotés de 1 à 8 : résultat concret + émotion débloquée + situation vécue. "
+            "Chaque bénéfice doit être spécifique au brief, pas générique. "
+        )
     if value == "variants":
         return "Produit 3 variantes A/B/C : hook, micro-promesse, CTA. Très court."
     if value == "rewrite_landing":
@@ -659,21 +670,57 @@ def _compact_output(text: str, *, char_limit: int, page_type: str, brief: str = 
     hard_limit = _safe_int(char_limit, DEFAULT_OUTPUT_CHARS)
     cleaned = _sanitize_done_for_you_output(_trim_to_char_limit(text, hard_limit))
 
-    if page_type == "lead_magnet" and cleaned.count("[[LGD_BLOCK:") < 6:
-        cleaned = _fallback_landing_blocks(brief=brief, cta_url=cta_url)
+    # IMPORTANT LGD PROD : ne jamais remplacer une réponse IA faible par un faux fallback instantané.
+    # Si la réponse est faible, generate_lead_content déclenche un vrai retry OpenAI avant de renvoyer.
+    if not cleaned.strip():
+        return ""
 
-    # Sécurité anti-page-de-vente trop longue : si un lead magnet dépasse encore,
-    # on retire les blocs secondaires au lieu de renvoyer un pavé.
     if page_type == "lead_magnet" and len(cleaned) > hard_limit:
-        parts = cleaned.split("\n\nBLOC")
+        parts = cleaned.split("\n\n[[LGD_BLOCK:")
         cleaned = parts[0]
-        for part in parts[1:5]:
-            candidate = cleaned + "\n\nBLOC" + part
+        for part in parts[1:]:
+            candidate = cleaned + "\n\n[[LGD_BLOCK:" + part
             if len(candidate) > hard_limit:
                 break
             cleaned = candidate
 
     return cleaned.strip()
+
+
+def _is_landing_complete_goal(goal: str, page_type: str) -> bool:
+    return _norm(goal) == "landing_complete" and page_type == "lead_magnet"
+
+
+def _is_strong_landing_output(text: str) -> bool:
+    raw = str(text or "")
+    visible = _sanitize_done_for_you_output(raw).strip()
+    forbidden = (
+        "voici la structure",
+        "clarifie",
+        "renforce",
+        "augmente",
+        "tu peux",
+        "vous pouvez",
+        "conseil",
+        "transformez votre vie",
+        "libérez votre potentiel",
+        "solution ultime",
+        "révolutionnez",
+    )
+    if any(word in visible.lower() for word in forbidden):
+        return False
+    return raw.count("[[LGD_BLOCK:") >= 8 and len(visible) >= 1300
+
+
+def _strict_retry_prompt(prompt: str) -> str:
+    return (
+        prompt
+        + "\n\nRETRY LGD OBLIGATOIRE — LA RÉPONSE PRÉCÉDENTE ÉTAIT TROP FAIBLE. "
+        + "Génère maintenant une vraie landing complète DONE FOR YOU avec au moins 9 marqueurs [[LGD_BLOCK:...]]. "
+        + "Chaque section doit contenir du texte final utilisable tel quel. "
+        + "Interdiction absolue de fallback, de conseils, de plan, de phrase méta, de contenu générique. "
+        + "Exploite l'offre, le persona, les douleurs cachées, l'affiliation/commission si présent, la capture email et le CTA. "
+    )
 
 
 def generate_lead_content(
@@ -723,10 +770,26 @@ def generate_lead_content(
         try:
             content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
             if content:
-                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                if _is_landing_complete_goal(goal, inferred_page_type) and not _is_strong_landing_output(compact):
+                    retry_messages = [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": _strict_retry_prompt(prompt)},
+                    ]
+                    retry = _chat_completion(client, model=candidate_model, messages=retry_messages, char_limit=max(char_limit, 9000))
+                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 9000), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
+                    if _is_strong_landing_output(retry_compact):
+                        return retry_compact
+                return compact
             content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
             if content:
-                return _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
+                if _is_landing_complete_goal(goal, inferred_page_type) and not _is_strong_landing_output(compact):
+                    retry = _responses_completion(client, model=candidate_model, prompt=_strict_retry_prompt(prompt), char_limit=max(char_limit, 9000))
+                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 9000), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
+                    if _is_strong_landing_output(retry_compact):
+                        return retry_compact
+                return compact
             errors.append(f"{candidate_model}: réponse vide")
         except Exception as exc:
             errors.append(f"{candidate_model}: {exc}")

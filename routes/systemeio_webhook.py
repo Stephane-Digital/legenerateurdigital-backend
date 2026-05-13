@@ -551,3 +551,4 @@ def systemeio_webhook_version(db: Session = Depends(get_db)):
         "front_base_used": _frontend_base_url(),
         "db_name": _current_database_name(db),
     }
+

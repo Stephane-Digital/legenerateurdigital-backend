@@ -17,10 +17,10 @@ except Exception:
 # ======================================================
 # LGD — SOURCE DE VÉRITÉ QUOTAS = ia_quota
 #
-# Trial = 70 000 total (10 000 / jour sur 7 jours)
-# Essentiel = 400 000
-# Pro = 1 000 000
-# Ultime = 2 500 000
+# Trial = 150 000 total (20 000 / jour sur 7 jours)
+# Essentiel = 2 000 000
+# Pro = 6 000 000
+# Ultime = 15 000 000
 #
 # Correctif coût IA 2026-05 :
 # - Tous les appels IA consomment le bucket canonique "global".
@@ -50,21 +50,23 @@ def _to_int(v: Any, default: int = 0) -> int:
 def _default_limit_for_plan(plan: str) -> int:
     p = (plan or "").lower()
     if "trial" in p:
-        return 70_000
+        return 150_000
     if "ult" in p:
-        return 2_500_000
+        return 15_000_000
     if "pro" in p:
-        return 1_000_000
-    return 400_000
+        return 6_000_000
+    return 2_000_000
 
 
 def _daily_limit_for_plan(plan: str, monthly_limit: int) -> int:
     p = (plan or "").lower()
-    if "trial" in p:
-        return 10_000
-    if monthly_limit <= 0:
-        monthly_limit = _default_limit_for_plan(p or "essentiel")
-    return max(1, int(monthly_limit // 30))
+    if "trial" in p or "azur" in p or "starter" in p or "decouverte" in p or "découverte" in p:
+        return 20_000
+    if "ult" in p or int(monthly_limit or 0) == 15_000_000:
+        return 500_000
+    if "pro" in p or int(monthly_limit or 0) == 6_000_000:
+        return 250_000
+    return 80_000
 
 
 def _today_key() -> str:
@@ -194,13 +196,15 @@ def get_or_create_quota(db: Session, user_id: int, feature: str = _CANONICAL_FEA
 
     if quota:
         limit = _get_limit(quota)
-        if limit <= 0 and not feature.startswith(_DAILY_FEATURE_PREFIX):
+        if not feature.startswith(_DAILY_FEATURE_PREFIX):
             plan = _get_plan(quota)
-            _set_limit(quota, _default_limit_for_plan(plan))
-            _set_remaining(quota, max(_get_limit(quota) - _get_used(quota), 0))
-            db.add(quota)
-            db.flush()
-            db.refresh(quota)
+            plan_limit = _default_limit_for_plan(plan)
+            if limit <= 0 or limit < plan_limit:
+                _set_limit(quota, plan_limit)
+                _set_remaining(quota, max(_get_limit(quota) - _get_used(quota), 0))
+                db.add(quota)
+                db.flush()
+                db.refresh(quota)
         return quota
 
     # Si on crée une feature non-global, on récupère le plan du global si possible.

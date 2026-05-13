@@ -17,11 +17,11 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V10.10 — Stratégie 9/10 anti-dispersion verrouillée
+# Version PROD V10.11 — Positionnement stratégique LGD verrouillé
 # Objectif : produire une vraie landing lead magnet structurée,
 # sans faux fallback silencieux, sans sortie 1 bloc, sans réponse coupée,
 # avec une qualité copywriting 9/10 orientée conversion.
-# V10.10 : stratégie plan d'action anti-dispersion + clarification d'offre sans toucher au parser.
+# V10.11 : positionnement LGD vs outil IA brut + différenciation stratégique sans toucher au parser.
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -109,6 +109,16 @@ Si le brief demande un lead magnet, une capture email, un guide gratuit, une aff
 Si le brief demande une vente premium : priorité à la valeur perçue, à la différenciation, à la preuve logique et au passage à l'action.
 Le texte final doit respecter l'intention exacte du brief, même si le type technique reste landing_complete.
 
+RÈGLE POSITIONNEMENT LGD 9/10 — OUTIL IA BRUT VS SYSTÈME GUIDÉ.
+Quand le brief compare ou oppose ChatGPT, Claude, un outil IA brut, une IA qui répond, et LGD, un chemin guidé, des modules, des étapes ou une transformation marketing :
+tu dois produire une landing de positionnement stratégique, pas une page émotionnelle générique.
+Le message central doit être : un outil IA peut donner des réponses, mais LGD organise ces réponses en actions, modules, étapes et système marketing.
+Tu ne dois jamais dénigrer ChatGPT, Claude ou les autres outils. Tu dois respecter leur utilité, puis clarifier la limite : la réponse seule ne crée pas l'exécution.
+Le HERO doit expliquer immédiatement la différence : réponse IA ≠ chemin d'exécution marketing guidé.
+Le mécanisme doit être très concret : idée → page/landing → email → contenu → conversion → prochaine action.
+La section CE_QUE_TU_RECOIS doit montrer un chemin complet, pas seulement un guide motivant.
+Le CTA doit inviter à voir le chemin complet gratuitement, en reconnectant au problème initial : arrêter d'empiler des réponses et commencer à structurer l'action.
+
 Tu ne copies jamais les consignes de format dans la réponse.
 Tu remplaces toujours les consignes par du texte final concret.
 """.strip()
@@ -132,10 +142,11 @@ REQUIRED_LANDING_BLOCKS = [
     "OBJECTION_KILLER",
     "REASSURANCE",
     "CTA_FINAL",
- ]
+]
 
 LANDING_STRATEGY_OFFER_CLARITY = "offer_clarity"
 LANDING_STRATEGY_ACTION_PLAN = "action_plan"
+LANDING_STRATEGY_POSITIONING = "positioning"
 LANDING_STRATEGY_LEAD_MAGNET = "lead_magnet"
 LANDING_STRATEGY_AFFILIATE = "affiliate"
 LANDING_STRATEGY_SALES = "sales"
@@ -269,6 +280,35 @@ def _detect_landing_strategy(
         ]
     )
 
+    positioning_signals = (
+        "chatgpt",
+        "chat gpt",
+        "claude",
+        "outil ia brut",
+        "outil ia",
+        "ia brut",
+        "ia brute",
+        "pas seulement d'un outil",
+        "pas seulement d’un outil",
+        "chemin guidé",
+        "chemin guide",
+        "structurer l'action",
+        "structurer l’action",
+        "structure l'action",
+        "structure l’action",
+        "modules",
+        "étapes",
+        "etapes",
+        "transformation marketing",
+        "réponses en actions",
+        "reponses en actions",
+        "lgd structure",
+        "le générateur digital structure",
+        "generateur digital structure",
+    )
+    if any(signal in raw for signal in positioning_signals):
+        return LANDING_STRATEGY_POSITIONING
+
     offer_clarity_signals = (
         "clarifier",
         "clarifie",
@@ -348,6 +388,7 @@ def _strategy_label(strategy: str) -> str:
     labels = {
         LANDING_STRATEGY_OFFER_CLARITY: "clarification_offre_premium",
         LANDING_STRATEGY_ACTION_PLAN: "plan_action_anti_dispersion",
+        LANDING_STRATEGY_POSITIONING: "positionnement_lgd_vs_outil_ia_brut",
         LANDING_STRATEGY_LEAD_MAGNET: "lead_magnet_capture_email",
         LANDING_STRATEGY_AFFILIATE: "affiliation_opportunite_credible",
         LANDING_STRATEGY_SALES: "vente_premium",
@@ -377,6 +418,15 @@ def _strategy_instruction(strategy: str) -> str:
             "Le HERO doit être court et chirurgical : trop de contenu, pas assez d'action, une action claire cette semaine, plan gratuit. "
             "Le mécanisme doit être concret : réduire le bruit, choisir une priorité, poser une action simple, éviter la paralysie. "
             "Le CTA final doit être plus fort que le HERO : avant de regarder une autre vidéo ou d'ouvrir une autre formation, récupérer le plan gratuit."
+        )
+    if strategy == LANDING_STRATEGY_POSITIONING:
+        return (
+            "STRATÉGIE DÉTECTÉE : POSITIONNEMENT LGD VS OUTIL IA BRUT. "
+            "Priorité absolue : clarifier que les outils IA peuvent donner des réponses, mais que LGD transforme ces réponses en chemin d'exécution marketing guidé. "
+            "Le ton doit être respectueux, crédible, premium et sans dénigrer ChatGPT, Claude ou les autres outils. "
+            "Le HERO doit être stratégique et direct : une réponse IA ne suffit pas si l'utilisateur ne sait pas quoi faire ensuite, dans quel ordre et avec quels modules. "
+            "Le mécanisme doit rendre LGD tangible : objectif, plan, landing, email, contenu, conversion, prochaines actions. "
+            "Le CTA final doit proposer de voir le chemin complet gratuitement, pas seulement de télécharger un guide vague."
         )
     if strategy == LANDING_STRATEGY_AFFILIATE:
         return (
@@ -437,6 +487,13 @@ def _page_strategy(page_type: str, strategy: str = LANDING_STRATEGY_DEFAULT) -> 
                 "Ne transforme pas la page en grande promesse émotionnelle. "
                 "Structure la page autour d'un déclic simple : trop d'informations, trop peu d'exécution, un plan gratuit pour choisir une priorité et agir sans se juger. "
                 "Chaque bloc doit rendre le plan plus concret, plus rassurant et plus facile à demander."
+            )
+        if strategy == LANDING_STRATEGY_POSITIONING:
+            return (
+                "TYPE : LANDING POSITIONNEMENT STRATÉGIQUE LGD. But unique : rendre immédiatement compréhensible la différence entre une IA qui répond et un système guidé qui structure l'action marketing. "
+                "Ne dénigre jamais les outils IA. Explique leur utilité, puis montre pourquoi une personne bloquée a besoin d'un chemin, d'un ordre, de modules et d'étapes. "
+                "Structure la page autour d'une idée premium : réponses → organisation → exécution → transformation marketing. "
+                "Chaque bloc doit rendre LGD plus concret, plus différenciant et plus facile à comprendre."
             )
         return (
             "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
@@ -524,6 +581,15 @@ def _goal_instruction(goal: str, page_type: str, max_length: int, strategy: str 
                 "Chaque section doit être courte, concrète et différente : diagnostic, situation vécue, coût de la dispersion, micro-transformation, contenu du plan, mécanisme, objections, réassurance et CTA. "
                 "Le rendu doit être empathique, lucide, premium, sans jugement, et plus précis qu'une page motivationnelle générique. "
                 "Le lecteur doit se dire : je n'ai pas besoin d'une méthode de plus, j'ai besoin de ce plan pour agir maintenant."
+            )
+        if strategy == LANDING_STRATEGY_POSITIONING:
+            return (
+                "Rédige une landing de positionnement LGD, prête à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
+                "Objectif : expliquer pourquoi une personne bloquée a besoin d'un chemin guidé, pas seulement d'un outil IA brut. "
+                "Minimum 9 sections obligatoires pour landing_complete. "
+                "Chaque section doit clarifier un aspect différent : différence outil/système, situation du prospect, coût de l'empilement de réponses, transformation en plan d'action, chemin reçu, mécanisme LGD, objections, réassurance et CTA. "
+                "Le rendu doit être respectueux, crédible, premium, concret, sans dénigrer ChatGPT ni les autres outils. "
+                "Le lecteur doit se dire : l'IA peut me répondre, mais LGD peut m'aider à organiser l'action marketing."
             )
         return (
             "Rédige un Lead Magnet Expert final, prêt à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
@@ -630,6 +696,54 @@ RÈGLES NON NÉGOCIABLES :
 - Le HERO doit être plus court que les autres blocs.
 - La section CE_QUE_TU_RECOIS doit être la plus concrète de toute la page.
 - Le CTA final doit opposer clairement : consommer encore du contenu ou récupérer un plan pour agir.
+TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
+""".strip()
+
+        if strategy == LANDING_STRATEGY_POSITIONING:
+            return f"""
+FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
+Utilise exactement les 9 marqueurs ci-dessous, dans cet ordre, une seule fois chacun.
+Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
+
+[[LGD_BLOCK:HERO]]
+Rédige un HERO stratégique et court : un outil IA peut répondre, mais LGD aide à transformer les réponses en chemin d'exécution marketing guidé. Maximum 3 phrases. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+
+[[LGD_BLOCK:IDENTIFICATION]]
+Décris la situation du prospect : il obtient des réponses, des idées ou des conseils, mais reste bloqué au moment de choisir l'ordre, les modules, les étapes et l'action suivante.
+
+[[LGD_BLOCK:AGITATION]]
+Montre le vrai coût du problème : empiler des réponses sans système, multiplier les idées, rester dans la préparation, perdre du temps entre contenus, prompts et outils.
+
+[[LGD_BLOCK:MICRO_TRANSFORMATION]]
+Montre la transformation : passer d'une IA qui répond à un chemin structuré qui organise l'action marketing étape par étape.
+
+[[LGD_BLOCK:CE_QUE_TU_RECOIS]]
+Rends le chemin complet tangible : 4 à 5 éléments concrets comme diagnostic, ordre des étapes, module landing, module email, contenu, conversion, prochaine action.
+
+[[LGD_BLOCK:MECANISME]]
+Explique le mécanisme LGD : objectif → stratégie → landing/page → email → contenu → conversion → action suivante. Rends les modules et l'ordre d'exécution compréhensibles.
+
+[[LGD_BLOCK:OBJECTION_KILLER]]
+Neutralise les objections : ChatGPT suffit-il ? Est-ce trop complexe ? Faut-il être expert marketing ? Est-ce une promesse magique ? Pourquoi un chemin guidé change quelque chose ?
+
+[[LGD_BLOCK:REASSURANCE]]
+Rassure sans dénigrer les autres outils : les IA généralistes sont utiles, mais LGD ajoute un cadre, une logique d'exécution, des modules orientés marketing et un chemin plus clair.
+
+[[LGD_BLOCK:CTA_FINAL]]
+CTA final reconnecté au HERO : invite à recevoir le guide gratuit pour voir le chemin complet, arrêter d'empiler des réponses et commencer à structurer une vraie action marketing. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+
+RÈGLES NON NÉGOCIABLES :
+- Minimum obligatoire : 9 marqueurs [[LGD_BLOCK:...]].
+- Ne renvoie jamais une seule section pour Landing complète.
+- Ne renvoie jamais seulement HERO ou HERO + IDENTIFICATION.
+- Si tu manques de place, raccourcis chaque bloc, mais garde les 9 blocs.
+- N'écris jamais BLOC 1, TITRE:, SOUS-TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, QUESTION:, RÉPONSE: dans le contenu visible.
+- N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
+- N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier », « rédige », « directement », « final visible », « consigne ».
+- Ne dénigre jamais ChatGPT, Claude ou les autres outils IA.
+- Le HERO doit expliquer la différence réponse IA vs chemin guidé en moins de 3 phrases.
+- Le mécanisme doit rendre LGD concret avec au moins 4 étapes d'exécution marketing.
+- Le CTA final doit proposer de voir le chemin complet gratuitement.
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
 
@@ -871,6 +985,7 @@ CONTRAINTES STRICTES :
 - Utilise l'angle, l'audience, le ton et surtout la stratégie marketing détectée.
 - Si la stratégie est clarification_offre_premium : privilégie la clarté, la compréhension immédiate, le mécanisme et les bénéfices précis plutôt que l'émotion forte.
 - Si la stratégie est plan_action_anti_dispersion : privilégie un HERO court, un diagnostic précis, un mécanisme concret et un CTA qui oppose consommation passive et action claire cette semaine.
+- Si la stratégie est positionnement_lgd_vs_outil_ia_brut : privilégie la différence réponse IA vs chemin guidé, le mécanisme LGD concret, les modules, les étapes et le respect des autres outils IA.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
 - Si le brief parle d'affiliation ou de commission : vends la découverte d'une opportunité crédible et progressive, jamais une promesse de richesse rapide.

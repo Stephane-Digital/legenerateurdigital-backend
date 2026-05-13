@@ -39,12 +39,12 @@ def _user_base_plan(user) -> str:
 def _limit_for_plan(plan: str) -> int:
     p = str(plan or "essentiel").lower()
     if p in {"trial", "starter", "azur"}:
-        return 70_000
+        return 150_000
     if "ult" in p:
-        return 2_500_000
+        return 15_000_000
     if "pro" in p:
-        return 1_000_000
-    return 400_000
+        return 6_000_000
+    return 2_000_000
 
 
 def _normalize_plan_key(raw_plan: str | None, limit_value: int = 0) -> str:
@@ -56,17 +56,17 @@ def _normalize_plan_key(raw_plan: str | None, limit_value: int = 0) -> str:
     if v == "pro":
         return "pro"
     if v == "essentiel":
-        if limit_value == 70_000:
+        if limit_value == 150_000:
             return "trial"
         return "essentiel"
 
-    if limit_value == 70_000:
+    if limit_value == 150_000:
         return "trial"
-    if limit_value == 2_500_000:
+    if limit_value == 15_000_000:
         return "ultime"
-    if limit_value == 1_000_000:
+    if limit_value == 6_000_000:
         return "pro"
-    if limit_value == 400_000:
+    if limit_value == 2_000_000:
         return "essentiel"
     return "essentiel"
 
@@ -75,6 +75,17 @@ def _display_plan_from_key(plan_key: str) -> str:
     if plan_key == "trial":
         return "azur"
     return plan_key
+
+def _daily_limit_for_plan_key(plan_key: str, tokens_limit: int = 0) -> int:
+    key = str(plan_key or "essentiel").lower()
+    limit = _to_int(tokens_limit, 0)
+    if key == "trial" or limit == 150_000:
+        return 20_000
+    if key == "ultime" or limit == 15_000_000:
+        return 500_000
+    if key == "pro" or limit == 6_000_000:
+        return 250_000
+    return 80_000
 
 
 def _quota_plan_key(quota) -> str | None:
@@ -121,7 +132,7 @@ def _fallback_quota(user, plan_key: str | None = None):
     tokens_limit = _limit_for_plan(effective_key)
     display_plan = _display_plan_from_key(effective_key)
 
-    daily_limit = 10_000 if effective_key == "trial" else max(1, int(tokens_limit / 30))
+    daily_limit = _daily_limit_for_plan_key(effective_key, tokens_limit)
 
     return {
         "feature": "global",
@@ -142,7 +153,7 @@ def serialize_quota(quota, *, plan_key_override: str | None = None, feature_over
         effective_key = _normalize_plan_key(str(plan_key_override or "essentiel"), 0)
         tokens_limit = _limit_for_plan(effective_key)
         display_plan = _display_plan_from_key(effective_key)
-        daily_limit = 10_000 if effective_key == "trial" else max(1, int(tokens_limit / 30))
+        daily_limit = _daily_limit_for_plan_key(effective_key, tokens_limit)
         return {
             "feature": feature_override or "global",
             "plan": display_plan,
@@ -193,7 +204,7 @@ def serialize_quota(quota, *, plan_key_override: str | None = None, feature_over
     reset_at = getattr(quota, "reset_at", None) or getattr(quota, "resetAt", None)
 
     display_plan = _display_plan_from_key(plan_key)
-    daily_limit = 10_000 if plan_key == "trial" else max(1, int(limit / 30))
+    daily_limit = _daily_limit_for_plan_key(plan_key, limit)
 
     return {
         "feature": feature,
@@ -221,11 +232,11 @@ def _get_display_quota(db: Session, user):
             data["tokens_limit"] = min_limit
             data["remaining"] = max(min_limit - _to_int(data["tokens_used"], 0), 0)
 
-        if data["tokens_limit"] == 70_000:
+        if data["tokens_limit"] == 150_000:
             data["plan_key"] = "trial"
             data["plan"] = "azur"
             data["display_plan"] = "azur"
-            data["daily_limit"] = 10_000
+            data["daily_limit"] = _daily_limit_for_plan_key("trial", data["tokens_limit"])
 
         return data
     except Exception as e:

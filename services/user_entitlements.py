@@ -1,26 +1,15 @@
 from __future__ import annotations
 
-"""User entitlements (plan override) for LGD.
+"""LGD — User entitlements / temporary commercial upgrades.
 
-We keep this module **ORM-free** and compatible with existing DB schema:
+But métier : séparer le plan réel payé via Systeme.io du bonus commercial temporaire.
 
-Table: user_entitlements
-Columns (expected):
-- id (bigserial)
-- user_id (bigint)
-- override_plan (varchar)
-- starts_at (timestamptz)
-- ends_at (timestamptz)
-- note (text, nullable)
-- created_by (varchar, nullable)
-- created_at (timestamptz, default now)
+- base_plan = plan réel SIO / essai d'origine (azur, essentiel, pro, ultime)
+- override_plan = bonus temporaire admin (ex : pro 3 mois / ultime 3 mois)
+- effective_plan = override actif si présent, sinon base_plan
 
-This module exposes backward-compatible helpers used by admin routes and quota services:
-- _norm_plan(plan) -> 'essentiel'|'pro'|'ultime'
-- get_active_override(db, user_id)
-- get_effective_plan(db, user_id, base_plan=None)
-- set_plan_override(db, user_id, plan, months=3, note=None, created_by=None)
-- clear_plan_override(db, user_id)
+Ce fichier reste volontairement ORM-free et compatible avec le schéma existant.
+Il crée/complète uniquement des tables techniques si elles n'existent pas.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -30,6 +19,33 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 TABLE = "user_entitlements"
+STATE_TABLE = "user_plan_state"
+
+
+PLAN_ALIASES = {
+    "trial": "azur",
+    "azur": "azur",
+    "starter": "azur",
+    "decouverte": "azur",
+    "découverte": "azur",
+    "free": "azur",
+    "essential": "essentiel",
+    "essentiel": "essentiel",
+    "essentiels": "essentiel",
+    "pro": "pro",
+    "professional": "pro",
+    "ultimate": "ultime",
+    "ultime": "ultime",
+    "premium": "ultime",
+}
+
+
+PLAN_LABELS = {
+    "azur": "Azur / essai",
+    "essentiel": "Essentiel",
+    "pro": "Pro",
+    "ultime": "Ultime",
+}
 
 
 def _utcnow() -> datetime:
@@ -38,18 +54,39 @@ def _utcnow() -> datetime:
 
 def _norm_plan(plan: Optional[str]) -> str:
     p = (plan or "").strip().lower()
-    if p in {"essential", "essentiel", "essentiels"}:
-        return "essentiel"
-    if p in {"pro", "professional"}:
-        return "pro"
-    if p in {"ultimate", "ultime"}:
-        return "ultime"
-    # default safe
-    return "essentiel"
+    return PLAN_ALIASES.get(p, "essentiel")
+
+
+def _iso(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    try:
+        return str(value)
+    except Exception:
+        return None
+
+
+def _days_remaining(ends_at: Any) -> Optional[int]:
+    if not ends_at:
+        return None
+    try:
+        end = ends_at
+        if isinstance(end, str):
+            end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        if getattr(end, "tzinfo", None) is None:
+            end = end.replace(tzinfo=timezone.utc)
+        delta = end - _utcnow()
+        if delta.total_seconds() <= 0:
+            return 0
+        # Arrondi supérieur : 1h restante = 1 jour restant côté produit.
+        return max(1, int((delta.total_seconds() + 86399) // 86400))
+    except Exception:
+        return None
 
 
 def ensure_table(db: Session) -> None:
-    # PostgreSQL-safe CREATE TABLE IF NOT EXISTS (no ORM dependency)
     db.execute(
         text(
             f"""
@@ -69,7 +106,95 @@ def ensure_table(db: Session) -> None:
             """
         )
     )
+
+    db.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {STATE_TABLE} (
+              id BIGSERIAL PRIMARY KEY,
+              user_id BIGINT NOT NULL UNIQUE,
+              base_plan VARCHAR(32) NOT NULL DEFAULT 'essentiel',
+              source VARCHAR(120) NULL,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_{STATE_TABLE}_user_id ON {STATE_TABLE}(user_id);
+            """
+        )
+    )
     db.commit()
+
+
+def _user_table_plan(db: Session, user_id: int) -> Optional[str]:
+    try:
+        row = db.execute(
+            text("SELECT plan FROM users WHERE id = :uid LIMIT 1"),
+            {"uid": int(user_id)},
+        ).mappings().first()
+        if row and row.get("plan"):
+            return _norm_plan(str(row["plan"]))
+    except Exception:
+        pass
+    return None
+
+
+def get_base_plan(db: Session, *, user_id: int, fallback: Optional[str] = None) -> str:
+    ensure_table(db)
+    row = db.execute(
+        text(
+            f"""
+            SELECT base_plan
+            FROM {STATE_TABLE}
+            WHERE user_id = :uid
+            LIMIT 1
+            """
+        ),
+        {"uid": int(user_id)},
+    ).mappings().first()
+    if row and row.get("base_plan"):
+        return _norm_plan(str(row["base_plan"]))
+
+    user_plan = _user_table_plan(db, int(user_id))
+    if user_plan:
+        return user_plan
+
+    return _norm_plan(fallback)
+
+
+def set_base_plan(
+    db: Session,
+    *,
+    user_id: int,
+    base_plan: str,
+    source: Optional[str] = None,
+    sync_user_column: bool = True,
+) -> Dict[str, Any]:
+    """Enregistre le plan réel payé / essai sans toucher au bonus temporaire actif."""
+    ensure_table(db)
+    plan = _norm_plan(base_plan)
+    db.execute(
+        text(
+            f"""
+            INSERT INTO {STATE_TABLE}(user_id, base_plan, source, created_at, updated_at)
+            VALUES (:uid, :plan, :source, NOW(), NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET base_plan = EXCLUDED.base_plan,
+                          source = EXCLUDED.source,
+                          updated_at = NOW()
+            """
+        ),
+        {"uid": int(user_id), "plan": plan, "source": source},
+    )
+
+    if sync_user_column:
+        try:
+            db.execute(text("UPDATE users SET plan = :plan WHERE id = :uid"), {"uid": int(user_id), "plan": plan})
+        except Exception:
+            pass
+
+    db.flush()
+    return {"ok": True, "user_id": int(user_id), "base_plan": plan, "source": source}
 
 
 def get_active_override(db: Session, user_id: int) -> Optional[Dict[str, Any]]:
@@ -93,15 +218,42 @@ def get_active_override(db: Session, user_id: int) -> Optional[Dict[str, Any]]:
         .mappings()
         .first()
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    data = dict(row)
+    data["override_plan"] = _norm_plan(str(data.get("override_plan") or ""))
+    data["temporary_plan"] = data["override_plan"]
+    data["temporary_until"] = data.get("ends_at")
+    data["temporary_days_remaining"] = _days_remaining(data.get("ends_at"))
+    data["starts_at_iso"] = _iso(data.get("starts_at"))
+    data["ends_at_iso"] = _iso(data.get("ends_at"))
+    return data
+
+
+def get_plan_state(db: Session, *, user_id: int, base_plan: Optional[str] = None) -> Dict[str, Any]:
+    base = get_base_plan(db, user_id=int(user_id), fallback=base_plan)
+    ov = get_active_override(db, int(user_id))
+    effective = _norm_plan(ov.get("override_plan")) if ov else base
+    return {
+        "user_id": int(user_id),
+        "base_plan": base,
+        "base_plan_label": PLAN_LABELS.get(base, base),
+        "effective_plan": effective,
+        "effective_plan_label": PLAN_LABELS.get(effective, effective),
+        "temporary_plan": ov.get("override_plan") if ov else None,
+        "temporary_plan_label": PLAN_LABELS.get(ov.get("override_plan"), ov.get("override_plan")) if ov else None,
+        "temporary_until": _iso(ov.get("ends_at")) if ov else None,
+        "temporary_days_remaining": ov.get("temporary_days_remaining") if ov else None,
+        "temporary_active": bool(ov),
+        "override": ov,
+    }
 
 
 def get_effective_plan(db: Session, *, user_id: int, base_plan: Optional[str] = None) -> Tuple[str, Optional[Dict[str, Any]]]:
     """Return (effective_plan, override_row_or_none)."""
-    ov = get_active_override(db, int(user_id))
-    if ov and ov.get("override_plan"):
-        return _norm_plan(str(ov["override_plan"])), ov
-    return _norm_plan(base_plan), None
+    state = get_plan_state(db, user_id=int(user_id), base_plan=base_plan)
+    ov = state.get("override") if state.get("temporary_active") else None
+    return _norm_plan(str(state.get("effective_plan") or base_plan)), ov
 
 
 def set_plan_override(
@@ -116,6 +268,9 @@ def set_plan_override(
     ensure_table(db)
 
     p = _norm_plan(plan)
+    if p not in {"pro", "ultime", "essentiel", "azur"}:
+        raise ValueError("plan invalide")
+
     months = int(months or 3)
     if months < 1 or months > 36:
         raise ValueError("months must be between 1 and 36")
@@ -133,7 +288,7 @@ def set_plan_override(
         {"uid": int(user_id), "plan": p, "starts": now, "ends": ends, "note": note, "created_by": created_by},
     )
     db.commit()
-    return get_active_override(db, int(user_id)) or {"ok": True}
+    return get_plan_state(db, user_id=int(user_id))
 
 
 def clear_plan_override(db: Session, *, user_id: int) -> Dict[str, Any]:
@@ -152,7 +307,7 @@ def clear_plan_override(db: Session, *, user_id: int) -> Dict[str, Any]:
         {"uid": int(user_id), "now": now},
     )
     db.commit()
-    return {"ok": True}
+    return get_plan_state(db, user_id=int(user_id))
 
 
 # Backward-compatible aliases (older patches used these names)

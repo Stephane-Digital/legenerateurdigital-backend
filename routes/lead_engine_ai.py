@@ -15,6 +15,10 @@ from services.ai_quota_service import get_or_create_quota, update_quota
 router = APIRouter(prefix="/lead-engine/ai", tags=["Lead Engine AI"])
 
 
+DEFAULT_LANDING_OUTPUT_CHARS = 8200
+MAX_LANDING_OUTPUT_CHARS = 12000
+
+
 def _user_id(user: Any) -> int:
     if isinstance(user, dict):
         return int(user.get("id"))
@@ -76,9 +80,26 @@ def _estimate_tokens(*parts: str) -> int:
     return max(1, int(len(text) / 4))
 
 
-def _safe_max_length(value: Any) -> int:
-    n = _to_int(value, 120)
-    return max(400, min(n, 3000))
+def _safe_max_length(value: Any, goal: Any = None, page_type: Any = None) -> int:
+    """
+    Correctif PROD V10.6 : l'ancien clamp 400–3000 était la cause principale
+    des sorties OpenAI trop courtes à 1 ou 2 blocs. Pour landing_complete,
+    on impose une vraie fenêtre de sortie backend.
+    """
+    n = _to_int(value, 0)
+    raw_goal = str(goal or "").strip().lower()
+    raw_page_type = str(page_type or "").strip().lower()
+
+    is_landing = raw_goal == "landing_complete" or raw_page_type in {"lead_magnet", "landing", "landing_complete"}
+
+    if is_landing:
+        if n < 6500:
+            return DEFAULT_LANDING_OUTPUT_CHARS
+        return max(6500, min(n, MAX_LANDING_OUTPUT_CHARS))
+
+    if n <= 0:
+        n = 1800
+    return max(400, min(n, 5000))
 
 
 @router.post("/save-memory")
@@ -140,12 +161,12 @@ def generate(
             },
         )
 
-    max_length = _safe_max_length(payload.max_length)
+    max_length = _safe_max_length(payload.max_length, payload.goal, payload.page_type)
 
-    # LGD V8 : estimation douce mais alignée avec les options réelles du Copilote.
-    # Le coût OpenAI reste plafonné dans le service ; ici on décrémente sans punir l'utilisateur.
+    # Estimation réaliste : on tient compte du brief + de la sortie demandée.
+    # Ce n'est pas la facture OpenAI réelle, mais cela évite de sous-décrémenter fortement le quota LGD.
     estimated_tokens = max(
-        180,
+        420,
         min(
             _estimate_tokens(
                 payload.goal,
@@ -158,8 +179,9 @@ def generate(
                 payload.tone or "",
                 payload.page_type or "",
             )
-            + 220,
-            780,
+            + int(max_length / 3.2)
+            + 260,
+            4200,
         ),
     )
 
@@ -188,7 +210,8 @@ def generate(
             page_type=payload.page_type,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"LEAD_ENGINE_AI_ERROR: {exc}") from exc
+        # 502 = OpenAI / génération distante invalide, pas une erreur frontend.
+        raise HTTPException(status_code=502, detail=f"LEAD_ENGINE_AI_ERROR: {exc}") from exc
 
     updated_quota = update_quota(db, user_id, estimated_tokens, feature="global")
     if updated_quota is None:

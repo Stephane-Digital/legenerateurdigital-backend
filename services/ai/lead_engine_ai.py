@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Iterable, Optional
 
 try:
@@ -16,19 +17,23 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V10.5 — Done For You Lead Engine
-# Objectif : produire un vrai lead magnet de copywriter senior,
-# multi-blocs, orienté capture email, sans casser le plafond caractères UI.
+# Version PROD V10.6 — Premium multi-blocs verrouillé
+# Objectif : produire une vraie landing lead magnet structurée,
+# sans faux fallback silencieux, sans sortie 1 bloc, sans réponse coupée.
 # ============================================================
 
 SYSTEM_PROMPT = """
 Tu es LEAD ENGINE LGD, copywriter conversion senior, stratège lead magnet et expert du marketing digital premium.
 Tu ne coaches pas l'utilisateur : tu produis le contenu final à sa place.
 
-RÈGLE V12 PRIORITAIRE : PROMPT BRAIN PERSONA-FIRST.
+RÈGLE PRIORITAIRE : SORTIE MULTI-BLOCS STRICTE.
+Pour une landing complète, tu dois produire une page finale exploitable en sections séparées par les marqueurs [[LGD_BLOCK:...]].
+Ces marqueurs servent uniquement au parser frontend. Le texte visible qui suit chaque marqueur doit être propre, final et utilisable tel quel.
+
+RÈGLE PERSONA-FIRST.
 Avant d'écrire, tu lis le brief comme un stratège marketing humain. Tu extrais silencieusement :
 - l'offre exacte ;
-- le modèle économique (vente directe, affiliation, commission récurrente, SaaS, formation, MRR, service) ;
+- le modèle économique ;
 - la cible réelle ;
 - les personas probables ;
 - la situation de vie ;
@@ -61,13 +66,6 @@ Interdits absolus :
 - vendre directement l'offre principale quand l'objectif est la capture de leads ;
 - écrire un texte IA générique du type « transformez votre vie », « libérez votre potentiel », « solution ultime », « révolutionnez votre business ».
 
-Pour une landing complète, tu produis une seule vraie page finale cohérente, composée de sections exploitables dans le canvas.
-Les séparateurs [[LGD_BLOCK:...]] sont autorisés uniquement pour le parser frontend et ne font pas partie du texte visible.
-Dans chaque section, écris uniquement le texte final propre que l'utilisateur pourrait laisser tel quel sur sa page.
-
-Si l'objectif est de générer des leads : crée un lead magnet qui maximise l'opt-in email.
-Si l'objectif est de vendre : crée une page de vente courte, persuasive et crédible.
-
 Niveau attendu : humain, premium, précis, émotionnel, crédible, expert marketing digital, jamais robotique.
 Chaque section doit faire avancer le lecteur : attention → identification → tension émotionnelle → désir → confiance → action.
 
@@ -84,11 +82,44 @@ Tu remplaces toujours les consignes par du texte final concret.
 """.strip()
 
 
-MAX_BRIEF_CHARS = 4500
+MAX_BRIEF_CHARS = 5200
 MAX_MEMORY_ITEMS = 1
-MAX_MEMORY_CHARS = 120
-DEFAULT_OUTPUT_CHARS = 7200
-MAX_OUTPUT_CHARS = 10000
+MAX_MEMORY_CHARS = 180
+DEFAULT_OUTPUT_CHARS = 8200
+MAX_OUTPUT_CHARS = 12000
+MIN_LANDING_CHARS = 2400
+MIN_LANDING_BLOCKS = 8
+
+REQUIRED_LANDING_BLOCKS = [
+    "HERO",
+    "IDENTIFICATION",
+    "AGITATION",
+    "MICRO_TRANSFORMATION",
+    "CE_QUE_TU_RECOIS",
+    "MECANISME",
+    "OBJECTION_KILLER",
+    "REASSURANCE",
+    "CTA_FINAL",
+]
+
+FORBIDDEN_VISIBLE_FRAGMENTS = (
+    "voici la structure",
+    "voici une structure",
+    "clarifie",
+    "renforce",
+    "augmente",
+    "tu peux",
+    "vous pouvez",
+    "conseil",
+    "à adapter",
+    "a adapter",
+    "à modifier",
+    "a modifier",
+    "transformez votre vie",
+    "libérez votre potentiel",
+    "solution ultime",
+    "révolutionnez votre business",
+)
 
 
 def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -138,13 +169,14 @@ def _safe_int(value: Optional[int], default: int = DEFAULT_OUTPUT_CHARS) -> int:
         n = int(value) if value is not None else default
     except Exception:
         n = default
-    return max(400, min(n, MAX_OUTPUT_CHARS))
+    return max(1200, min(n, MAX_OUTPUT_CHARS))
 
 
 def _target_output_tokens(char_limit: int) -> int:
-    # Approximation prudente : 1 token ≈ 3.5/4 caractères en français.
-    # On garde une marge pour éviter les sorties longues côté OpenAI.
-    return max(420, min(2600, int(char_limit / 3.6) + 160))
+    # Correctif V10.6 : l'ancien plafond était trop bas et provoquait des sorties tronquées.
+    # Pour une vraie landing française, on autorise assez de sortie pour 8 à 9 blocs.
+    estimated = int(max(char_limit, DEFAULT_OUTPUT_CHARS) / 2.45) + 700
+    return max(2200, min(5200, estimated))
 
 
 def _memory_block(memories: Iterable[dict]) -> str:
@@ -154,7 +186,7 @@ def _memory_block(memories: Iterable[dict]) -> str:
         memory_type = str(item.get("memory_type") or "memoire")[:40]
         goal = _clip(str(item.get("goal") or ""), 70)
         content = _clip(str(item.get("content") or ""), MAX_MEMORY_CHARS)
-        business = _clip(str(item.get("business_context") or ""), 80)
+        business = _clip(str(item.get("business_context") or ""), 100)
 
         if not content:
             continue
@@ -195,7 +227,9 @@ def _page_strategy(page_type: str) -> str:
             "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
             "Ne vends pas l'offre principale. Vends la micro-transformation gratuite qui donne envie de laisser son email. "
             "Écris la page finale en mode DONE FOR YOU : aucun conseil, aucun plan, aucun texte à compléter. "
-            "Structure la page comme un vrai tunnel psychologique : accroche, identification, promesse du guide, contenu, mécanisme, réassurance, objection killer, CTA. Si le brief parle d\'affiliation, explique l\'opportunité sans la rendre magique : capter l\'email, éduquer, montrer le chemin et préparer la vente."
+            "Structure la page comme un vrai tunnel psychologique : accroche, identification, agitation, micro-transformation, "
+            "contenu reçu, mécanisme, objections, réassurance et CTA. Si le brief parle d'affiliation, explique l'opportunité "
+            "sans la rendre magique : capter l'email, éduquer, montrer le chemin et préparer la vente."
         )
     if page_type == "webinar":
         return "TYPE : WEBINAR. But : inscription à une session avec prise de conscience forte."
@@ -220,13 +254,13 @@ def _copilot_options_block(
 ) -> str:
     return f"""
 OPTIONS COPILOTE À RESPECTER :
-Objectif : {_clip(objective, 90) or "Générer des leads"}
+Objectif : {_clip(objective, 120) or "Générer des leads"}
 Type de page : {page_type}
-Angle : {_clip(angle, 90) or "conversion claire"}
-Audience : {_clip(audience, 120) or "audience froide ou tiède"}
-Ton : {_clip(tone, 90) or "humain premium"}
+Angle : {_clip(angle, 140) or "conversion claire"}
+Audience : {_clip(audience, 180) or "audience froide ou tiède"}
+Ton : {_clip(tone, 120) or "humain premium"}
 Longueur automatique recommandée : {max_length} caractères maximum de sécurité, tous blocs inclus
-URL CTA : {_clip(cta_url, 220) or "à renseigner"}
+URL CTA : {_clip(cta_url, 240) or "à renseigner"}
 """.strip()
 
 
@@ -236,19 +270,19 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     if value == "hooks":
         return (
             "Produit exactement 10 hooks premium numérotés de 1 à 10. "
-            "Chaque hook doit cibler une douleur ou un désir différent : argent, temps, famille, honte silencieuse, surcharge d\'infos, peur d\'échouer, envie de liberté, besoin de première action. "
-            "Aucun conseil, aucun remplissage, aucun hook générique. Chaque hook doit pouvoir être utilisé tel quel sur une landing. "
+            "Chaque hook doit cibler une douleur ou un désir différent : argent, temps, famille, honte silencieuse, surcharge d'infos, peur d'échouer, envie de liberté, besoin de première action. "
+            "Aucun conseil, aucun remplissage, aucun hook générique. Chaque hook doit pouvoir être utilisé tel quel sur une landing."
         )
     if value == "cta":
         return (
             "Produit exactement 10 CTA premium pour capture email, numérotés de 1 à 10. "
-            "Ils doivent donner envie de recevoir le guide maintenant, sans vendre directement l\'offre principale. "
-            "Mélange : CTA doux, CTA émotionnels, CTA directs, CTA curiosité. Aucun CTA générique. "
+            "Ils doivent donner envie de recevoir le guide maintenant, sans vendre directement l'offre principale. "
+            "Mélange : CTA doux, CTA émotionnels, CTA directs, CTA curiosité. Aucun CTA générique."
         )
     if value == "benefits":
         return (
             "Produit exactement 8 bénéfices premium numérotés de 1 à 8 : résultat concret + émotion débloquée + situation vécue. "
-            "Chaque bénéfice doit être spécifique au brief, pas générique. "
+            "Chaque bénéfice doit être spécifique au brief, pas générique."
         )
     if value == "variants":
         return "Produit 3 variantes A/B/C : hook, micro-promesse, CTA. Très court."
@@ -260,7 +294,8 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
             "Rédige un Lead Magnet Expert final, prêt à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
             "Chaque section doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
             "Objectif : capture email maximale, pas vente directe. "
-            "Minimum 8 sections obligatoires pour landing_complete. "
+            "Minimum 9 sections obligatoires pour landing_complete. "
+            "Chaque section doit contenir au moins 2 phrases concrètes, sauf CTA_FINAL qui peut être plus direct. "
             "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA."
         )
 
@@ -271,41 +306,44 @@ def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> st
     if page_type == "lead_magnet":
         return f"""
 FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
+Utilise exactement les 9 marqueurs ci-dessous, dans cet ordre, une seule fois chacun.
 Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
 
 [[LGD_BLOCK:HERO]]
-Rédige directement le hero final visible : une accroche émotionnelle, une micro-promesse gratuite et un CTA d'opt-in. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+Accroche émotionnelle + micro-promesse gratuite + appel à l'opt-in. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
 
 [[LGD_BLOCK:IDENTIFICATION]]
-Rédige directement la scène d'identification finale. Le prospect doit se reconnaître sans lire une consigne.
+Scène d'identification : le prospect doit se reconnaître dans sa situation réelle.
 
 [[LGD_BLOCK:AGITATION]]
-Rédige directement l'agitation finale : le coût concret de rester bloqué, sans conseil ni analyse.
+Coût concret de rester bloqué : temps perdu, fatigue mentale, honte silencieuse, peur d'échouer encore.
 
 [[LGD_BLOCK:MICRO_TRANSFORMATION]]
-Rédige directement la micro-transformation promise par le lead magnet.
+Micro-transformation promise par le lead magnet : clarté, première action, chemin réaliste.
 
 [[LGD_BLOCK:CE_QUE_TU_RECOIS]]
-Rédige directement 4 à 5 lignes finales sur ce que le prospect reçoit dans le guide.
+4 à 5 lignes finales sur ce que le prospect reçoit dans le guide. Pas de liste technique froide.
 
 [[LGD_BLOCK:MECANISME]]
-Rédige directement le mécanisme final : pourquoi ce lead magnet aide vraiment, sans promesse magique.
+Pourquoi ce lead magnet aide vraiment : logique simple, action progressive, sans promesse magique.
 
 [[LGD_BLOCK:OBJECTION_KILLER]]
-Rédige directement les réponses finales aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
+Réponses finales aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
 
 [[LGD_BLOCK:REASSURANCE]]
-Rédige directement la réassurance finale : débutant accepté, pas besoin d'être influenceur, progression réaliste.
+Réassurance finale : débutant accepté, pas besoin d'être influenceur, progression réaliste, pas de bullshit.
 
 [[LGD_BLOCK:CTA_FINAL]]
-Rédige directement le CTA final : une phrase émotionnelle + un appel clair à laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 220) or "à renseigner"}.
+CTA final : phrase émotionnelle + appel clair à laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
 
 RÈGLES NON NÉGOCIABLES :
-- Minimum obligatoire : 8 marqueurs [[LGD_BLOCK:...]].
+- Minimum obligatoire : 9 marqueurs [[LGD_BLOCK:...]].
+- Ne renvoie jamais une seule section pour Landing complète.
+- Ne renvoie jamais seulement HERO ou HERO + IDENTIFICATION.
+- Si tu manques de place, raccourcis chaque bloc, mais garde les 9 blocs.
 - N'écris jamais BLOC 1, TITRE:, SOUS-TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, QUESTION:, RÉPONSE: dans le contenu visible.
 - N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
 - N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier », « rédige », « directement », « final visible », « consigne ».
-- Ne renvoie jamais une seule section pour Landing complète.
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
 
@@ -324,7 +362,7 @@ Texte final de la promesse, sans préfixe technique.
 Texte final du mécanisme, sans préfixe technique.
 
 [[LGD_BLOCK:CTA_FINAL]]
-Texte final du CTA avec URL si fournie : {_clip(cta_url, 220) or "à renseigner"}
+Texte final du CTA avec URL si fournie : {_clip(cta_url, 240) or "à renseigner"}
 
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
@@ -346,64 +384,36 @@ def _sanitize_done_for_you_output(text: str) -> str:
         "passe d'une simple page",
         "passe d’une simple page",
     )
+    labels = (
+        "TITRE:",
+        "SOUS-TITRE:",
+        "SOUS TITRE:",
+        "CTA:",
+        "URL CTA:",
+        "DOULEUR:",
+        "BÉNÉFICES:",
+        "BENEFICES:",
+        "PROMESSE:",
+        "QUESTION:",
+        "RÉPONSE:",
+        "REPONSE:",
+    )
+
     cleaned_lines: list[str] = []
-    for raw in str(text or "").splitlines():
+    for raw in str(text or "").replace("```", "").splitlines():
         line = raw.rstrip()
         low = line.strip().lower()
         if any(low.startswith(prefix) for prefix in forbidden_starts):
             continue
-        # Retire les labels techniques en début de ligne s'ils apparaissent malgré l'instruction.
-        for prefix in ("TITRE:", "SOUS-TITRE:", "SOUS TITRE:", "CTA:", "URL CTA:", "DOULEUR:", "BÉNÉFICES:", "BENEFICES:", "PROMESSE:", "QUESTION:", "RÉPONSE:", "REPONSE:"):
+        for prefix in labels:
             if line.strip().upper().startswith(prefix):
-                line = line.strip()[len(prefix):].strip()
+                line = line.strip()[len(prefix) :].strip()
                 break
         cleaned_lines.append(line)
-    return "\n".join(cleaned_lines).strip()
 
-
-def _extract_offer_hint(brief: str) -> str:
-    text = str(brief or "").strip()
-    for marker in ("OFFRE :", "Offre / sujet :", "Offre:", "Sujet / offre"):
-        if marker.lower() in text.lower():
-            idx = text.lower().find(marker.lower())
-            chunk = text[idx + len(marker):].strip().splitlines()[0].strip()
-            if chunk:
-                return _clip(chunk, 180)
-    return _clip(text.splitlines()[0] if text else "ton offre", 180)
-
-
-def _fallback_landing_blocks(*, brief: str, cta_url: Optional[str]) -> str:
-    offer = _extract_offer_hint(brief)
-    url = _clip(cta_url, 220) or ""
-    url_line = f"\n{url}" if url else ""
-    return f"""
-[[LGD_BLOCK:HERO]]
-Vous avez acheté des formations, testé des idées, regardé des vidéos… mais rien n’a vraiment bougé. Recevez le guide gratuit pour transformer {offer} en première action claire, simple et visible.{url_line}
-
-[[LGD_BLOCK:IDENTIFICATION]]
-Vous n’avez pas besoin d’une énième promesse magique. Vous avez besoin de savoir quoi faire maintenant, dans quel ordre, sans vous perdre dans les tunnels, les outils et les méthodes qui se contredisent.
-
-[[LGD_BLOCK:AGITATION]]
-Chaque semaine passée à hésiter renforce la même impression : les autres avancent, pendant que vous recommencez encore une nouvelle formation sans publier, sans vendre, sans vraie direction.
-
-[[LGD_BLOCK:MICRO_TRANSFORMATION]]
-Ce guide vous aide à identifier la première étape concrète pour sortir de la dispersion et construire une page simple qui capte des prospects au lieu de rester bloqué dans la préparation.
-
-[[LGD_BLOCK:CE_QUE_TU_RECOIS]]
-Un angle clair pour présenter votre offre sans paraître forcé.\nUne structure de page pensée pour récupérer des emails.\nLes erreurs qui bloquent les débutants avant leur première vente.\nUn chemin simple pour passer de l’idée à l’action.\nUn CTA prêt à utiliser pour inviter le prospect à laisser son email.
-
-[[LGD_BLOCK:MECANISME]]
-La méthode repose sur une idée simple : arrêter de vendre trop tôt, créer d’abord une micro-victoire, puis utiliser l’email pour construire la confiance avant la vente.
-
-[[LGD_BLOCK:OBJECTION_KILLER]]
-Pas d’audience ? Commencez avec une page claire.\nPas technique ? Le guide simplifie les étapes.\nDéjà essayé ? Cette fois, l’objectif n’est pas de tout faire, mais de lancer la première action qui attire un prospect.
-
-[[LGD_BLOCK:REASSURANCE]]
-C’est pensé pour les débutants, les personnes qui manquent de temps et celles qui veulent avancer sans devenir influenceur, sans jargon et sans promesse irréaliste.
-
-[[LGD_BLOCK:CTA_FINAL]]
-Laissez votre email et recevez le guide pour arrêter de tourner en rond et poser la première brique de votre système de prospects.{url_line}
-""".strip()
+    cleaned = "\n".join(cleaned_lines).strip()
+    cleaned = re.sub(r"\n{4,}", "\n\n\n", cleaned)
+    return cleaned
 
 
 def _prompt_brain_context(brief: str, objective: Optional[str], angle: Optional[str], audience: Optional[str], tone: Optional[str]) -> str:
@@ -475,10 +485,13 @@ def build_lead_prompt(
 ) -> tuple[str, int, str]:
     safe_goal = _clip(goal, 80)
     safe_brief = _clip(brief, MAX_BRIEF_CHARS)
-    safe_style = _clip(emotional_style, 140) or "humain premium"
-    safe_context = _clip(business_context, 200) or "lead generation premium"
+    safe_style = _clip(emotional_style, 180) or "humain premium"
+    safe_context = _clip(business_context, 260) or "lead generation premium"
     safe_max_length = _safe_int(max_length, DEFAULT_OUTPUT_CHARS)
     inferred_page_type = _infer_page_type(safe_goal, objective, page_type)
+
+    if _norm(safe_goal) == "landing_complete" and inferred_page_type == "lead_magnet":
+        safe_max_length = max(safe_max_length, DEFAULT_OUTPUT_CHARS)
 
     prompt = f"""
 {_page_strategy(inferred_page_type)}
@@ -588,7 +601,7 @@ def _chat_completion(client: Any, *, model: str, messages: list[dict[str, str]],
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.72,
+                temperature=0.74,
                 max_tokens=max_out,
             )
     except TypeError:
@@ -645,7 +658,7 @@ def _dedupe_near_lines(text: str) -> str:
     for raw in str(text or "").splitlines():
         line = raw.rstrip()
         key = line.lower().strip(" -•:;.!?")
-        if key and len(key) > 24:
+        if key and len(key) > 34 and not key.startswith("[[lgd_block:"):
             if key in seen:
                 continue
             seen.add(key)
@@ -653,10 +666,28 @@ def _dedupe_near_lines(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _trim_to_char_limit(text: str, char_limit: int) -> str:
+def _landing_block_count(text: str) -> int:
+    return len(re.findall(r"\[\[LGD_BLOCK:[A-Z0-9_\-]+\]\]", str(text or "")))
+
+
+def _missing_required_blocks(text: str) -> list[str]:
+    raw = str(text or "")
+    return [block for block in REQUIRED_LANDING_BLOCKS if f"[[LGD_BLOCK:{block}]]" not in raw]
+
+
+def _visible_text(text: str) -> str:
+    return re.sub(r"\[\[LGD_BLOCK:[A-Z0-9_\-]+\]\]", "", str(text or "")).strip()
+
+
+def _trim_to_char_limit(text: str, char_limit: int, *, page_type: str = "modular") -> str:
     cleaned = _dedupe_near_lines(str(text or "").strip())
     if len(cleaned) <= char_limit:
         return cleaned
+
+    if page_type == "lead_magnet":
+        # Ne jamais couper une landing au milieu des blocs obligatoires.
+        # On laisse une marge contrôlée plutôt que de renvoyer 1 ou 2 blocs.
+        return cleaned[: min(len(cleaned), MAX_OUTPUT_CHARS)].rstrip()
 
     cut = cleaned[:char_limit].rstrip()
     break_points = [cut.rfind("\n\nBLOC"), cut.rfind("\nBLOC"), cut.rfind("\n- "), cut.rfind("\n")]
@@ -666,23 +697,12 @@ def _trim_to_char_limit(text: str, char_limit: int) -> str:
     return cut.rstrip()
 
 
-def _compact_output(text: str, *, char_limit: int, page_type: str, brief: str = "", cta_url: Optional[str] = None) -> str:
+def _compact_output(text: str, *, char_limit: int, page_type: str) -> str:
     hard_limit = _safe_int(char_limit, DEFAULT_OUTPUT_CHARS)
-    cleaned = _sanitize_done_for_you_output(_trim_to_char_limit(text, hard_limit))
+    cleaned = _sanitize_done_for_you_output(_trim_to_char_limit(text, hard_limit, page_type=page_type))
 
-    # IMPORTANT LGD PROD : ne jamais remplacer une réponse IA faible par un faux fallback instantané.
-    # Si la réponse est faible, generate_lead_content déclenche un vrai retry OpenAI avant de renvoyer.
     if not cleaned.strip():
         return ""
-
-    if page_type == "lead_magnet" and len(cleaned) > hard_limit:
-        parts = cleaned.split("\n\n[[LGD_BLOCK:")
-        cleaned = parts[0]
-        for part in parts[1:]:
-            candidate = cleaned + "\n\n[[LGD_BLOCK:" + part
-            if len(candidate) > hard_limit:
-                break
-            cleaned = candidate
 
     return cleaned.strip()
 
@@ -693,34 +713,46 @@ def _is_landing_complete_goal(goal: str, page_type: str) -> bool:
 
 def _is_strong_landing_output(text: str) -> bool:
     raw = str(text or "")
-    visible = _sanitize_done_for_you_output(raw).strip()
-    forbidden = (
-        "voici la structure",
-        "clarifie",
-        "renforce",
-        "augmente",
-        "tu peux",
-        "vous pouvez",
-        "conseil",
-        "transformez votre vie",
-        "libérez votre potentiel",
-        "solution ultime",
-        "révolutionnez",
-    )
-    if any(word in visible.lower() for word in forbidden):
+    visible = _sanitize_done_for_you_output(_visible_text(raw)).strip()
+    low = visible.lower()
+
+    if any(fragment in low for fragment in FORBIDDEN_VISIBLE_FRAGMENTS):
         return False
-    return raw.count("[[LGD_BLOCK:") >= 8 and len(visible) >= 1300
+    if _landing_block_count(raw) < MIN_LANDING_BLOCKS:
+        return False
+    if _missing_required_blocks(raw):
+        return False
+    if len(visible) < MIN_LANDING_CHARS:
+        return False
+    if raw.strip().endswith("[[LGD_BLOCK:IDENTIFICATION]]") or raw.strip().endswith("[[LGD_BLOCK:HERO]]"):
+        return False
+    return True
 
 
-def _strict_retry_prompt(prompt: str) -> str:
+def _strict_retry_prompt(prompt: str, attempt: int) -> str:
     return (
         prompt
-        + "\n\nRETRY LGD OBLIGATOIRE — LA RÉPONSE PRÉCÉDENTE ÉTAIT TROP FAIBLE. "
-        + "Génère maintenant une vraie landing complète DONE FOR YOU avec au moins 9 marqueurs [[LGD_BLOCK:...]]. "
-        + "Chaque section doit contenir du texte final utilisable tel quel. "
+        + f"\n\nRETRY LGD OBLIGATOIRE #{attempt} — LA RÉPONSE PRÉCÉDENTE ÉTAIT TROP FAIBLE OU INCOMPLÈTE. "
+        + "Génère maintenant une vraie landing complète DONE FOR YOU avec exactement les 9 marqueurs obligatoires : "
+        + ", ".join(f"[[LGD_BLOCK:{block}]]" for block in REQUIRED_LANDING_BLOCKS)
+        + ". Chaque section doit contenir du texte final utilisable tel quel. "
         + "Interdiction absolue de fallback, de conseils, de plan, de phrase méta, de contenu générique. "
         + "Exploite l'offre, le persona, les douleurs cachées, l'affiliation/commission si présent, la capture email et le CTA. "
+        + "Ne t'arrête pas après HERO. Continue jusqu'à CTA_FINAL."
     )
+
+
+def _completion_attempt(client: Any, *, model: str, prompt: str, char_limit: int) -> str:
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    content = _chat_completion(client, model=model, messages=messages, char_limit=char_limit)
+    if content:
+        return content
+
+    return _responses_completion(client, model=model, prompt=prompt, char_limit=char_limit)
 
 
 def generate_lead_content(
@@ -754,44 +786,64 @@ def generate_lead_content(
         page_type=page_type,
     )
 
-    model = _choose_model()
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
+    is_landing = _is_landing_complete_goal(goal, inferred_page_type)
+    if is_landing:
+        char_limit = max(char_limit, DEFAULT_OUTPUT_CHARS)
 
-    errors: list[str] = []
-    candidate_models = [model]
+    model = _choose_model()
     fallback = _fallback_model(model)
+    candidate_models = [model]
     if fallback not in candidate_models:
         candidate_models.append(fallback)
 
+    errors: list[str] = []
+    weak_outputs: list[str] = []
+
     for candidate_model in candidate_models:
-        try:
-            content = _chat_completion(client, model=candidate_model, messages=messages, char_limit=char_limit)
-            if content:
-                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
-                if _is_landing_complete_goal(goal, inferred_page_type) and not _is_strong_landing_output(compact):
-                    retry_messages = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": _strict_retry_prompt(prompt)},
-                    ]
-                    retry = _chat_completion(client, model=candidate_model, messages=retry_messages, char_limit=max(char_limit, 9000))
-                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 9000), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
-                    if _is_strong_landing_output(retry_compact):
-                        return retry_compact
+        attempts = [prompt]
+        if is_landing:
+            attempts.append(_strict_retry_prompt(prompt, 1))
+            attempts.append(_strict_retry_prompt(prompt, 2))
+
+        for index, attempt_prompt in enumerate(attempts, start=1):
+            try:
+                raw = _completion_attempt(
+                    client,
+                    model=candidate_model,
+                    prompt=attempt_prompt,
+                    char_limit=char_limit,
+                )
+                compact = _compact_output(raw, char_limit=char_limit, page_type=inferred_page_type) if raw else ""
+
+                if not compact:
+                    errors.append(f"{candidate_model} tentative {index}: réponse vide")
+                    continue
+
+                if is_landing:
+                    if _is_strong_landing_output(compact):
+                        return compact
+                    weak_outputs.append(compact)
+                    errors.append(
+                        f"{candidate_model} tentative {index}: sortie faible "
+                        f"({ _landing_block_count(compact) } blocs, manquants={','.join(_missing_required_blocks(compact)) or 'aucun'}, chars={len(_visible_text(compact))})"
+                    )
+                    continue
+
                 return compact
-            content = _responses_completion(client, model=candidate_model, prompt=prompt, char_limit=char_limit)
-            if content:
-                compact = _compact_output(content, char_limit=char_limit, page_type=inferred_page_type, brief=brief, cta_url=cta_url)
-                if _is_landing_complete_goal(goal, inferred_page_type) and not _is_strong_landing_output(compact):
-                    retry = _responses_completion(client, model=candidate_model, prompt=_strict_retry_prompt(prompt), char_limit=max(char_limit, 9000))
-                    retry_compact = _compact_output(retry, char_limit=max(char_limit, 9000), page_type=inferred_page_type, brief=brief, cta_url=cta_url) if retry else ""
-                    if _is_strong_landing_output(retry_compact):
-                        return retry_compact
-                return compact
-            errors.append(f"{candidate_model}: réponse vide")
-        except Exception as exc:
-            errors.append(f"{candidate_model}: {exc}")
+            except Exception as exc:
+                errors.append(f"{candidate_model} tentative {index}: {exc}")
+
+    # Correctif V10.6 : ne plus renvoyer silencieusement une sortie faible en production.
+    # Cela évite que le frontend affiche un faux résultat à 1 bloc et que l'utilisateur croie à un fallback.
+    if is_landing:
+        diagnostic = " | ".join(errors[-6:]) or "sortie incomplète"
+        raise RuntimeError(
+            "Lead Engine IA a refusé la sortie car elle est incomplète. "
+            "Minimum attendu : 8 blocs structurés et une vraie landing complète. "
+            f"Diagnostic: {diagnostic}"
+        )
+
+    if weak_outputs:
+        return weak_outputs[-1]
 
     raise RuntimeError("Réponse OpenAI vide pour Lead Engine. " + " | ".join(errors))

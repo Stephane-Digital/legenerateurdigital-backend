@@ -17,9 +17,10 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V10.6 — Premium multi-blocs verrouillé
+# Version PROD V10.8 — Premium 9/10 copywriting verrouillé
 # Objectif : produire une vraie landing lead magnet structurée,
-# sans faux fallback silencieux, sans sortie 1 bloc, sans réponse coupée.
+# sans faux fallback silencieux, sans sortie 1 bloc, sans réponse coupée,
+# avec une qualité copywriting 9/10 orientée conversion.
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -69,13 +70,27 @@ Interdits absolus :
 Niveau attendu : humain, premium, précis, émotionnel, crédible, expert marketing digital, jamais robotique.
 Chaque section doit faire avancer le lecteur : attention → identification → tension émotionnelle → désir → confiance → action.
 
+RÈGLE QUALITÉ 9/10 — COPYWRITING DIFFÉRENCIANT.
+Le contenu doit donner l'impression d'avoir été écrit par un vrai stratège marketing senior, pas par un générateur IA.
+Chaque bloc doit avoir une fonction différente et une idée nouvelle. Tu dois éviter les répétitions faciles comme « reprendre le contrôle », « transformer votre quotidien », « créer un revenu complémentaire » dans tous les blocs.
+Tu dois écrire des phrases spécifiques au brief : type d'offre, cible, situation de vie, mécanisme, objections et résultat attendu.
+Tu dois rendre le lead magnet concret : le lecteur doit comprendre ce qu'il reçoit, pourquoi c'est utile maintenant, et pourquoi laisser son email est une petite décision logique.
+
+RÈGLE MARKETING DIGITAL LGD.
+Quand le brief touche au digital, à l'IA, au MRR, à l'affiliation, aux formations ou à LGD, tu dois montrer une vraie maîtrise du terrain : surcharge d'informations, tunnels, emails, pages de capture, audience froide, première action, première vente, peur d'investir encore, outils qui dispersent, promesses trop belles.
+Tu ne dois jamais faire croire qu'un revenu arrive vite ou automatiquement. Tu dois vendre un chemin clair, progressif, crédible et actionnable.
+
+RÈGLE ÉMOTION CACHÉE.
 Tu dois utiliser les douleurs cachées quand elles sont présentes ou déductibles :
 honte de ne pas réussir, fatigue mentale, peur du regard des proches, impression d'être en retard,
 peur d'avoir encore échoué, peur de ne pas être fait pour réussir, peur de reperdre de l'argent.
+Ces émotions doivent être intégrées naturellement dans des scènes concrètes, pas listées froidement.
 
+RÈGLE BÉNÉFICES VÉCUS.
 Tu dois transformer les bénéfices rationnels en bénéfices vécus :
 retrouver de la clarté, reprendre confiance, savoir quoi faire aujourd'hui, sentir qu'on avance enfin,
 capturer un email, poser une première brique concrète, créer une source de revenu progressive.
+Chaque bénéfice doit être relié à une situation réelle : fin de journée, enfants, fatigue, formations accumulées, peur de recommencer, besoin d'un plan simple.
 
 Tu ne copies jamais les consignes de format dans la réponse.
 Tu remplaces toujours les consignes par du texte final concret.
@@ -296,7 +311,9 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
             "Objectif : capture email maximale, pas vente directe. "
             "Minimum 9 sections obligatoires pour landing_complete. "
             "Chaque section doit contenir au moins 2 phrases concrètes, sauf CTA_FINAL qui peut être plus direct. "
-            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA."
+            "Le rendu doit être plus fort qu'une réponse ChatGPT générique : angle précis, émotion, désir, mécanisme, objection killer et CTA. "
+            "Chaque bloc doit ajouter une information nouvelle, une nuance émotionnelle ou une raison de laisser son email. "
+            "Évite les phrases passe-partout : écris comme un copywriter senior qui connaît le marketing digital réel."
         )
 
     return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
@@ -322,19 +339,19 @@ Coût concret de rester bloqué : temps perdu, fatigue mentale, honte silencieus
 Micro-transformation promise par le lead magnet : clarté, première action, chemin réaliste.
 
 [[LGD_BLOCK:CE_QUE_TU_RECOIS]]
-4 à 5 lignes finales sur ce que le prospect reçoit dans le guide. Pas de liste technique froide.
+4 à 5 lignes finales très concrètes sur ce que le prospect reçoit dans le guide : étapes, clarté, erreurs évitées, premier plan d'action, angle de capture email. Pas de liste technique froide.
 
 [[LGD_BLOCK:MECANISME]]
-Pourquoi ce lead magnet aide vraiment : logique simple, action progressive, sans promesse magique.
+Pourquoi ce lead magnet aide vraiment : logique simple, action progressive, ordre des priorités, premier système de prospects, sans promesse magique.
 
 [[LGD_BLOCK:OBJECTION_KILLER]]
-Réponses finales aux objections fortes : pas le temps, déjà essayé, pas d'audience, peur d'échouer encore.
+Réponses finales aux objections fortes : pas le temps, déjà essayé, pas d'audience, pas technique, peur d'échouer encore, peur de reperdre de l'argent.
 
 [[LGD_BLOCK:REASSURANCE]]
-Réassurance finale : débutant accepté, pas besoin d'être influenceur, progression réaliste, pas de bullshit.
+Réassurance finale : débutant accepté, pas besoin d'être influenceur, pas besoin de tout comprendre, progression réaliste, pas de bullshit.
 
 [[LGD_BLOCK:CTA_FINAL]]
-CTA final : phrase émotionnelle + appel clair à laisser son email. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+CTA final : phrase émotionnelle + appel clair à laisser son email. Le CTA doit créer une petite urgence saine : arrêter de consommer des contenus au hasard et récupérer un chemin clair. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
 
 RÈGLES NON NÉGOCIABLES :
 - Minimum obligatoire : 9 marqueurs [[LGD_BLOCK:...]].
@@ -534,6 +551,10 @@ CONTRAINTES STRICTES :
 - Si le ton est storytelling : ajoute une micro-scène concrète, mais sans transformer la page en récit long.
 - Chaque bloc doit apporter une nouvelle raison de laisser son email.
 - Ne répète pas le même bloc sous deux formes.
+- Réduis les répétitions de formulations : si une idée apparaît dans HERO, les blocs suivants doivent l'approfondir autrement.
+- Donne au moins 3 détails concrets issus du brief ou déduits du persona : situation de vie, blocage, type d'offre, outil, tunnel, email, page, formation, audience, famille ou temps disponible.
+- La section CE_QUE_TU_RECOIS doit être plus concrète que le reste : elle doit faire sentir que le guide contient un vrai plan, pas seulement de la motivation.
+- Le CTA final doit être plus fort que le CTA du HERO : il doit fermer la boucle émotionnelle ouverte au début.
 - Pas de markdown décoratif, pas de tableau, pas de guillemets.
 
 {_format_rules(inferred_page_type, safe_max_length, cta_url)}

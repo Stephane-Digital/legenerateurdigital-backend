@@ -17,9 +17,9 @@ from services.ai_quota_service import get_or_create_quota
 
 DEFAULT_PLAN = "essentiel"
 PLAN_LIMITS = {
-    "essentiel": 400_000,
-    "pro": 1_000_000,
-    "ultime": 2_500_000,
+    "essentiel": 2_000_000,
+    "pro": 6_000_000,
+    "ultime": 15_000_000,
 }
 
 

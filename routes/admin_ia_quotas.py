@@ -28,7 +28,7 @@ def _get_db_dep():
 get_db = _get_db_dep()
 
 from services.ia_quota_admin import list_quotas, reset_quota, set_quota_limit, plan_default_limit
-from services.user_entitlements import set_plan_override, clear_plan_override
+from services.user_entitlements import set_plan_override, clear_plan_override, get_plan_state
 
 # ✅ We also update the quota row so plan+limit stay coherent across reload.
 from services.ai_quota_service import get_or_create_quota
@@ -160,7 +160,7 @@ def post_plan_override(
     if not plan_val:
         raise HTTPException(status_code=422, detail="plan manquant")
 
-    feature = payload.get("feature") or "coach"
+    feature = payload.get("feature") or "global"
     note = payload.get("note")
 
     # 1) Persist entitlements override (SOURCE OF TRUTH for admin listing)
@@ -178,28 +178,30 @@ def post_plan_override(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 2) Best-effort align quota row plan+limit (does NOT block the request)
+    # 2) Best-effort align global quota row to the temporary effective plan.
+    # We do NOT reset usage here: the upgrade changes capacity, not history.
     try:
         with db.begin_nested():
-            quota = get_or_create_quota(db, int(user_id))
+            quota = get_or_create_quota(db, int(user_id), feature="global")
+            effective_plan = str(plan_val).lower()
+            default_limit = _compute_default_limit(effective_plan, "global")
 
-            _safe_set_attr(quota, "plan", str(plan_val).lower())
-            _safe_set_attr(quota, "feature", str(feature))
-
-            default_limit = _compute_default_limit(str(plan_val).lower(), str(feature))
+            _safe_set_attr(quota, "plan", effective_plan)
+            _safe_set_attr(quota, "feature", "global")
             if default_limit:
                 _safe_set_attr(quota, "limit_tokens", int(default_limit))
                 _safe_set_attr(quota, "tokens_limit", int(default_limit))
+                _safe_set_attr(quota, "credits", int(default_limit))
+                used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+                _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.commit()
     except Exception:
-        # Do NOT rollback the outer transaction (override is already committed).
-        # Only ignore this alignment step.
         try:
             db.rollback()
         except Exception:
             pass
 
-    return {"ok": True, "entitlement": ent}
+    return {"ok": True, "entitlement": ent, "plan_state": get_plan_state(db, user_id=int(user_id))}
 
 
 @router.post("/users/{user_id}/plan-clear")
@@ -213,7 +215,7 @@ def post_plan_clear(
     key = _pick_admin_key(admin_key, payload)
     _require_admin_key(key)
 
-    feature = payload.get("feature") or "coach"
+    feature = payload.get("feature") or "global"
 
     # 1) Clear entitlement override and commit (SOURCE OF TRUTH for admin listing)
     out = clear_plan_override(db, user_id=int(user_id))
@@ -225,17 +227,23 @@ def post_plan_clear(
         except Exception:
             pass
 
-    # 2) Best-effort align quota row back to Essentiel defaults
+    # 2) Best-effort align global quota row back to the real base plan (SIO/trial).
+    # Important: clearing the commercial bonus must not destroy the paid base plan.
+    plan_state = get_plan_state(db, user_id=int(user_id))
+    effective_plan = str(plan_state.get("effective_plan") or "essentiel").lower()
     try:
         with db.begin_nested():
-            quota = get_or_create_quota(db, int(user_id))
-            _safe_set_attr(quota, "plan", "essentiel")
-            _safe_set_attr(quota, "feature", str(feature))
+            quota = get_or_create_quota(db, int(user_id), feature="global")
+            _safe_set_attr(quota, "plan", effective_plan)
+            _safe_set_attr(quota, "feature", "global")
 
-            default_limit = _compute_default_limit("essentiel", str(feature))
+            default_limit = _compute_default_limit(effective_plan, "global")
             if default_limit:
                 _safe_set_attr(quota, "limit_tokens", int(default_limit))
                 _safe_set_attr(quota, "tokens_limit", int(default_limit))
+                _safe_set_attr(quota, "credits", int(default_limit))
+                used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+                _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.commit()
     except Exception:
         try:
@@ -243,7 +251,7 @@ def post_plan_clear(
         except Exception:
             pass
 
-    return {"ok": True, "cleared": out}
+    return {"ok": True, "cleared": out, "plan_state": plan_state}
 
 
 @router.post("/users/{user_id}/quota/reset")

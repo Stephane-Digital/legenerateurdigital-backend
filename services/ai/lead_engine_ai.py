@@ -17,10 +17,10 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V10.8 — Premium 9/10 copywriting verrouillé
+# Version PROD V10.9 — Intelligence stratégique landing verrouillée
 # Objectif : produire une vraie landing lead magnet structurée,
 # sans faux fallback silencieux, sans sortie 1 bloc, sans réponse coupée,
-# avec une qualité copywriting 9/10 orientée conversion.
+# avec une intelligence stratégique adaptée au type de landing demandé.
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -92,6 +92,21 @@ retrouver de la clarté, reprendre confiance, savoir quoi faire aujourd'hui, sen
 capturer un email, poser une première brique concrète, créer une source de revenu progressive.
 Chaque bénéfice doit être relié à une situation réelle : fin de journée, enfants, fatigue, formations accumulées, peur de recommencer, besoin d'un plan simple.
 
+RÈGLE STRATÉGIQUE — ADAPTATION AU TYPE DE LANDING.
+Tu ne dois pas appliquer la même logique à toutes les demandes.
+Si le brief demande de clarifier une offre premium, rendre une offre compréhensible, expliquer une transformation, un mécanisme, une cible ou des bénéfices : priorité absolue à la clarté stratégique, pas à l'émotion forte.
+Dans ce cas, la page doit expliquer immédiatement :
+- à qui l'offre s'adresse ;
+- quel problème précis elle résout ;
+- quelle transformation elle promet ;
+- par quel mécanisme elle fonctionne ;
+- quels bénéfices concrets elle apporte ;
+- quelles objections elle neutralise ;
+- quelle action claire le lecteur doit faire.
+Si le brief demande un lead magnet, une capture email, un guide gratuit, une affiliation ou une audience froide : priorité à l'opt-in, à l'identification et à la confiance.
+Si le brief demande une vente premium : priorité à la valeur perçue, à la différenciation, à la preuve logique et au passage à l'action.
+Le texte final doit respecter l'intention exacte du brief, même si le type technique reste landing_complete.
+
 Tu ne copies jamais les consignes de format dans la réponse.
 Tu remplaces toujours les consignes par du texte final concret.
 """.strip()
@@ -116,6 +131,16 @@ REQUIRED_LANDING_BLOCKS = [
     "REASSURANCE",
     "CTA_FINAL",
 ]
+
+
+LANDING_STRATEGY_OFFER_CLARITY = "offer_clarity"
+LANDING_STRATEGY_LEAD_MAGNET = "lead_magnet"
+LANDING_STRATEGY_AFFILIATE = "affiliate"
+LANDING_STRATEGY_SALES = "sales"
+LANDING_STRATEGY_WEBINAR = "webinar"
+LANDING_STRATEGY_APPOINTMENT = "appointment"
+LANDING_STRATEGY_BRIDGE = "bridge"
+LANDING_STRATEGY_DEFAULT = "default"
 
 FORBIDDEN_VISIBLE_FRAGMENTS = (
     "voici la structure",
@@ -220,6 +245,138 @@ def _memory_block(memories: Iterable[dict]) -> str:
     return "\n".join(lines)
 
 
+
+def _detect_landing_strategy(
+    *,
+    goal: str,
+    brief: str,
+    objective: Optional[str],
+    angle: Optional[str],
+    audience: Optional[str],
+    tone: Optional[str],
+    page_type: Optional[str],
+) -> str:
+    raw = " ".join(
+        [
+            _norm(goal),
+            _norm(brief),
+            _norm(objective),
+            _norm(angle),
+            _norm(audience),
+            _norm(tone),
+            _norm(page_type),
+        ]
+    )
+
+    offer_clarity_signals = (
+        "clarifier",
+        "clarifie",
+        "compréhensible",
+        "comprehensible",
+        "immédiatement compréhensible",
+        "immediatement comprehensible",
+        "offre premium",
+        "rendre l'offre",
+        "rendre l’offre",
+        "mettre en avant",
+        "cible, problème",
+        "cible, probleme",
+        "transformation, mécanisme",
+        "transformation, mecanisme",
+        "mécanisme, bénéfices",
+        "mecanisme, benefices",
+        "limpide",
+        "expert marketing",
+        "chaque bloc doit rendre l'offre plus claire",
+        "chaque bloc doit rendre l’offre plus claire",
+    )
+    if any(signal in raw for signal in offer_clarity_signals):
+        return LANDING_STRATEGY_OFFER_CLARITY
+
+    affiliate_signals = ("affiliation", "commission", "partenaire", "récurrent", "recurrent", "60%")
+    if any(signal in raw for signal in affiliate_signals):
+        return LANDING_STRATEGY_AFFILIATE
+
+    lead_signals = ("lead magnet", "guide gratuit", "capture email", "laisser son email", "prospect", "opt-in", "optin")
+    if any(signal in raw for signal in lead_signals):
+        return LANDING_STRATEGY_LEAD_MAGNET
+
+    webinar_signals = ("webinar", "atelier", "masterclass")
+    if any(signal in raw for signal in webinar_signals):
+        return LANDING_STRATEGY_WEBINAR
+
+    appointment_signals = ("rdv", "rendez-vous", "rendez vous", "appel", "call", "diagnostic")
+    if any(signal in raw for signal in appointment_signals):
+        return LANDING_STRATEGY_APPOINTMENT
+
+    bridge_signals = ("bridge", "transition", "prévente", "prevente")
+    if any(signal in raw for signal in bridge_signals):
+        return LANDING_STRATEGY_BRIDGE
+
+    sales_signals = ("vente", "vendre", "achat", "payer", "commande", "conversion achat", "offre payante")
+    if any(signal in raw for signal in sales_signals):
+        return LANDING_STRATEGY_SALES
+
+    return LANDING_STRATEGY_DEFAULT
+
+
+def _strategy_label(strategy: str) -> str:
+    labels = {
+        LANDING_STRATEGY_OFFER_CLARITY: "clarification_offre_premium",
+        LANDING_STRATEGY_LEAD_MAGNET: "lead_magnet_capture_email",
+        LANDING_STRATEGY_AFFILIATE: "affiliation_opportunite_credible",
+        LANDING_STRATEGY_SALES: "vente_premium",
+        LANDING_STRATEGY_WEBINAR: "inscription_webinar",
+        LANDING_STRATEGY_APPOINTMENT: "prise_de_rendez_vous",
+        LANDING_STRATEGY_BRIDGE: "bridge_page",
+        LANDING_STRATEGY_DEFAULT: "landing_conversion_generale",
+    }
+    return labels.get(strategy, labels[LANDING_STRATEGY_DEFAULT])
+
+
+def _strategy_instruction(strategy: str) -> str:
+    if strategy == LANDING_STRATEGY_OFFER_CLARITY:
+        return (
+            "STRATÉGIE DÉTECTÉE : CLARIFICATION D'OFFRE PREMIUM. "
+            "Priorité absolue : rendre l'offre immédiatement compréhensible. "
+            "Le texte doit être limpide, expert, concret et structuré. "
+            "Évite l'excès d'émotion et les scènes trop longues. "
+            "Chaque bloc doit répondre à une question claire : pour qui, quel problème, quelle transformation, comment ça marche, ce que l'on obtient, pourquoi c'est crédible, pourquoi agir maintenant. "
+            "Le HERO doit expliquer l'offre en une promesse claire, pas seulement créer de la tension émotionnelle. "
+            "La section IDENTIFICATION doit préciser la cible. "
+            "La section MICRO_TRANSFORMATION doit montrer un avant/après concret. "
+            "La section MECANISME doit expliquer la logique de l'offre avec précision. "
+            "La section CE_QUE_TU_RECOIS doit rendre l'offre tangible avec des livrables ou composants précis. "
+            "La section CTA_FINAL doit inviter à passer à l'étape suivante avec clarté et confiance."
+        )
+    if strategy == LANDING_STRATEGY_AFFILIATE:
+        return (
+            "STRATÉGIE DÉTECTÉE : AFFILIATION / COMMISSION RÉCURRENTE. "
+            "Ne vends pas brutalement le produit final. Mets en avant une opportunité crédible, progressive et non magique. "
+            "Montre comment le prospect peut comprendre le chemin avant de s'engager."
+        )
+    if strategy == LANDING_STRATEGY_LEAD_MAGNET:
+        return (
+            "STRATÉGIE DÉTECTÉE : LEAD MAGNET / CAPTURE EMAIL. "
+            "Priorité à l'identification, à la micro-transformation gratuite, à la confiance et à l'opt-in."
+        )
+    if strategy == LANDING_STRATEGY_SALES:
+        return (
+            "STRATÉGIE DÉTECTÉE : VENTE PREMIUM. "
+            "Priorité à la valeur perçue, à la différenciation, au mécanisme, aux objections et au passage à l'action."
+        )
+    if strategy == LANDING_STRATEGY_WEBINAR:
+        return "STRATÉGIE DÉTECTÉE : WEBINAR / ATELIER. Priorité à la prise de conscience et à l'inscription."
+    if strategy == LANDING_STRATEGY_APPOINTMENT:
+        return "STRATÉGIE DÉTECTÉE : RENDEZ-VOUS / DIAGNOSTIC. Priorité à la confiance, au besoin d'échange et à la prise de contact."
+    if strategy == LANDING_STRATEGY_BRIDGE:
+        return "STRATÉGIE DÉTECTÉE : BRIDGE PAGE. Priorité à la transition, à la crédibilité et à la préparation de l'étape suivante."
+    return (
+        "STRATÉGIE DÉTECTÉE : LANDING DE CONVERSION GÉNÉRALE. "
+        "Adapte la structure au brief exact et évite d'imposer un modèle émotionnel si le brief demande surtout de la clarté."
+    )
+
+
 def _infer_page_type(goal: str, objective: Optional[str], page_type: Optional[str]) -> str:
     raw = " ".join([_norm(goal), _norm(objective), _norm(page_type)])
 
@@ -236,8 +393,15 @@ def _infer_page_type(goal: str, objective: Optional[str], page_type: Optional[st
     return "lead_magnet" if _norm(goal) == "landing_complete" else "modular"
 
 
-def _page_strategy(page_type: str) -> str:
+def _page_strategy(page_type: str, strategy: str = LANDING_STRATEGY_DEFAULT) -> str:
     if page_type == "lead_magnet":
+        if strategy == LANDING_STRATEGY_OFFER_CLARITY:
+            return (
+                "TYPE : LANDING CLARIFICATION D'OFFRE PREMIUM. But unique : rendre l'offre immédiatement compréhensible et désirable. "
+                "Ne force pas une logique de lead magnet émotionnel si le brief demande de clarifier l'offre. "
+                "Structure la page comme une explication premium orientée conversion : cible, problème, transformation, mécanisme, bénéfices, objections et CTA. "
+                "Chaque bloc doit augmenter la clarté de l'offre et réduire la confusion du lecteur."
+            )
         return (
             "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
             "Ne vends pas l'offre principale. Vends la micro-transformation gratuite qui donne envie de laisser son email. "
@@ -266,11 +430,13 @@ def _copilot_options_block(
     max_length: int,
     cta_url: Optional[str],
     page_type: str,
+    landing_strategy: str = LANDING_STRATEGY_DEFAULT,
 ) -> str:
     return f"""
 OPTIONS COPILOTE À RESPECTER :
 Objectif : {_clip(objective, 120) or "Générer des leads"}
 Type de page : {page_type}
+Stratégie appliquée : {_strategy_label(landing_strategy)}
 Angle : {_clip(angle, 140) or "conversion claire"}
 Audience : {_clip(audience, 180) or "audience froide ou tiède"}
 Ton : {_clip(tone, 120) or "humain premium"}
@@ -279,7 +445,7 @@ URL CTA : {_clip(cta_url, 240) or "à renseigner"}
 """.strip()
 
 
-def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
+def _goal_instruction(goal: str, page_type: str, max_length: int, strategy: str = LANDING_STRATEGY_DEFAULT) -> str:
     value = str(goal or "landing_complete")
 
     if value == "hooks":
@@ -305,6 +471,15 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
         return "Réécris le contenu fourni en blocs plus courts. Ne rajoute pas de longueur."
 
     if page_type == "lead_magnet":
+        if strategy == LANDING_STRATEGY_OFFER_CLARITY:
+            return (
+                "Rédige une landing de clarification d'offre premium, prête à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
+                "Objectif : rendre l'offre immédiatement compréhensible et crédible. "
+                "Minimum 9 sections obligatoires pour landing_complete. "
+                "Chaque section doit clarifier un élément différent : cible, problème, transformation, mécanisme, bénéfices, objections, réassurance, CTA. "
+                "Le rendu doit être limpide, expert marketing, premium et concret. "
+                "Évite les grandes émotions génériques : privilégie la précision, la valeur perçue, la différenciation et la logique de transformation."
+            )
         return (
             "Rédige un Lead Magnet Expert final, prêt à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
             "Chaque section doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
@@ -319,8 +494,53 @@ def _goal_instruction(goal: str, page_type: str, max_length: int) -> str:
     return f"Produit une structure {page_type} courte en blocs injectables. Aucun doublon."
 
 
-def _format_rules(page_type: str, max_length: int, cta_url: Optional[str]) -> str:
+def _format_rules(page_type: str, max_length: int, cta_url: Optional[str], strategy: str = LANDING_STRATEGY_DEFAULT) -> str:
     if page_type == "lead_magnet":
+        if strategy == LANDING_STRATEGY_OFFER_CLARITY:
+            return f"""
+FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
+Utilise exactement les 9 marqueurs ci-dessous, dans cet ordre, une seule fois chacun.
+Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
+
+[[LGD_BLOCK:HERO]]
+Clarifie l'offre en une promesse premium immédiatement compréhensible : qui est aidé, quel problème est résolu, quel résultat devient plus accessible. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+
+[[LGD_BLOCK:IDENTIFICATION]]
+Décris précisément la cible et sa situation actuelle. Le lecteur doit comprendre en quelques lignes si l'offre est faite pour lui.
+
+[[LGD_BLOCK:AGITATION]]
+Explique le vrai problème que l'offre règle : confusion, dispersion, mauvais ordre des actions, offre mal comprise, perte de temps ou manque de méthode. Reste concret et expert.
+
+[[LGD_BLOCK:MICRO_TRANSFORMATION]]
+Montre la transformation avant/après : ce que le prospect ne comprend pas aujourd'hui, puis ce qu'il saura faire ou décider après l'offre.
+
+[[LGD_BLOCK:CE_QUE_TU_RECOIS]]
+Rends l'offre tangible : 4 à 5 éléments concrets, livrables, étapes, décisions, outils, méthode ou accompagnement. Chaque ligne doit rendre l'offre plus claire.
+
+[[LGD_BLOCK:MECANISME]]
+Explique le mécanisme : comment l'offre produit la transformation. Décris la logique, l'ordre, la méthode, les leviers ou le système.
+
+[[LGD_BLOCK:OBJECTION_KILLER]]
+Neutralise les objections avec précision : trop cher, pas sûr de comprendre, déjà essayé, manque de temps, peur que ce soit trop complexe, doute sur le résultat.
+
+[[LGD_BLOCK:REASSURANCE]]
+Rassure sans banaliser : approche progressive, cadre clair, pas de jargon inutile, pas de promesse magique, montée en compétence ou exécution guidée.
+
+[[LGD_BLOCK:CTA_FINAL]]
+CTA final clair et premium : invite à passer à l'étape suivante parce que l'offre est maintenant comprise. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+
+RÈGLES NON NÉGOCIABLES :
+- Minimum obligatoire : 9 marqueurs [[LGD_BLOCK:...]].
+- Ne renvoie jamais une seule section pour Landing complète.
+- Ne renvoie jamais seulement HERO ou HERO + IDENTIFICATION.
+- Si tu manques de place, raccourcis chaque bloc, mais garde les 9 blocs.
+- N'écris jamais BLOC 1, TITRE:, SOUS-TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, QUESTION:, RÉPONSE: dans le contenu visible.
+- N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
+- N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier », « rédige », « directement », « final visible », « consigne ».
+- Chaque bloc doit rendre l'offre plus claire que le bloc précédent.
+TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
+""".strip()
+
         return f"""
 FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
 Utilise exactement les 9 marqueurs ci-dessous, dans cet ordre, une seule fois chacun.
@@ -506,12 +726,24 @@ def build_lead_prompt(
     safe_context = _clip(business_context, 260) or "lead generation premium"
     safe_max_length = _safe_int(max_length, DEFAULT_OUTPUT_CHARS)
     inferred_page_type = _infer_page_type(safe_goal, objective, page_type)
+    landing_strategy = _detect_landing_strategy(
+        goal=safe_goal,
+        brief=safe_brief,
+        objective=objective,
+        angle=angle,
+        audience=audience,
+        tone=tone,
+        page_type=page_type,
+    )
 
     if _norm(safe_goal) == "landing_complete" and inferred_page_type == "lead_magnet":
         safe_max_length = max(safe_max_length, DEFAULT_OUTPUT_CHARS)
 
     prompt = f"""
-{_page_strategy(inferred_page_type)}
+{_page_strategy(inferred_page_type, landing_strategy)}
+
+STRATÉGIE MARKETING À APPLIQUER :
+{_strategy_instruction(landing_strategy)}
 
 {_copilot_options_block(
     objective=objective,
@@ -521,6 +753,7 @@ def build_lead_prompt(
     max_length=safe_max_length,
     cta_url=cta_url,
     page_type=inferred_page_type,
+    landing_strategy=landing_strategy,
 )}
 
 PROMPT BRAIN LGD :
@@ -535,7 +768,7 @@ MÉMOIRE UTILE :
 {_memory_block(memories)}
 
 MISSION :
-{_goal_instruction(safe_goal, inferred_page_type, safe_max_length)}
+{_goal_instruction(safe_goal, inferred_page_type, safe_max_length, landing_strategy)}
 
 CONTRAINTES STRICTES :
 - Longueur automatique : utilise assez de texte pour produire une vraie page complète, sans dépasser {safe_max_length} caractères.
@@ -543,7 +776,8 @@ CONTRAINTES STRICTES :
 - N'écris pas une page de vente si l'objectif est de générer des leads.
 - Ne parle pas d'achat direct dans le HERO d'un lead magnet.
 - Chaque bloc doit être propre, finalisé, positionnable séparément dans le canvas, et ne jamais être une consigne.
-- Utilise l'angle, l'audience et le ton fournis.
+- Utilise l'angle, l'audience, le ton et surtout la stratégie marketing détectée.
+- Si la stratégie est clarification_offre_premium : privilégie la clarté, la compréhension immédiate, le mécanisme et les bénéfices précis plutôt que l'émotion forte.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
 - Si le brief parle d'affiliation ou de commission : vends la découverte d'une opportunité crédible et progressive, jamais une promesse de richesse rapide.
@@ -557,7 +791,7 @@ CONTRAINTES STRICTES :
 - Le CTA final doit être plus fort que le CTA du HERO : il doit fermer la boucle émotionnelle ouverte au début.
 - Pas de markdown décoratif, pas de tableau, pas de guillemets.
 
-{_format_rules(inferred_page_type, safe_max_length, cta_url)}
+{_format_rules(inferred_page_type, safe_max_length, cta_url, landing_strategy)}
 """.strip()
 
     return prompt, safe_max_length, inferred_page_type

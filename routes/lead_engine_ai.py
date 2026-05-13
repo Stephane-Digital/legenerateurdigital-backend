@@ -252,3 +252,4 @@ def generate(
         "tokens_consumed": estimated_tokens,
         "quota": _quota_snapshot(updated_quota),
     }
+

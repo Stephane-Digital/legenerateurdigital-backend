@@ -13,23 +13,23 @@ from models.user_model import User
 def _limit_from_plan(plan: Optional[str]) -> int:
     p = (plan or "essentiel").strip().lower()
     if p in ("azur", "trial", "starter", "decouverte", "découverte"):
-        return 70000
+        return 150000
     if p in ("pro", "professional"):
-        return 1_000_000
+        return 6_000_000
     if p in ("ultime", "ultimate", "premium"):
-        return 2_500_000
-    return 400_000
+        return 15_000_000
+    return 2_000_000
 
 
 def _display_plan_from_limit(limit_tokens: int, raw_plan: Optional[str] = None) -> str:
     n = int(limit_tokens or 0)
-    if n == 70000:
+    if n == 150000:
         return "azur"
-    if n == 1_000_000:
+    if n == 6_000_000:
         return "pro"
-    if n == 2_500_000:
+    if n == 15_000_000:
         return "ultime"
-    if n == 400_000:
+    if n == 2_000_000:
         return "essentiel"
 
     p = (raw_plan or "").strip().lower()

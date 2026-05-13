@@ -8,12 +8,13 @@ from sqlalchemy import and_, func
 
 from models.ia_quota_model import IAQuota
 from models.user_model import User
+from services.user_entitlements import get_effective_plan, get_plan_state
 
 
 def _limit_from_plan(plan: Optional[str]) -> int:
     p = (plan or "essentiel").strip().lower()
     if p in ("azur", "trial", "starter", "decouverte", "découverte"):
-        return 150000
+        return 150_000
     if p in ("pro", "professional"):
         return 6_000_000
     if p in ("ultime", "ultimate", "premium"):
@@ -23,13 +24,13 @@ def _limit_from_plan(plan: Optional[str]) -> int:
 
 def _display_plan_from_limit(limit_tokens: int, raw_plan: Optional[str] = None) -> str:
     n = int(limit_tokens or 0)
-    if n == 150000:
+    if n == 150_000 or n == 70_000:
         return "azur"
-    if n == 6_000_000:
+    if n == 6_000_000 or n == 1_000_000:
         return "pro"
-    if n == 15_000_000:
+    if n == 15_000_000 or n == 2_500_000:
         return "ultime"
-    if n == 2_000_000:
+    if n == 2_000_000 or n == 400_000:
         return "essentiel"
 
     p = (raw_plan or "").strip().lower()
@@ -47,7 +48,7 @@ def _norm_plan(plan: Optional[str]) -> str:
 
 
 def _norm_feature(feature: Optional[str]) -> str:
-    f = (feature or "coach").strip().lower()
+    f = (feature or "global").strip().lower()
     if f in ("coaching", "coach"):
         return "coach"
     if f in ("editor", "editeur", "éditeur"):
@@ -58,7 +59,7 @@ def _norm_feature(feature: Optional[str]) -> str:
         return "email"
     if f in ("sales", "sales_pages", "salespage", "sales-page"):
         return "sales_pages"
-    return f or "coach"
+    return f or "global"
 
 
 def plan_default_limit(plan: str, feature: str) -> int:
@@ -72,6 +73,16 @@ def _utcnow() -> datetime:
 def _get_user_plan(user: User) -> str:
     p = getattr(user, "plan", None)
     return _norm_plan(p)
+
+
+def _effective_user_plan(db: Session, user: User) -> tuple[str, dict]:
+    base = _get_user_plan(user)
+    try:
+        plan, _ov = get_effective_plan(db, user_id=int(user.id), base_plan=base)
+        state = get_plan_state(db, user_id=int(user.id), base_plan=base)
+        return _norm_plan(plan), state
+    except Exception:
+        return base, {"base_plan": base, "effective_plan": base, "temporary_active": False}
 
 
 def _quota_limit_get(quota: IAQuota, plan: str, feature: str) -> int:
@@ -202,15 +213,28 @@ def list_quotas(
     )
 
     rows: List[Dict[str, Any]] = []
-    features = [feature] if feature else ["coach"]
+    features = [feature] if feature else ["global"]
 
     for u in users:
-        u_plan = _get_user_plan(u)
+        u_plan, plan_state = _effective_user_plan(db, u)
 
         for f in features:
             quota = _get_or_create_quota(db, u.id, f, u_plan)
-            limit_tokens_val = _quota_limit_get(quota, plan=getattr(quota, "plan", None) or u_plan, feature=f)
-            effective_plan = _display_plan_from_limit(limit_tokens_val, getattr(quota, "plan", None) or u_plan)
+            target_limit = _limit_from_plan(u_plan)
+            current_used = int(getattr(quota, "tokens_used", 0) or 0)
+            if _quota_limit_get(quota, plan=getattr(quota, "plan", None) or u_plan, feature=f) != target_limit or getattr(quota, "plan", None) != u_plan:
+                try:
+                    quota.plan = u_plan
+                except Exception:
+                    pass
+                try:
+                    _quota_limit_set(quota, target_limit)
+                except Exception:
+                    pass
+                db.commit()
+                db.refresh(quota)
+            limit_tokens_val = _quota_limit_get(quota, plan=u_plan, feature=f)
+            effective_plan = u_plan
 
             if plan and effective_plan != plan:
                 continue
@@ -223,7 +247,14 @@ def list_quotas(
                 "feature": getattr(quota, "feature", f),
                 "tokens_used": used,
                 "limit_tokens": int(limit_tokens_val),
+                "tokens_limit": int(limit_tokens_val),
                 "remaining_tokens": max(int(limit_tokens_val) - used, 0),
+                "base_plan": plan_state.get("base_plan"),
+                "effective_plan": plan_state.get("effective_plan") or effective_plan,
+                "temporary_plan": plan_state.get("temporary_plan"),
+                "temporary_until": plan_state.get("temporary_until"),
+                "temporary_days_remaining": plan_state.get("temporary_days_remaining"),
+                "temporary_active": bool(plan_state.get("temporary_active")),
             }
             rows.append(row)
 
@@ -235,14 +266,14 @@ def list_quotas(
     }
 
 
-def set_quota_limit(db: Session, user_id: int, limit_tokens: int, feature: str = "coach") -> Dict[str, Any]:
+def set_quota_limit(db: Session, user_id: int, limit_tokens: int, feature: str = "global") -> Dict[str, Any]:
     feature = _norm_feature(feature)
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
         return {"ok": False, "error": "USER_NOT_FOUND"}
 
-    u_plan = _get_user_plan(user)
+    u_plan, _state = _effective_user_plan(db, user)
     quota = _get_or_create_quota(db, int(user_id), feature, u_plan)
 
     try:
@@ -268,14 +299,14 @@ def set_quota_limit(db: Session, user_id: int, limit_tokens: int, feature: str =
     return {"ok": True, "user_id": int(user_id), "feature": feature, "limit_tokens": int(limit_val), "plan": effective_plan}
 
 
-def reset_quota(db: Session, user_id: int, feature: str = "coach") -> Dict[str, Any]:
+def reset_quota(db: Session, user_id: int, feature: str = "global") -> Dict[str, Any]:
     feature = _norm_feature(feature)
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
         return {"ok": False, "error": "USER_NOT_FOUND"}
 
-    u_plan = _get_user_plan(user)
+    u_plan, _state = _effective_user_plan(db, user)
     quota = _get_or_create_quota(db, int(user_id), feature, u_plan)
 
     quota.tokens_used = 0

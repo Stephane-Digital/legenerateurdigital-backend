@@ -44,9 +44,9 @@ def get_user_quota(db: Session, user: User, feature: str = FEATURE_COACH) -> Dic
             "feature": feat,
             "plan": "essentiel",
             "display_plan": "essentiel",
-            "tokens_limit": 400000,
+            "tokens_limit": 2000000,
             "tokens_used": 0,
-            "tokens_remaining": 400000,
+            "tokens_remaining": 2000000,
             "source": "ia_quota",
         }
 

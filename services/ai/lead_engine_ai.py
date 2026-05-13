@@ -17,10 +17,11 @@ except Exception:  # pragma: no cover
 
 # ============================================================
 # LGD — Lead Engine IA
-# Version PROD V10.9 — Intelligence stratégique landing verrouillée
+# Version PROD V10.10 — Stratégie 9/10 anti-dispersion verrouillée
 # Objectif : produire une vraie landing lead magnet structurée,
 # sans faux fallback silencieux, sans sortie 1 bloc, sans réponse coupée,
-# avec une intelligence stratégique adaptée au type de landing demandé.
+# avec une qualité copywriting 9/10 orientée conversion.
+# V10.10 : stratégie plan d'action anti-dispersion + clarification d'offre sans toucher au parser.
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -92,17 +93,18 @@ retrouver de la clarté, reprendre confiance, savoir quoi faire aujourd'hui, sen
 capturer un email, poser une première brique concrète, créer une source de revenu progressive.
 Chaque bénéfice doit être relié à une situation réelle : fin de journée, enfants, fatigue, formations accumulées, peur de recommencer, besoin d'un plan simple.
 
+RÈGLE PLAN D'ACTION 9/10.
+Quand le brief parle de personnes qui consomment beaucoup de contenu business, repoussent l'action, se dispersent, ont peur de mal faire ou veulent un plan simple cette semaine :
+tu dois produire une landing très chirurgicale. Le HERO doit être court, clair et percutant : diagnostic du blocage + promesse d'une action claire cette semaine + CTA.
+Le texte doit éviter les grands discours motivationnels. Il doit opposer clairement consommation passive et action simple.
+Le mécanisme doit expliquer comment le plan réduit la dispersion : choisir une priorité, éliminer le bruit, poser une première action réalisable, mesurer un petit progrès.
+La section CE_QUE_TU_RECOIS doit être extrêmement concrète : étapes, checklist, priorité du jour, action de 30 minutes, décision à prendre, prochaine étape.
+Le CTA final doit fermer la boucle : avant de consommer un contenu de plus, récupérer le plan gratuit et passer à une action claire.
+
 RÈGLE STRATÉGIQUE — ADAPTATION AU TYPE DE LANDING.
 Tu ne dois pas appliquer la même logique à toutes les demandes.
 Si le brief demande de clarifier une offre premium, rendre une offre compréhensible, expliquer une transformation, un mécanisme, une cible ou des bénéfices : priorité absolue à la clarté stratégique, pas à l'émotion forte.
-Dans ce cas, la page doit expliquer immédiatement :
-- à qui l'offre s'adresse ;
-- quel problème précis elle résout ;
-- quelle transformation elle promet ;
-- par quel mécanisme elle fonctionne ;
-- quels bénéfices concrets elle apporte ;
-- quelles objections elle neutralise ;
-- quelle action claire le lecteur doit faire.
+Si le brief demande un plan simple, une action claire, de sortir de la dispersion ou d'arrêter de consommer du contenu sans agir : priorité absolue à la micro-action concrète, au diagnostic lucide et au CTA plan gratuit.
 Si le brief demande un lead magnet, une capture email, un guide gratuit, une affiliation ou une audience froide : priorité à l'opt-in, à l'identification et à la confiance.
 Si le brief demande une vente premium : priorité à la valeur perçue, à la différenciation, à la preuve logique et au passage à l'action.
 Le texte final doit respecter l'intention exacte du brief, même si le type technique reste landing_complete.
@@ -130,10 +132,10 @@ REQUIRED_LANDING_BLOCKS = [
     "OBJECTION_KILLER",
     "REASSURANCE",
     "CTA_FINAL",
-]
-
+ ]
 
 LANDING_STRATEGY_OFFER_CLARITY = "offer_clarity"
+LANDING_STRATEGY_ACTION_PLAN = "action_plan"
 LANDING_STRATEGY_LEAD_MAGNET = "lead_magnet"
 LANDING_STRATEGY_AFFILIATE = "affiliate"
 LANDING_STRATEGY_SALES = "sales"
@@ -245,7 +247,6 @@ def _memory_block(memories: Iterable[dict]) -> str:
     return "\n".join(lines)
 
 
-
 def _detect_landing_strategy(
     *,
     goal: str,
@@ -293,6 +294,29 @@ def _detect_landing_strategy(
     if any(signal in raw for signal in offer_clarity_signals):
         return LANDING_STRATEGY_OFFER_CLARITY
 
+    action_plan_signals = (
+        "consomment beaucoup de contenu",
+        "consomme beaucoup de contenu",
+        "contenu business",
+        "n'agissent pas",
+        "n agissent pas",
+        "n’agissent pas",
+        "repousser encore",
+        "repousse encore",
+        "peur de mal faire",
+        "fatigue mentale",
+        "dispersion",
+        "plan simple",
+        "action claire",
+        "cette semaine",
+        "recevoir le plan gratuit",
+        "plan gratuit",
+        "passer à l'action",
+        "passer a l'action",
+    )
+    if any(signal in raw for signal in action_plan_signals):
+        return LANDING_STRATEGY_ACTION_PLAN
+
     affiliate_signals = ("affiliation", "commission", "partenaire", "récurrent", "recurrent", "60%")
     if any(signal in raw for signal in affiliate_signals):
         return LANDING_STRATEGY_AFFILIATE
@@ -323,6 +347,7 @@ def _detect_landing_strategy(
 def _strategy_label(strategy: str) -> str:
     labels = {
         LANDING_STRATEGY_OFFER_CLARITY: "clarification_offre_premium",
+        LANDING_STRATEGY_ACTION_PLAN: "plan_action_anti_dispersion",
         LANDING_STRATEGY_LEAD_MAGNET: "lead_magnet_capture_email",
         LANDING_STRATEGY_AFFILIATE: "affiliation_opportunite_credible",
         LANDING_STRATEGY_SALES: "vente_premium",
@@ -342,12 +367,16 @@ def _strategy_instruction(strategy: str) -> str:
             "Le texte doit être limpide, expert, concret et structuré. "
             "Évite l'excès d'émotion et les scènes trop longues. "
             "Chaque bloc doit répondre à une question claire : pour qui, quel problème, quelle transformation, comment ça marche, ce que l'on obtient, pourquoi c'est crédible, pourquoi agir maintenant. "
-            "Le HERO doit expliquer l'offre en une promesse claire, pas seulement créer de la tension émotionnelle. "
-            "La section IDENTIFICATION doit préciser la cible. "
-            "La section MICRO_TRANSFORMATION doit montrer un avant/après concret. "
-            "La section MECANISME doit expliquer la logique de l'offre avec précision. "
-            "La section CE_QUE_TU_RECOIS doit rendre l'offre tangible avec des livrables ou composants précis. "
-            "La section CTA_FINAL doit inviter à passer à l'étape suivante avec clarté et confiance."
+            "Le HERO doit expliquer l'offre en une promesse claire, pas seulement créer de la tension émotionnelle."
+        )
+    if strategy == LANDING_STRATEGY_ACTION_PLAN:
+        return (
+            "STRATÉGIE DÉTECTÉE : PLAN D'ACTION ANTI-DISPERSION. "
+            "Priorité absolue : transformer un lecteur qui consomme trop de contenu en personne qui reprend une action claire cette semaine. "
+            "Le texte doit être empathique, lucide, premium et sans jugement. "
+            "Le HERO doit être court et chirurgical : trop de contenu, pas assez d'action, une action claire cette semaine, plan gratuit. "
+            "Le mécanisme doit être concret : réduire le bruit, choisir une priorité, poser une action simple, éviter la paralysie. "
+            "Le CTA final doit être plus fort que le HERO : avant de regarder une autre vidéo ou d'ouvrir une autre formation, récupérer le plan gratuit."
         )
     if strategy == LANDING_STRATEGY_AFFILIATE:
         return (
@@ -401,6 +430,13 @@ def _page_strategy(page_type: str, strategy: str = LANDING_STRATEGY_DEFAULT) -> 
                 "Ne force pas une logique de lead magnet émotionnel si le brief demande de clarifier l'offre. "
                 "Structure la page comme une explication premium orientée conversion : cible, problème, transformation, mécanisme, bénéfices, objections et CTA. "
                 "Chaque bloc doit augmenter la clarté de l'offre et réduire la confusion du lecteur."
+            )
+        if strategy == LANDING_STRATEGY_ACTION_PLAN:
+            return (
+                "TYPE : LANDING PLAN D'ACTION / CAPTURE EMAIL. But unique : faire passer un lecteur dispersé de la consommation passive à une première action claire cette semaine. "
+                "Ne transforme pas la page en grande promesse émotionnelle. "
+                "Structure la page autour d'un déclic simple : trop d'informations, trop peu d'exécution, un plan gratuit pour choisir une priorité et agir sans se juger. "
+                "Chaque bloc doit rendre le plan plus concret, plus rassurant et plus facile à demander."
             )
         return (
             "TYPE : LEAD MAGNET EXPERT / CAPTURE EMAIL. But unique : maximiser l'opt-in. "
@@ -480,6 +516,15 @@ def _goal_instruction(goal: str, page_type: str, max_length: int, strategy: str 
                 "Le rendu doit être limpide, expert marketing, premium et concret. "
                 "Évite les grandes émotions génériques : privilégie la précision, la valeur perçue, la différenciation et la logique de transformation."
             )
+        if strategy == LANDING_STRATEGY_ACTION_PLAN:
+            return (
+                "Rédige une landing de plan d'action anti-dispersion, prête à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
+                "Objectif : donner envie de recevoir un plan gratuit pour reprendre une action claire cette semaine. "
+                "Minimum 9 sections obligatoires pour landing_complete. "
+                "Chaque section doit être courte, concrète et différente : diagnostic, situation vécue, coût de la dispersion, micro-transformation, contenu du plan, mécanisme, objections, réassurance et CTA. "
+                "Le rendu doit être empathique, lucide, premium, sans jugement, et plus précis qu'une page motivationnelle générique. "
+                "Le lecteur doit se dire : je n'ai pas besoin d'une méthode de plus, j'ai besoin de ce plan pour agir maintenant."
+            )
         return (
             "Rédige un Lead Magnet Expert final, prêt à injecter, en sections séparées par les marqueurs [[LGD_BLOCK:...]]. "
             "Chaque section doit pouvoir devenir un calque texte distinct, mais le texte visible ne doit contenir aucun label technique. "
@@ -538,6 +583,53 @@ RÈGLES NON NÉGOCIABLES :
 - N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
 - N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier », « rédige », « directement », « final visible », « consigne ».
 - Chaque bloc doit rendre l'offre plus claire que le bloc précédent.
+TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
+""".strip()
+
+        if strategy == LANDING_STRATEGY_ACTION_PLAN:
+            return f"""
+FORMAT TECHNIQUE OBLIGATOIRE POUR LE PARSER FRONTEND.
+Utilise exactement les 9 marqueurs ci-dessous, dans cet ordre, une seule fois chacun.
+Les marqueurs [[LGD_BLOCK:...]] sont obligatoires, mais le texte après chaque marqueur doit être du contenu final visible, sans consigne.
+
+[[LGD_BLOCK:HERO]]
+Rédige un HERO court : diagnostic de la consommation passive de contenu business + promesse du plan gratuit + action claire cette semaine. Maximum 3 phrases. Intègre naturellement l'URL si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+
+[[LGD_BLOCK:IDENTIFICATION]]
+Décris la situation vécue : beaucoup de vidéos, formations, notes, idées, mais peu d'exécution. Le lecteur doit se sentir compris sans être jugé.
+
+[[LGD_BLOCK:AGITATION]]
+Montre le coût réel de la dispersion : fatigue mentale, peur de mal faire, honte de repousser encore, énergie perdue à comparer les méthodes.
+
+[[LGD_BLOCK:MICRO_TRANSFORMATION]]
+Promets une micro-transformation simple : passer du brouillard à une priorité claire, puis à une action réalisable cette semaine.
+
+[[LGD_BLOCK:CE_QUE_TU_RECOIS]]
+Rends le plan gratuit tangible : 4 à 5 éléments très concrets comme priorité du jour, action de 30 minutes, checklist anti-dispersion, décision à prendre, prochaine étape.
+
+[[LGD_BLOCK:MECANISME]]
+Explique comment le plan fonctionne : réduire le bruit, choisir une seule priorité, transformer l'information en action, mesurer un petit progrès.
+
+[[LGD_BLOCK:OBJECTION_KILLER]]
+Neutralise les objections : peur de mal faire, pas assez de temps, trop d'idées, déjà essayé, honte d'avoir repoussé, peur de choisir la mauvaise direction.
+
+[[LGD_BLOCK:REASSURANCE]]
+Rassure sans infantiliser : pas besoin de tout comprendre, pas besoin d'être prêt, pas besoin d'une nouvelle formation complète ; juste une prochaine action claire.
+
+[[LGD_BLOCK:CTA_FINAL]]
+CTA final plus fort que le HERO : avant de consommer un contenu business de plus, récupérer le plan gratuit et passer à une action claire cette semaine. Ajoute naturellement l'URL CTA si elle est fournie : {_clip(cta_url, 240) or "à renseigner"}.
+
+RÈGLES NON NÉGOCIABLES :
+- Minimum obligatoire : 9 marqueurs [[LGD_BLOCK:...]].
+- Ne renvoie jamais une seule section pour Landing complète.
+- Ne renvoie jamais seulement HERO ou HERO + IDENTIFICATION.
+- Si tu manques de place, raccourcis chaque bloc, mais garde les 9 blocs.
+- N'écris jamais BLOC 1, TITRE:, SOUS-TITRE:, CTA:, DOULEUR:, BÉNÉFICES:, QUESTION:, RÉPONSE: dans le contenu visible.
+- N'écris jamais des conseils ni une analyse. Écris uniquement la page finale.
+- N'écris jamais « voici », « clarifie », « renforce », « augmente », « tu peux », « structure », « à modifier », « rédige », « directement », « final visible », « consigne ».
+- Le HERO doit être plus court que les autres blocs.
+- La section CE_QUE_TU_RECOIS doit être la plus concrète de toute la page.
+- Le CTA final doit opposer clairement : consommer encore du contenu ou récupérer un plan pour agir.
 TOTAL MAXIMUM DE SÉCURITÉ : {max_length} caractères.
 """.strip()
 
@@ -778,6 +870,7 @@ CONTRAINTES STRICTES :
 - Chaque bloc doit être propre, finalisé, positionnable séparément dans le canvas, et ne jamais être une consigne.
 - Utilise l'angle, l'audience, le ton et surtout la stratégie marketing détectée.
 - Si la stratégie est clarification_offre_premium : privilégie la clarté, la compréhension immédiate, le mécanisme et les bénéfices précis plutôt que l'émotion forte.
+- Si la stratégie est plan_action_anti_dispersion : privilégie un HERO court, un diagnostic précis, un mécanisme concret et un CTA qui oppose consommation passive et action claire cette semaine.
 - Si l'angle mentionne MRR : parle de formations achetées, dispersion, surcharge d'informations, inaction, première vente.
 - Si l'objectif est génération de leads : vends l'envie de recevoir le lead magnet, pas l'achat de l'offre principale.
 - Si le brief parle d'affiliation ou de commission : vends la découverte d'une opportunité crédible et progressive, jamais une promesse de richesse rapide.

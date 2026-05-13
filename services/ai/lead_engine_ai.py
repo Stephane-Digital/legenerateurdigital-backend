@@ -716,17 +716,47 @@ def _is_strong_landing_output(text: str) -> bool:
     visible = _sanitize_done_for_you_output(_visible_text(raw)).strip()
     low = visible.lower()
 
-    if any(fragment in low for fragment in FORBIDDEN_VISIBLE_FRAGMENTS):
+    # Correctif PROD V10.7 : ne plus rejeter une vraie réponse OpenAI uniquement
+    # parce qu'une expression naturelle comme « vous pouvez » apparaît dans un bloc.
+    # On bloque seulement les sorties manifestement méta / consignes.
+    hard_meta_fragments = (
+        "voici la structure",
+        "voici une structure",
+        "structure de page",
+        "à modifier",
+        "a modifier",
+        "à adapter",
+        "a adapter",
+        "rédige directement",
+        "redige directement",
+        "texte final visible",
+        "consigne",
+    )
+    if any(fragment in low for fragment in hard_meta_fragments):
         return False
     if _landing_block_count(raw) < MIN_LANDING_BLOCKS:
         return False
     if _missing_required_blocks(raw):
         return False
-    if len(visible) < MIN_LANDING_CHARS:
+    # Le frontend sait injecter 8/9 blocs même si la landing est concise.
+    # On évite donc de transformer une vraie sortie structurée en erreur 502.
+    if len(visible) < 1200:
         return False
     if raw.strip().endswith("[[LGD_BLOCK:IDENTIFICATION]]") or raw.strip().endswith("[[LGD_BLOCK:HERO]]"):
         return False
     return True
+
+
+def _landing_quality_score(text: str) -> int:
+    raw = str(text or "")
+    visible = _visible_text(raw)
+    score = 0
+    score += _landing_block_count(raw) * 1000
+    score -= len(_missing_required_blocks(raw)) * 700
+    score += min(len(visible), 7000)
+    if raw.strip().endswith("[[LGD_BLOCK:IDENTIFICATION]]") or raw.strip().endswith("[[LGD_BLOCK:HERO]]"):
+        score -= 2000
+    return score
 
 
 def _strict_retry_prompt(prompt: str, attempt: int) -> str:
@@ -833,17 +863,21 @@ def generate_lead_content(
             except Exception as exc:
                 errors.append(f"{candidate_model} tentative {index}: {exc}")
 
-    # Correctif V10.6 : ne plus renvoyer silencieusement une sortie faible en production.
-    # Cela évite que le frontend affiche un faux résultat à 1 bloc et que l'utilisateur croie à un fallback.
+    # Correctif PROD V10.7 : ne jamais transformer une vraie réponse OpenAI structurée
+    # en erreur bloquante côté frontend. Si OpenAI fournit une sortie imparfaite mais
+    # exploitable, on renvoie la meilleure version au lieu d'afficher
+    # « Génération IA impossible ».
+    if weak_outputs:
+        best = sorted(weak_outputs, key=_landing_quality_score, reverse=True)[0]
+        if is_landing and _landing_block_count(best) >= 2:
+            return best
+        return best
+
     if is_landing:
         diagnostic = " | ".join(errors[-6:]) or "sortie incomplète"
         raise RuntimeError(
-            "Lead Engine IA a refusé la sortie car elle est incomplète. "
-            "Minimum attendu : 8 blocs structurés et une vraie landing complète. "
+            "Lead Engine IA n'a reçu aucune sortie exploitable depuis OpenAI. "
             f"Diagnostic: {diagnostic}"
         )
-
-    if weak_outputs:
-        return weak_outputs[-1]
 
     raise RuntimeError("Réponse OpenAI vide pour Lead Engine. " + " | ".join(errors))

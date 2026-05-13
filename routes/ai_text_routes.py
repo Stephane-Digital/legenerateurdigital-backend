@@ -82,10 +82,10 @@ def _effective_plan(db: Session, user: Any) -> str:
 def _limit_for_plan(plan: str) -> int:
     p = str(plan or "essentiel").lower()
     if "ult" in p:
-        return 2_500_000
+        return 15_000_000
     if "pro" in p:
-        return 1_000_000
-    return 400_000
+        return 6_000_000
+    return 2_000_000
 
 
 def _quota_snapshot(quota: Any, *, plan_override: Optional[str] = None) -> dict:
@@ -274,3 +274,4 @@ def ai_generate_caption(
         ),
         "message": "Caption générée avec succès.",
     }
+

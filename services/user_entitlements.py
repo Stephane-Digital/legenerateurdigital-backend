@@ -9,7 +9,8 @@ But métier : séparer le plan réel payé via Systeme.io du bonus commercial te
 - effective_plan = override actif si présent, sinon base_plan
 
 Ce fichier reste volontairement ORM-free et compatible avec le schéma existant.
-Il crée/complète uniquement des tables techniques si elles n'existent pas.
+Important prod : la table users ne contient PAS de colonne plan. La vérité du plan
+vient donc uniquement de user_plan_state + user_entitlements.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -20,7 +21,6 @@ from sqlalchemy.orm import Session
 
 TABLE = "user_entitlements"
 STATE_TABLE = "user_plan_state"
-
 
 PLAN_ALIASES = {
     "trial": "azur",
@@ -38,7 +38,6 @@ PLAN_ALIASES = {
     "ultime": "ultime",
     "premium": "ultime",
 }
-
 
 PLAN_LABELS = {
     "azur": "Azur / essai",
@@ -80,7 +79,6 @@ def _days_remaining(ends_at: Any) -> Optional[int]:
         delta = end - _utcnow()
         if delta.total_seconds() <= 0:
             return 0
-        # Arrondi supérieur : 1h restante = 1 jour restant côté produit.
         return max(1, int((delta.total_seconds() + 86399) // 86400))
     except Exception:
         return None
@@ -106,7 +104,6 @@ def ensure_table(db: Session) -> None:
             """
         )
     )
-
     db.execute(
         text(
             f"""
@@ -123,16 +120,11 @@ def ensure_table(db: Session) -> None:
             """
         )
     )
-    db.commit()
+    db.flush()
 
 
 def _user_table_plan(db: Session, user_id: int) -> Optional[str]:
-    """
-    LGD SAFE:
-    La table users en prod ne contient pas de colonne `plan`.
-    On ne tente donc plus de SELECT dessus.
-    La vérité du plan vient désormais de user_plan_state.
-    """
+    """LGD SAFE: users.plan n'existe pas en prod. Ne jamais SELECT dessus."""
     return None
 
 
@@ -165,9 +157,14 @@ def set_base_plan(
     user_id: int,
     base_plan: str,
     source: Optional[str] = None,
-    sync_user_column: bool = True,
+    sync_user_column: bool = False,
 ) -> Dict[str, Any]:
-    """Enregistre le plan réel payé / essai sans toucher au bonus temporaire actif."""
+    """Enregistre le plan réel payé / essai sans toucher au bonus temporaire actif.
+
+    Important : on ne synchronise pas users.plan, car cette colonne n'existe pas
+    dans la base Render/pgAdmin actuelle. Le paramètre sync_user_column reste
+    présent seulement pour compatibilité de signature.
+    """
     ensure_table(db)
     plan = _norm_plan(base_plan)
     db.execute(
@@ -183,13 +180,6 @@ def set_base_plan(
         ),
         {"uid": int(user_id), "plan": plan, "source": source},
     )
-
-    if sync_user_column:
-        try:
-            db.execute(text("UPDATE users SET plan = :plan WHERE id = :uid"), {"uid": int(user_id), "plan": plan})
-        except Exception:
-            pass
-
     db.flush()
     return {"ok": True, "user_id": int(user_id), "base_plan": plan, "source": source}
 
@@ -247,7 +237,6 @@ def get_plan_state(db: Session, *, user_id: int, base_plan: Optional[str] = None
 
 
 def get_effective_plan(db: Session, *, user_id: int, base_plan: Optional[str] = None) -> Tuple[str, Optional[Dict[str, Any]]]:
-    """Return (effective_plan, override_row_or_none)."""
     state = get_plan_state(db, user_id=int(user_id), base_plan=base_plan)
     ov = state.get("override") if state.get("temporary_active") else None
     return _norm_plan(str(state.get("effective_plan") or base_plan)), ov
@@ -263,7 +252,6 @@ def set_plan_override(
     created_by: Optional[str] = None,
 ) -> Dict[str, Any]:
     ensure_table(db)
-
     p = _norm_plan(plan)
     if p not in {"pro", "ultime", "essentiel", "azur"}:
         raise ValueError("plan invalide")
@@ -284,7 +272,7 @@ def set_plan_override(
         ),
         {"uid": int(user_id), "plan": p, "starts": now, "ends": ends, "note": note, "created_by": created_by},
     )
-    db.commit()
+    db.flush()
     return get_plan_state(db, user_id=int(user_id))
 
 
@@ -303,11 +291,10 @@ def clear_plan_override(db: Session, *, user_id: int) -> Dict[str, Any]:
         ),
         {"uid": int(user_id), "now": now},
     )
-    db.commit()
+    db.flush()
     return get_plan_state(db, user_id=int(user_id))
 
 
-# Backward-compatible aliases (older patches used these names)
 def set_override(
     db: Session,
     *,

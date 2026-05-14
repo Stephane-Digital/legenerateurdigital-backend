@@ -325,3 +325,4 @@ def set_override(
 
 def clear_override(db: Session, *, user_id: int) -> Dict[str, Any]:
     return clear_plan_override(db, user_id=int(user_id))
+

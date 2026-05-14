@@ -125,6 +125,17 @@ def ensure_table(db: Session) -> None:
     )
     db.commit()
 
+
+def _user_table_plan(db: Session, user_id: int) -> Optional[str]:
+    """
+    LGD SAFE:
+    La table users en prod ne contient pas de colonne `plan`.
+    On ne tente donc plus de SELECT dessus.
+    La vérité du plan vient désormais de user_plan_state.
+    """
+    return None
+
+
 def get_base_plan(db: Session, *, user_id: int, fallback: Optional[str] = None) -> str:
     ensure_table(db)
     row = db.execute(

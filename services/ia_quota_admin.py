@@ -71,8 +71,9 @@ def _utcnow() -> datetime:
 
 
 def _get_user_plan(user: User) -> str:
-    p = getattr(user, "plan", None)
-    return _norm_plan(p)
+    # La table users n’a pas de colonne plan en prod.
+    # Le fallback reste Essentiel si user_plan_state n’existe pas encore.
+    return "essentiel"
 
 
 def _effective_user_plan(db: Session, user: User) -> tuple[str, dict]:

@@ -125,20 +125,6 @@ def ensure_table(db: Session) -> None:
     )
     db.commit()
 
-
-def _user_table_plan(db: Session, user_id: int) -> Optional[str]:
-    try:
-        row = db.execute(
-            text("SELECT plan FROM users WHERE id = :uid LIMIT 1"),
-            {"uid": int(user_id)},
-        ).mappings().first()
-        if row and row.get("plan"):
-            return _norm_plan(str(row["plan"]))
-    except Exception:
-        pass
-    return None
-
-
 def get_base_plan(db: Session, *, user_id: int, fallback: Optional[str] = None) -> str:
     ensure_table(db)
     row = db.execute(

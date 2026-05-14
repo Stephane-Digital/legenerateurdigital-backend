@@ -358,3 +358,4 @@ def update_quota(db: Session, user_id: int, amount: int, feature: str = _CANONIC
     db.commit()
     db.refresh(global_quota)
     return global_quota
+

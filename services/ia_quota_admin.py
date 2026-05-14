@@ -70,45 +70,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _quota_plan_fallback(db: Session, user_id: int, feature: str = "global") -> str:
-    """Fallback safe pour les comptes créés avant user_plan_state.
-
-    La table users n'a pas de colonne plan en prod. Si user_plan_state n'existe
-    pas encore pour un utilisateur historique, on conserve le plan déjà présent
-    dans ia_quota au lieu de le ramener brutalement à Essentiel.
-    """
-    try:
-        quota = (
-            db.query(IAQuota)
-            .filter(and_(IAQuota.user_id == int(user_id), IAQuota.feature == _norm_feature(feature)))
-            .order_by(IAQuota.id.desc())
-            .first()
-        )
-        if quota:
-            raw_plan = getattr(quota, "plan", None)
-            limit_tokens = _quota_limit_get(quota, plan=_norm_plan(raw_plan), feature=_norm_feature(feature))
-            return _display_plan_from_limit(limit_tokens, raw_plan)
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-    return "essentiel"
+def _get_user_plan(user: User) -> str:
+    p = getattr(user, "plan", None)
+    return _norm_plan(p)
 
 
 def _effective_user_plan(db: Session, user: User) -> tuple[str, dict]:
-    base = _quota_plan_fallback(db, int(user.id), "global")
+    base = _get_user_plan(user)
     try:
         plan, _ov = get_effective_plan(db, user_id=int(user.id), base_plan=base)
         state = get_plan_state(db, user_id=int(user.id), base_plan=base)
         return _norm_plan(plan), state
     except Exception:
-        # Important : si une requête SQL échoue, SQLAlchemy marque la transaction
-        # comme aborted. On rollback ici pour éviter le 500 en cascade dans l'admin.
-        try:
-            db.rollback()
-        except Exception:
-            pass
         return base, {"base_plan": base, "effective_plan": base, "temporary_active": False}
 
 

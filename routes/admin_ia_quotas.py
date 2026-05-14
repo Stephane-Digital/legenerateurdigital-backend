@@ -179,7 +179,7 @@ def post_plan_override(
         raise HTTPException(status_code=400, detail=str(e))
 
     # 2) Best-effort align global quota row to the temporary effective plan.
-    # We do NOT reset usage here: the upgrade changes capacity, not history.
+    # Important : on ne reset pas l’usage ; l’upgrade change la capacité, pas l’historique.
     try:
         with db.begin_nested():
             quota = get_or_create_quota(db, int(user_id), feature="global")
@@ -228,7 +228,7 @@ def post_plan_clear(
             pass
 
     # 2) Best-effort align global quota row back to the real base plan (SIO/trial).
-    # Important: clearing the commercial bonus must not destroy the paid base plan.
+    # Important : clear commercial bonus must never destroy the paid base plan.
     plan_state = get_plan_state(db, user_id=int(user_id))
     effective_plan = str(plan_state.get("effective_plan") or "essentiel").lower()
     try:

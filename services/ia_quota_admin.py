@@ -13,6 +13,8 @@ from services.user_entitlements import get_effective_plan, get_plan_state
 
 def _limit_from_plan(plan: Optional[str]) -> int:
     p = (plan or "essentiel").strip().lower()
+    if p in ("canceled", "cancelled", "inactive", "stopped"):
+        return 0
     if p in ("azur", "trial", "starter", "decouverte", "découverte"):
         return 150_000
     if p in ("pro", "professional"):
@@ -23,7 +25,13 @@ def _limit_from_plan(plan: Optional[str]) -> int:
 
 
 def _display_plan_from_limit(limit_tokens: int, raw_plan: Optional[str] = None) -> str:
+    p = (raw_plan or "").strip().lower()
+    if p in ("canceled", "cancelled", "inactive", "stopped"):
+        return "canceled"
+
     n = int(limit_tokens or 0)
+    if n <= 0:
+        return "canceled"
     if n == 150_000 or n == 70_000:
         return "azur"
     if n == 6_000_000 or n == 1_000_000:
@@ -34,6 +42,8 @@ def _display_plan_from_limit(limit_tokens: int, raw_plan: Optional[str] = None) 
         return "essentiel"
 
     p = (raw_plan or "").strip().lower()
+    if p in ("canceled", "cancelled", "inactive", "stopped"):
+        return "canceled"
     if p in ("azur", "trial", "starter", "decouverte", "découverte"):
         return "azur"
     if p in ("pro", "professional"):
@@ -71,8 +81,9 @@ def _utcnow() -> datetime:
 
 
 def _get_user_plan(user: User) -> str:
-    p = getattr(user, "plan", None)
-    return _norm_plan(p)
+    # La table users en prod ne contient pas de colonne plan.
+    # user_plan_state est la source de vérité ; fallback safe = essentiel.
+    return "essentiel"
 
 
 def _effective_user_plan(db: Session, user: User) -> tuple[str, dict]:

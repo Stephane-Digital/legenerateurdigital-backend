@@ -252,11 +252,7 @@ def _get_global_quota(db: Session, user_id: int):
 
 
 def _apply_effective_plan_to_quota(db: Session, user_id: int, quota: Any):
-    """Aligne la ligne ia_quota sur le plan effectif sans perdre le plan SIO de base.
-
-    Si un bonus Pro/Ultime 3 mois est actif, le quota utilise ce plan.
-    Si le bonus est expiré, le quota revient automatiquement au base_plan.
-    """
+    """Aligne ia_quota sur le plan effectif sans perdre le plan SIO de base."""
     fallback_plan = _get_plan(quota)
     effective_plan, override = get_effective_plan(db, user_id=int(user_id), base_plan=fallback_plan)
     effective_plan = _norm_plan(effective_plan)
@@ -301,7 +297,6 @@ def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
     clean_plan = _norm_plan(effective_plan)
     limit_tokens = _default_limit_for_plan(clean_plan)
 
-    # Source de vérité affichée / consommée. Reset mensuel lors d'une vraie synchro SIO/activation.
     global_quota = get_or_create_quota(db, int(user_id), feature=_CANONICAL_FEATURE)
     _set_plan(global_quota, clean_plan)
     _set_used(global_quota, 0)
@@ -309,7 +304,6 @@ def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
     _set_remaining(global_quota, limit_tokens)
     db.add(global_quota)
 
-    # Compat affichages/routes anciennes.
     for feature_name in _LEGACY_FEATURES_TO_SYNC:
         quota = get_or_create_quota(db, int(user_id), feature=feature_name)
         _set_plan(quota, clean_plan)
@@ -318,7 +312,6 @@ def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
         _set_remaining(quota, limit_tokens)
         db.add(quota)
 
-    # Reset du compteur journalier du jour.
     daily_quota = _get_daily_quota(db, int(user_id), plan=clean_plan, monthly_limit=limit_tokens)
     _set_used(daily_quota, 0)
     _set_remaining(daily_quota, _daily_limit_for_plan(clean_plan, limit_tokens))

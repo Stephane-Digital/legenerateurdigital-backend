@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from config.settings import settings
 from services.ai_quota_service import sync_plan_quotas
+from services.user_entitlements import clear_plan_override
 from services.pending_access_service import (
     mark_pending_access_active,
     upsert_pending_access,
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/webhooks/systemeio", tags=["Systeme.io Webhook"])
 
 DEFAULT_FRONT_URL = "https://legenerateurdigital-front.vercel.app"
 DEFAULT_TOKEN_HOURS = 24
-ROUTE_VERSION = "LGD_TOKEN_SYSTEM_PROD_V2_2026_04_28_SIO_GENERIC_FIX"
+ROUTE_VERSION = "LGD_TOKEN_SYSTEM_PROD_V3_2026_05_14_SIO_CANCEL_SYNC"
 
 
 class SystemeioTestPayload(BaseModel):
@@ -186,6 +187,21 @@ def _is_trial_event(event: str, payload: dict) -> bool:
     return False
 
 
+def _is_cancellation_event(event: str, payload: dict) -> bool:
+    event_value = str(event or "").strip().lower()
+    raw = _payload_text(payload)
+
+    cancel_keywords = (
+        "sale_canceled", "sale_cancelled",
+        "subscription_canceled", "subscription_cancelled",
+        "subscription.canceled", "subscription.cancelled",
+        "abonnement annul", "désabonnement", "desabonnement",
+        "canceled", "cancelled", "refund", "refunded",
+    )
+
+    return any(keyword in event_value for keyword in cancel_keywords) or any(keyword in raw for keyword in cancel_keywords)
+
+
 def _infer_event_from_payload(payload: dict, fallback: str = "") -> str:
     direct = (
         fallback
@@ -197,6 +213,9 @@ def _infer_event_from_payload(payload: dict, fallback: str = "") -> str:
     direct = str(direct or "").strip().upper()
     if direct:
         return direct
+
+    if _is_cancellation_event("", payload):
+        return "SUBSCRIPTION_CANCELED"
 
     if _is_trial_event("", payload):
         return "TRIAL_OPTIN"
@@ -419,6 +438,15 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
     plan = _resolve_plan(priceplan_id)
     user_id = _get_user_by_email(db, email)
 
+    if _is_cancellation_event(event, payload) or event in {"SALE_CANCELED", "SALE_CANCELLED", "SUBSCRIPTION_CANCELED", "SUBSCRIPTION_CANCELLED"}:
+        if not user_id:
+            return {"status": "ignored", "reason": "user_not_found", "email": email, "event": event}
+
+        clear_plan_override(db, user_id=int(user_id))
+        sync_plan_quotas(db=db, user_id=int(user_id), plan="canceled")
+        db.commit()
+        return {"status": "canceled", "plan": "canceled", "email": email, "event": event}
+
     if event == "NEW_SALE":
         if not plan:
             return {"status": "ignored", "reason": "unknown_plan", "email": email}
@@ -473,14 +501,6 @@ def _process_event(*, db: Session, event: str, payload: dict) -> dict:
             "email_delivery": email_delivery,
             **token_bundle,
         }
-
-    if event == "SALE_CANCELED":
-        if not user_id:
-            return {"status": "ignored", "reason": "user_not_found", "email": email}
-
-        sync_plan_quotas(db=db, user_id=int(user_id), plan="essentiel")
-        db.commit()
-        return {"status": "canceled", "plan": "essentiel", "email": email}
 
     return {"status": "ignored", "event": event, "email": email}
 
@@ -551,4 +571,3 @@ def systemeio_webhook_version(db: Session = Depends(get_db)):
         "front_base_used": _frontend_base_url(),
         "db_name": _current_database_name(db),
     }
-

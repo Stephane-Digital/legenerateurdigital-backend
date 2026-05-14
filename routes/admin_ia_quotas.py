@@ -180,12 +180,11 @@ def post_plan_override(
 
         _safe_set_attr(quota, "plan", effective_plan)
         _safe_set_attr(quota, "feature", "global")
-        if default_limit:
-            _safe_set_attr(quota, "limit_tokens", int(default_limit))
-            _safe_set_attr(quota, "tokens_limit", int(default_limit))
-            _safe_set_attr(quota, "credits", int(default_limit))
-            used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
-            _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        _safe_set_attr(quota, "limit_tokens", int(default_limit))
+        _safe_set_attr(quota, "tokens_limit", int(default_limit))
+        _safe_set_attr(quota, "credits", int(default_limit))
+        used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+        _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.add(quota)
         db.commit()
         return {"ok": True, "entitlement": ent, "plan_state": plan_state}
@@ -216,12 +215,11 @@ def post_plan_clear(
         default_limit = _compute_default_limit(effective_plan, "global")
         _safe_set_attr(quota, "plan", effective_plan)
         _safe_set_attr(quota, "feature", "global")
-        if default_limit:
-            _safe_set_attr(quota, "limit_tokens", int(default_limit))
-            _safe_set_attr(quota, "tokens_limit", int(default_limit))
-            _safe_set_attr(quota, "credits", int(default_limit))
-            used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
-            _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        _safe_set_attr(quota, "limit_tokens", int(default_limit))
+        _safe_set_attr(quota, "tokens_limit", int(default_limit))
+        _safe_set_attr(quota, "credits", int(default_limit))
+        used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+        _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.add(quota)
         db.commit()
         return {"ok": True, "cleared": out, "plan_state": plan_state}
@@ -255,7 +253,7 @@ def post_user_base_plan(
     clean_plan = str(plan_val).strip().lower()
     if clean_plan in {"trial", "starter", "decouverte", "découverte", "free"}:
         clean_plan = "azur"
-    if clean_plan not in {"azur", "essentiel", "pro", "ultime"}:
+    if clean_plan not in {"azur", "essentiel", "pro", "ultime", "canceled"}:
         raise HTTPException(status_code=400, detail="plan invalide")
 
     # 1) Le plan de base devient la vérité corrigée.
@@ -280,12 +278,11 @@ def post_user_base_plan(
 
         _safe_set_attr(quota, "plan", effective_plan)
         _safe_set_attr(quota, "feature", "global")
-        if default_limit:
-            _safe_set_attr(quota, "limit_tokens", int(default_limit))
-            _safe_set_attr(quota, "tokens_limit", int(default_limit))
-            _safe_set_attr(quota, "credits", int(default_limit))
-            used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
-            _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        _safe_set_attr(quota, "limit_tokens", int(default_limit))
+        _safe_set_attr(quota, "tokens_limit", int(default_limit))
+        _safe_set_attr(quota, "credits", int(default_limit))
+        used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+        _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.add(quota)
     except Exception:
         # Ne bloque pas la correction du base_plan : le prochain list_quotas réalignera.

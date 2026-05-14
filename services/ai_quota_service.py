@@ -5,8 +5,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from services.user_entitlements import get_effective_plan, set_base_plan
-
 try:
     from models.ia_quota_model import IAQuota as QuotaModel  # type: ignore
 except Exception:
@@ -49,37 +47,24 @@ def _to_int(v: Any, default: int = 0) -> int:
             return default
 
 
-def _norm_plan(plan: str) -> str:
-    p = (plan or "").strip().lower()
-    if p in {"trial", "azur", "starter", "decouverte", "découverte", "free"}:
-        return "azur"
-    if p in {"essential", "essentiel", "essentiels"}:
-        return "essentiel"
-    if p in {"pro", "professional"}:
-        return "pro"
-    if p in {"ultimate", "ultime", "premium"}:
-        return "ultime"
-    return "essentiel"
-
-
 def _default_limit_for_plan(plan: str) -> int:
-    p = _norm_plan(plan)
-    if p == "azur":
+    p = (plan or "").lower()
+    if "trial" in p:
         return 150_000
-    if p == "ultime":
+    if "ult" in p:
         return 15_000_000
-    if p == "pro":
+    if "pro" in p:
         return 6_000_000
     return 2_000_000
 
 
 def _daily_limit_for_plan(plan: str, monthly_limit: int) -> int:
-    p = _norm_plan(plan)
-    if p == "azur":
+    p = (plan or "").lower()
+    if "trial" in p or "azur" in p or "starter" in p or "decouverte" in p or "découverte" in p:
         return 20_000
-    if p == "ultime" or int(monthly_limit or 0) == 15_000_000:
+    if "ult" in p or int(monthly_limit or 0) == 15_000_000:
         return 500_000
-    if p == "pro" or int(monthly_limit or 0) == 6_000_000:
+    if "pro" in p or int(monthly_limit or 0) == 6_000_000:
         return 250_000
     return 80_000
 
@@ -251,25 +236,6 @@ def _get_global_quota(db: Session, user_id: int):
     return quota
 
 
-def _apply_effective_plan_to_quota(db: Session, user_id: int, quota: Any):
-    """Aligne ia_quota sur le plan effectif sans perdre le plan SIO de base."""
-    fallback_plan = _get_plan(quota)
-    effective_plan, override = get_effective_plan(db, user_id=int(user_id), base_plan=fallback_plan)
-    effective_plan = _norm_plan(effective_plan)
-    limit = _default_limit_for_plan(effective_plan)
-    used = _get_used(quota)
-
-    if _get_plan(quota) != effective_plan or _get_limit(quota) != limit:
-        _set_plan(quota, effective_plan)
-        _set_limit(quota, limit)
-        _set_remaining(quota, max(limit - used, 0))
-        db.add(quota)
-        db.flush()
-        db.refresh(quota)
-
-    return quota, effective_plan, override
-
-
 def _get_daily_quota(db: Session, user_id: int, *, plan: str, monthly_limit: int):
     feature = _daily_feature()
     daily_limit = _daily_limit_for_plan(plan, monthly_limit)
@@ -288,15 +254,10 @@ def _get_daily_quota(db: Session, user_id: int, *, plan: str, monthly_limit: int
 
 
 def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
-    # Le plan reçu ici vient de Systeme.io / auth : c'est le plan réel de base.
-    # On le stocke sans supprimer un éventuel bonus temporaire admin actif.
-    base_plan = _norm_plan(plan)
-    set_base_plan(db, user_id=int(user_id), base_plan=base_plan, source="sync_plan_quotas")
-
-    effective_plan, _override = get_effective_plan(db, user_id=int(user_id), base_plan=base_plan)
-    clean_plan = _norm_plan(effective_plan)
+    clean_plan = str(plan or "essentiel").lower()
     limit_tokens = _default_limit_for_plan(clean_plan)
 
+    # Source de vérité.
     global_quota = get_or_create_quota(db, int(user_id), feature=_CANONICAL_FEATURE)
     _set_plan(global_quota, clean_plan)
     _set_used(global_quota, 0)
@@ -304,6 +265,7 @@ def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
     _set_remaining(global_quota, limit_tokens)
     db.add(global_quota)
 
+    # Compat affichages/routes anciennes.
     for feature_name in _LEGACY_FEATURES_TO_SYNC:
         quota = get_or_create_quota(db, int(user_id), feature=feature_name)
         _set_plan(quota, clean_plan)
@@ -312,6 +274,7 @@ def sync_plan_quotas(db: Session, user_id: int, plan: str) -> None:
         _set_remaining(quota, limit_tokens)
         db.add(quota)
 
+    # Reset du compteur journalier du jour.
     daily_quota = _get_daily_quota(db, int(user_id), plan=clean_plan, monthly_limit=limit_tokens)
     _set_used(daily_quota, 0)
     _set_remaining(daily_quota, _daily_limit_for_plan(clean_plan, limit_tokens))
@@ -332,7 +295,7 @@ def update_quota(db: Session, user_id: int, amount: int, feature: str = _CANONIC
         amt = 1
 
     global_quota = _get_global_quota(db, int(user_id))
-    global_quota, plan, _override = _apply_effective_plan_to_quota(db, int(user_id), global_quota)
+    plan = _get_plan(global_quota)
     monthly_limit = _get_limit(global_quota)
     monthly_used = _get_used(global_quota)
 
@@ -358,4 +321,3 @@ def update_quota(db: Session, user_id: int, amount: int, feature: str = _CANONIC
     db.commit()
     db.refresh(global_quota)
     return global_quota
-

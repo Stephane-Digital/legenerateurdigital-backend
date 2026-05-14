@@ -28,7 +28,7 @@ def _get_db_dep():
 get_db = _get_db_dep()
 
 from services.ia_quota_admin import list_quotas, reset_quota, set_quota_limit, plan_default_limit
-from services.user_entitlements import set_plan_override, clear_plan_override, get_plan_state
+from services.user_entitlements import set_plan_override, clear_plan_override, get_plan_state, set_base_plan
 
 # ✅ We also update the quota row so plan+limit stay coherent across reload.
 from services.ai_quota_service import get_or_create_quota
@@ -160,10 +160,8 @@ def post_plan_override(
     if not plan_val:
         raise HTTPException(status_code=422, detail="plan manquant")
 
-    feature = payload.get("feature") or "global"
     note = payload.get("note")
 
-    # 1) Persist entitlements override (SOURCE OF TRUTH for admin listing)
     try:
         ent = set_plan_override(
             db,
@@ -173,17 +171,11 @@ def post_plan_override(
             note=note,
             created_by="admin",
         )
-        # ✅ Force commit here so a later failure cannot rollback the plan override
-        db.commit()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-    # 2) Alignement global quota sur le plan effectif temporaire.
-    # Pas de begin_nested ici : get_or_create_quota peut flusher/commit selon les versions.
-    # On garde l'usage existant : l'upgrade change la capacité, pas l'historique.
-    try:
+        plan_state = get_plan_state(db, user_id=int(user_id))
+        effective_plan = str(plan_state.get("effective_plan") or plan_val).lower()
+
         quota = get_or_create_quota(db, int(user_id), feature="global")
-        effective_plan = str(plan_val).lower()
         default_limit = _compute_default_limit(effective_plan, "global")
 
         _safe_set_attr(quota, "plan", effective_plan)
@@ -196,14 +188,13 @@ def post_plan_override(
             _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.add(quota)
         db.commit()
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-
-    return {"ok": True, "entitlement": ent, "plan_state": get_plan_state(db, user_id=int(user_id))}
-
+        return {"ok": True, "entitlement": ent, "plan_state": plan_state}
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/users/{user_id}/plan-clear")
 def post_plan_clear(
@@ -216,28 +207,15 @@ def post_plan_clear(
     key = _pick_admin_key(admin_key, payload)
     _require_admin_key(key)
 
-    feature = payload.get("feature") or "global"
-
-    # 1) Clear entitlement override and commit (SOURCE OF TRUTH for admin listing)
-    out = clear_plan_override(db, user_id=int(user_id))
     try:
-        db.commit()
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
+        out = clear_plan_override(db, user_id=int(user_id))
+        plan_state = get_plan_state(db, user_id=int(user_id))
+        effective_plan = str(plan_state.get("effective_plan") or plan_state.get("base_plan") or "essentiel").lower()
 
-    # 2) Best-effort align global quota row back to the real base plan (SIO/trial).
-    # Important : clear commercial bonus must never destroy the paid base plan.
-    plan_state = get_plan_state(db, user_id=int(user_id))
-    effective_plan = str(plan_state.get("effective_plan") or "essentiel").lower()
-    try:
         quota = get_or_create_quota(db, int(user_id), feature="global")
+        default_limit = _compute_default_limit(effective_plan, "global")
         _safe_set_attr(quota, "plan", effective_plan)
         _safe_set_attr(quota, "feature", "global")
-
-        default_limit = _compute_default_limit(effective_plan, "global")
         if default_limit:
             _safe_set_attr(quota, "limit_tokens", int(default_limit))
             _safe_set_attr(quota, "tokens_limit", int(default_limit))
@@ -246,13 +224,79 @@ def post_plan_clear(
             _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
         db.add(quota)
         db.commit()
+        return {"ok": True, "cleared": out, "plan_state": plan_state}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/users/{user_id}/base-plan")
+def post_user_base_plan(
+    user_id: int,
+    payload: dict | None = Body(None),
+    plan: str | None = Query(None),
+    admin_key: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> Any:
+    """Force le plan réel de base (ex : remettre un ancien essai en Azur).
+
+    Important LGD : cette action est volontairement distincte du reset bonus.
+    - base_plan = plan réel SIO / essai corrigé par admin
+    - override actif = supprimé pour éviter les incohérences
+    - ia_quota/global = aligné sur le plan effectif final
+    """
+    payload = payload or {}
+    key = _pick_admin_key(admin_key, payload)
+    _require_admin_key(key)
+
+    plan_val = payload.get("plan") or payload.get("base_plan") or plan
+    if not plan_val:
+        raise HTTPException(status_code=422, detail="plan manquant")
+
+    clean_plan = str(plan_val).strip().lower()
+    if clean_plan in {"trial", "starter", "decouverte", "découverte", "free"}:
+        clean_plan = "azur"
+    if clean_plan not in {"azur", "essentiel", "pro", "ultime"}:
+        raise HTTPException(status_code=400, detail="plan invalide")
+
+    # 1) Le plan de base devient la vérité corrigée.
+    set_base_plan(
+        db,
+        user_id=int(user_id),
+        base_plan=clean_plan,
+        source="admin_force_base_plan",
+        sync_user_column=False,
+    )
+
+    # 2) Un changement de plan de base admin annule le bonus temporaire actif.
+    out = clear_plan_override(db, user_id=int(user_id))
+
+    # 3) Aligne le quota global sur le plan effectif final.
+    plan_state = get_plan_state(db, user_id=int(user_id), base_plan=clean_plan)
+    effective_plan = str(plan_state.get("effective_plan") or clean_plan).lower()
+
+    try:
+        quota = get_or_create_quota(db, int(user_id), feature="global")
+        default_limit = _compute_default_limit(effective_plan, "global")
+
+        _safe_set_attr(quota, "plan", effective_plan)
+        _safe_set_attr(quota, "feature", "global")
+        if default_limit:
+            _safe_set_attr(quota, "limit_tokens", int(default_limit))
+            _safe_set_attr(quota, "tokens_limit", int(default_limit))
+            _safe_set_attr(quota, "credits", int(default_limit))
+            used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+            _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        db.add(quota)
     except Exception:
+        # Ne bloque pas la correction du base_plan : le prochain list_quotas réalignera.
         try:
             db.rollback()
         except Exception:
             pass
+        raise
 
-    return {"ok": True, "cleared": out, "plan_state": plan_state}
+    db.commit()
+    return {"ok": True, "base_plan": clean_plan, "cleared": out, "plan_state": plan_state}
 
 
 @router.post("/users/{user_id}/quota/reset")

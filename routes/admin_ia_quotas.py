@@ -178,22 +178,23 @@ def post_plan_override(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 2) Best-effort align global quota row to the temporary effective plan.
-    # Important : on ne reset pas l’usage ; l’upgrade change la capacité, pas l’historique.
+    # 2) Alignement global quota sur le plan effectif temporaire.
+    # Pas de begin_nested ici : get_or_create_quota peut flusher/commit selon les versions.
+    # On garde l'usage existant : l'upgrade change la capacité, pas l'historique.
     try:
-        with db.begin_nested():
-            quota = get_or_create_quota(db, int(user_id), feature="global")
-            effective_plan = str(plan_val).lower()
-            default_limit = _compute_default_limit(effective_plan, "global")
+        quota = get_or_create_quota(db, int(user_id), feature="global")
+        effective_plan = str(plan_val).lower()
+        default_limit = _compute_default_limit(effective_plan, "global")
 
-            _safe_set_attr(quota, "plan", effective_plan)
-            _safe_set_attr(quota, "feature", "global")
-            if default_limit:
-                _safe_set_attr(quota, "limit_tokens", int(default_limit))
-                _safe_set_attr(quota, "tokens_limit", int(default_limit))
-                _safe_set_attr(quota, "credits", int(default_limit))
-                used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
-                _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        _safe_set_attr(quota, "plan", effective_plan)
+        _safe_set_attr(quota, "feature", "global")
+        if default_limit:
+            _safe_set_attr(quota, "limit_tokens", int(default_limit))
+            _safe_set_attr(quota, "tokens_limit", int(default_limit))
+            _safe_set_attr(quota, "credits", int(default_limit))
+            used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+            _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        db.add(quota)
         db.commit()
     except Exception:
         try:
@@ -232,18 +233,18 @@ def post_plan_clear(
     plan_state = get_plan_state(db, user_id=int(user_id))
     effective_plan = str(plan_state.get("effective_plan") or "essentiel").lower()
     try:
-        with db.begin_nested():
-            quota = get_or_create_quota(db, int(user_id), feature="global")
-            _safe_set_attr(quota, "plan", effective_plan)
-            _safe_set_attr(quota, "feature", "global")
+        quota = get_or_create_quota(db, int(user_id), feature="global")
+        _safe_set_attr(quota, "plan", effective_plan)
+        _safe_set_attr(quota, "feature", "global")
 
-            default_limit = _compute_default_limit(effective_plan, "global")
-            if default_limit:
-                _safe_set_attr(quota, "limit_tokens", int(default_limit))
-                _safe_set_attr(quota, "tokens_limit", int(default_limit))
-                _safe_set_attr(quota, "credits", int(default_limit))
-                used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
-                _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        default_limit = _compute_default_limit(effective_plan, "global")
+        if default_limit:
+            _safe_set_attr(quota, "limit_tokens", int(default_limit))
+            _safe_set_attr(quota, "tokens_limit", int(default_limit))
+            _safe_set_attr(quota, "credits", int(default_limit))
+            used = int(getattr(quota, "tokens_used", 0) or getattr(quota, "used_tokens", 0) or 0)
+            _safe_set_attr(quota, "remaining", max(int(default_limit) - used, 0))
+        db.add(quota)
         db.commit()
     except Exception:
         try:

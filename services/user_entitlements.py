@@ -263,6 +263,22 @@ def set_plan_override(
     now = _utcnow()
     ends = now + timedelta(days=30 * months)
 
+    # LGD LOCK 200% : un seul bonus commercial actif à la fois.
+    # On expire d'abord tout override actif pour éviter les empilements invisibles
+    # Pro 3 mois / Ultime 3 mois qui rendraient l'admin ambigu.
+    db.execute(
+        text(
+            f"""
+            UPDATE {TABLE}
+            SET ends_at = :now
+            WHERE user_id = :uid
+              AND starts_at <= :now
+              AND ends_at > :now
+            """
+        ),
+        {"uid": int(user_id), "now": now},
+    )
+
     db.execute(
         text(
             f"""

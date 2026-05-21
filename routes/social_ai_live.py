@@ -265,4 +265,3 @@ def social_ai_live_generate_day(
         "tokens_consumed": consumed,
         "quota": quota,
     }
-

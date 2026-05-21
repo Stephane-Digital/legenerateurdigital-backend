@@ -46,6 +46,11 @@ FORBIDDEN_WEAK_PHRASES = [
     "transformez votre vie",
     "boostez votre présence",
     "stratégie gagnante",
+    "communauté",
+    "engagement authentique",
+    "valeur réelle",
+    "solutions miracles",
+    "méthode parfaite",
 ]
 
 MRR_TOKENS = [
@@ -344,6 +349,10 @@ def _looks_weak(text: str, payload: Dict[str, Any] | None = None) -> bool:
         return True
     if _wants_stop_doing(payload) and not any(token in lower for token in ["arrête", "arrete", "stop"]):
         return True
+    if lower.count("si tu débutes dans le mrr") >= 2:
+        return True
+    if lower.startswith("si tu débutes dans le mrr") and not _wants_stop_doing(payload):
+        return True
     return False
 
 
@@ -457,8 +466,9 @@ Pas de motivation.
 Pas de "gourous" sauf si l'utilisateur le demande.
 
 SI LE BRIEF DEMANDE "ARRÊTE DE FAIRE ÇA"
-Le post doit commencer par :
-"Si tu débutes dans [niche] :\n\narrête de ..."
+Le post doit commencer par une idée de rupture claire en "arrête de...".
+Tu peux utiliser "Si tu débutes dans le MRR :" quand c’est pertinent, mais tu ne dois PAS le répéter systématiquement.
+Varie les hooks : vérité directe, scène du quotidien, contraste, question qui pique, phrase miroir.
 
 RÉFÉRENCE DE STYLE À IMITER
 Si tu débutes dans le MRR :
@@ -537,19 +547,22 @@ def _quality_frame(payload: Dict[str, Any]) -> str:
     strict_start = ""
     if _wants_stop_doing(payload) and _is_mrr(payload):
         strict_start = """
-DÉBUT OBLIGATOIRE POUR CE CAS
-La première ligne du hook doit être proche de :
-"Si tu débutes dans le MRR :"
-
-La suite immédiate doit commencer par :
-"arrête de ..."
-
-Ne pars pas sur les gourous, la motivation ou un angle général.
+DÉBUT CONTRÔLÉ POUR CE CAS
+Tu dois ouvrir sur une rupture en "arrête de...", MAIS tu dois varier la forme.
+Ne commence PAS toujours par "Si tu débutes dans le MRR :".
+Choisis UNE des formes suivantes selon le seed créatif :
+- "Si tu débutes dans le MRR :" puis "arrête de..."
+- "Arrête de..." directement
+- "Tu fais peut-être cette erreur :"
+- "Le piège quand tu débutes dans le MRR :"
+- "Tu crois manquer de stratégie. En vrai..."
+- "Pendant que tu cherches la méthode parfaite..."
+Ne pars pas sur les gourous, la motivation, l’authenticité vague ou un angle général.
 """.strip()
     elif _wants_stop_doing(payload):
         strict_start = """
-DÉBUT OBLIGATOIRE POUR CE CAS
-La première idée doit commencer par "arrête de ...".
+DÉBUT CONTRÔLÉ POUR CE CAS
+La première idée doit contenir une rupture claire en "arrête de...", mais varie la formulation.
 Ne transforme pas ça en conseil général.
 """.strip()
 
@@ -603,6 +616,14 @@ def _single_generation_user_prompt(payload: Dict[str, Any]) -> str:
 VARIATION LIVE
 Seed créatif : {seed}
 Tu dois produire un angle différent des générations précédentes.
+Interdit de répéter systématiquement le même hook.
+Interdit de commencer toutes les générations par "Si tu débutes dans le MRR".
+Choisis un pattern selon le seed :
+- seed finissant par 0/1 : scène concrète du quotidien ;
+- seed finissant par 2/3 : vérité qui pique ;
+- seed finissant par 4/5 : erreur fréquente ;
+- seed finissant par 6/7 : contraste apprentissage/exécution ;
+- seed finissant par 8/9 : question miroir.
 
 CONTRAINTE PRINCIPALE
 Écris comme si l'utilisateur allait copier-coller le contenu dans Instagram maintenant.

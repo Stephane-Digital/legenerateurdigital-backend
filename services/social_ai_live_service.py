@@ -4,7 +4,7 @@ import json
 import os
 import random
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 try:
     from openai import OpenAI
@@ -18,42 +18,6 @@ class SocialAILiveError(RuntimeError):
 
 ALLOWED_ROLES = {"hook", "body", "cta", "slide", "title"}
 
-FORBIDDEN_WEAK_PHRASES = [
-    "vous méritez",
-    "croyez en vous",
-    "crois en toi",
-    "passez à l'action",
-    "passe à l'action",
-    "connectez-vous avec votre audience",
-    "connecte-toi avec ton audience",
-    "écoutez votre audience",
-    "ecoutez votre audience",
-    "contenu authentique",
-    "authenticité",
-    "apportez de la valeur",
-    "apporter de la valeur",
-    "il est essentiel",
-    "dans le monde d'aujourd'hui",
-    "découvrez comment",
-    "decouvrez comment",
-    "optimisez votre stratégie",
-    "optimisez votre strategie",
-    "comprenez ses besoins",
-    "comprenez leurs besoins",
-    "résultats concrets",
-    "resultats concrets",
-    "votre potentiel",
-    "libérez votre potentiel",
-    "libere ton potentiel",
-    "transformez votre vie",
-    "boostez votre présence",
-    "stratégie gagnante",
-    "identifiez une niche",
-    "créez du contenu de qualité",
-    "crée du contenu de qualité",
-    "soyez régulier",
-]
-
 MRR_TOKENS = [
     "mrr",
     "master resale",
@@ -63,6 +27,7 @@ MRR_TOKENS = [
     "formations",
     "affiliation",
     "revente",
+    "droits de revente",
 ]
 
 STOP_TOKENS = [
@@ -73,59 +38,71 @@ STOP_TOKENS = [
     "doit arreter",
     "arrêter de faire",
     "arreter de faire",
+    "commence par ce que",
     "stop doing",
 ]
 
+FORBIDDEN_WEAK_PHRASES = [
+    "vous méritez",
+    "tu mérites",
+    "croyez en vous",
+    "crois en toi",
+    "passez à l'action",
+    "passe à l'action",
+    "connectez-vous avec votre audience",
+    "connecte-toi avec ton audience",
+    "écoutez votre audience",
+    "écoute ton audience",
+    "contenu authentique",
+    "authenticité",
+    "apportez de la valeur",
+    "apporte de la valeur",
+    "il est essentiel",
+    "dans le monde d'aujourd'hui",
+    "découvrez comment",
+    "optimisez votre stratégie",
+    "comprenez ses besoins",
+    "comprends ses besoins",
+    "résultats concrets",
+    "votre potentiel",
+    "libérez votre potentiel",
+    "libère ton potentiel",
+    "transformez votre vie",
+    "boostez votre présence",
+    "stratégie gagnante",
+    "construire une relation de confiance",
+    "bâtir des relations authentiques",
+    "engage-toi à publier régulièrement",
+    "sois constant",
+    "reste constant",
+    "communauté",
+]
 
-TRUTH_STYLE = """
-Si tu débutes dans le MRR :
 
-arrête de regarder des vidéos toute la journée.
-
-Oui.
-
-Vraiment.
-
-Parce qu'à un moment :
-
-tu n'as plus un problème d'information.
-
-Tu as un problème d'exécution.
-
-Tu regardes :
-
-une vidéo TikTok
-une autre stratégie
-une autre méthode
-
-Et le soir ?
-
-Toujours zéro contenu publié.
-
-Zéro prospect.
-
-Zéro vente.
-
-Le vrai déclic :
-
-publier imparfaitement.
-
-Parce qu'un contenu imparfait posté aujourd'hui…
-
-bat toujours une stratégie “parfaite” restée dans ta tête.
-""".strip()
-
+# -----------------------------------------------------------------------------
+# Utils
+# -----------------------------------------------------------------------------
 
 def _clean(value: Any, fallback: str = "") -> str:
     text = str(value or "").replace("\r", "").strip()
     return text or fallback
 
 
-def _clip(value: Any, limit: int = 2800) -> str:
+def _clip(value: Any, limit: int = 2200) -> str:
     text = _clean(value)
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
+
+
+def _model() -> str:
+    return (
+        os.getenv("OPENAI_MODEL_SOCIAL_AI", "").strip()
+        or os.getenv("OPENAI_MODEL_SOCIAL", "").strip()
+        or os.getenv("OPENAI_MODEL_TEXT", "").strip()
+        or os.getenv("OPENAI_MODEL", "").strip()
+        or "gpt-4o-mini"
+    )
 
 
 def _get_client() -> "OpenAI":
@@ -139,41 +116,29 @@ def _get_client() -> "OpenAI":
     return OpenAI(api_key=api_key)
 
 
-def _model() -> str:
-    return (
-        os.getenv("OPENAI_MODEL_SOCIAL_AI", "").strip()
-        or os.getenv("OPENAI_MODEL_SOCIAL", "").strip()
-        or os.getenv("OPENAI_MODEL_TEXT", "").strip()
-        or os.getenv("OPENAI_MODEL", "").strip()
-        or "gpt-4o-mini"
-    )
-
-
 def _all_context(payload: Dict[str, Any]) -> str:
-    return " ".join(
-        _clean(payload.get(key))
-        for key in [
-            "format",
-            "network",
-            "goal",
-            "objective",
-            "category",
-            "tone",
-            "prompt",
-            "brief",
-            "context",
-            "offer",
-            "product",
-            "subject",
-            "audience",
-            "target",
-            "pain",
-            "promise",
-            "result",
-            "objection",
-            "cta",
-        ]
-    ).lower()
+    keys = [
+        "format",
+        "network",
+        "goal",
+        "objective",
+        "category",
+        "tone",
+        "prompt",
+        "brief",
+        "context",
+        "offer",
+        "product",
+        "subject",
+        "audience",
+        "target",
+        "pain",
+        "promise",
+        "result",
+        "objection",
+        "cta",
+    ]
+    return " ".join(_clean(payload.get(key)) for key in keys).lower()
 
 
 def _is_mrr(payload: Dict[str, Any]) -> bool:
@@ -181,9 +146,25 @@ def _is_mrr(payload: Dict[str, Any]) -> bool:
     return any(token in raw for token in MRR_TOKENS)
 
 
-def _wants_stop_doing(payload: Dict[str, Any]) -> bool:
+def _wants_stop(payload: Dict[str, Any]) -> bool:
     raw = _all_context(payload)
     return any(token in raw for token in STOP_TOKENS)
+
+
+def _network(payload: Dict[str, Any]) -> str:
+    return _clean(payload.get("network"), "Instagram")
+
+
+def _format(payload: Dict[str, Any]) -> str:
+    return _clean(payload.get("format"), "post")
+
+
+def _goal(payload: Dict[str, Any]) -> str:
+    return _clean(payload.get("goal") or payload.get("objective"), "Autorité")
+
+
+def _category(payload: Dict[str, Any]) -> str:
+    return _clean(payload.get("category"), "Conseils")
 
 
 def _infer_market(payload: Dict[str, Any]) -> str:
@@ -192,7 +173,7 @@ def _infer_market(payload: Dict[str, Any]) -> str:
         return "MRR / produits digitaux"
     if any(token in raw for token in ["coach", "consultant", "accompagnement", "mentor"]):
         return "coaching / service"
-    if any(token in raw for token in ["ecommerce", "e-commerce", "boutique", "shopify"]):
+    if any(token in raw for token in ["ecommerce", "e-commerce", "shopify", "boutique"]):
         return "e-commerce"
     if any(token in raw for token in ["saas", "logiciel", "application"]):
         return "SaaS"
@@ -265,101 +246,97 @@ def _word_count(text: str) -> int:
 
 
 def _max_words_for(payload: Dict[str, Any]) -> int:
-    fmt = _clean(payload.get("format"), "post").lower()
-    network = _clean(payload.get("network"), "Instagram").lower()
+    fmt = _format(payload).lower()
+    network = _network(payload).lower()
     if "story" in fmt:
         return 55
     if "reel" in fmt or "tiktok" in network:
-        return 105
+        return 115
     if "linkedin" in network or "linkedin" in fmt:
         return 145
     if "carrousel" in fmt:
-        return 36
-    return 125
+        return 38
+    return 118
 
 
-def _has_long_paragraph(text: str) -> bool:
-    for paragraph in re.split(r"\n\s*\n", text or ""):
-        if _word_count(paragraph) > 24:
-            return True
-    return False
-
-
-def _split_mobile_lines(text: str) -> str:
+def _mobile_linebreak(text: str) -> str:
     raw = _strip_labels(text)
-    if not raw:
-        return raw
-
+    raw = re.sub(r"[ \t]+", " ", raw)
+    source_lines = [line.strip() for line in raw.split("\n")]
     out: List[str] = []
-    for original_line in raw.split("\n"):
-        line = original_line.strip()
+
+    for line in source_lines:
         if not line:
             if out and out[-1] != "":
                 out.append("")
             continue
 
-        if len(line.split()) <= 8:
+        # Keep bullet/list lines.
+        if re.match(r"^[-•]\s+", line):
             out.append(line)
             continue
 
-        parts = re.split(r"(?<=[.!?…:])\s+", line)
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            words = part.split()
-            if len(words) <= 8:
-                out.append(part)
-            else:
-                for i in range(0, len(words), 7):
-                    out.append(" ".join(words[i : i + 7]).strip())
+        words = line.split()
+        if len(words) <= 8:
+            out.append(line)
+            continue
 
-    compacted: List[str] = []
+        # First split by sentence, then by chunks.
+        sentences = re.split(r"(?<=[.!?…])\s+", line)
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            s_words = sentence.split()
+            if len(s_words) <= 8:
+                out.append(sentence)
+            else:
+                for i in range(0, len(s_words), 7):
+                    out.append(" ".join(s_words[i : i + 7]).strip())
+
+    # Collapse repeated blanks, but keep breathing between lines.
+    cleaned: List[str] = []
     previous_blank = False
     for line in out:
         blank = not line.strip()
         if blank and previous_blank:
             continue
-        compacted.append(line)
+        cleaned.append(line)
         previous_blank = blank
 
-    # Une ligne = une respiration. On force double saut pour le rendu mobile dans le canvas.
-    return "\n\n".join(line for line in compacted if line.strip())
+    return "\n\n".join(line for line in cleaned if line.strip()).strip()
 
 
-def _trim_to_mobile(text: str, payload: Dict[str, Any]) -> str:
-    max_words = _max_words_for(payload)
+def _trim_words(text: str, max_words: int) -> str:
     words = re.findall(r"\S+", text or "")
     if len(words) <= max_words:
         return text.strip()
     clipped = " ".join(words[:max_words]).strip()
-    clipped = re.sub(r"[,;:]?$", "", clipped).strip()
+    clipped = re.sub(r"[,;:]$", "", clipped).strip()
     return clipped + "."
 
 
-def _normalize_blocks(value: Any, payload: Dict[str, Any] | None = None) -> List[Dict[str, str]]:
-    if not isinstance(value, list):
-        raise SocialAILiveError("Réponse Social AI LIVE invalide : blocks manquant.")
+def _has_long_paragraph(text: str) -> bool:
+    for paragraph in re.split(r"\n\s*\n", text or ""):
+        if _word_count(paragraph) > 22:
+            return True
+    return False
 
-    blocks: List[Dict[str, str]] = []
-    payload = payload or {}
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        role = _clean(item.get("role"), "body").lower()
-        text = _strip_labels(_clean(item.get("text")))
-        if role not in ALLOWED_ROLES:
-            role = "body"
-        if text:
-            if role in {"body", "hook", "cta"}:
-                text = _trim_to_mobile(text, payload)
-                text = _split_mobile_lines(text)
-            blocks.append({"role": role, "text": text})
 
-    if not blocks:
-        raise SocialAILiveError("Réponse Social AI LIVE vide.")
-
-    return blocks[:12]
+def _looks_weak(text: str, payload: Dict[str, Any]) -> Tuple[bool, str]:
+    lower = text.lower()
+    for phrase in FORBIDDEN_WEAK_PHRASES:
+        if phrase in lower:
+            return True, f"phrase interdite: {phrase}"
+    if _word_count(text) > _max_words_for(payload) + 12:
+        return True, "trop long"
+    if _has_long_paragraph(text):
+        return True, "pavé détecté"
+    if _is_mrr(payload) and not any(token in lower for token in ["mrr", "formation", "formations", "vidéo", "video", "publie", "publier", "contenu", "prospect", "vente", "vendre"]):
+        return True, "MRR pas assez incarné"
+    if _wants_stop(payload) and not any(token in lower for token in ["arrête", "arrete", "stop"]):
+        return True, "arrête de non respecté"
+    return False, "ok"
 
 
 def _normalize_string_list(value: Any, limit: int = 12) -> List[str]:
@@ -378,224 +355,250 @@ def _normalize_string_list(value: Any, limit: int = 12) -> List[str]:
     return out
 
 
-def _flat_text_from_blocks(blocks: List[Dict[str, str]]) -> str:
+def _flat_text(blocks: List[Dict[str, str]]) -> str:
     return "\n\n".join(_clean(block.get("text")) for block in blocks if _clean(block.get("text")))
 
 
-def _looks_weak(text: str, payload: Dict[str, Any] | None = None) -> bool:
-    payload = payload or {}
-    lower = text.lower()
-    if any(phrase in lower for phrase in FORBIDDEN_WEAK_PHRASES):
-        return True
-    if _word_count(text) > _max_words_for(payload) + 18:
-        return True
-    if _has_long_paragraph(text):
-        return True
-    if _is_mrr(payload) and not any(token in lower for token in ["mrr", "formation", "formations", "publier", "contenu", "vente", "prospect", "vidéo", "video", "tiktok", "stratégie", "strategie"]):
-        return True
-    if _wants_stop_doing(payload) and not any(token in lower for token in ["arrête", "arrete", "stop"]):
-        return True
-    # Rejet des conseils trop vagues.
-    if "niche" in lower and "mrr" in _all_context(payload) and not any(token in lower for token in ["contenu", "publier", "formation", "vente", "prospect"]):
-        return True
-    return False
+def _normalize_blocks(value: Any, payload: Dict[str, Any]) -> List[Dict[str, str]]:
+    if not isinstance(value, list):
+        raise SocialAILiveError("Réponse Social AI LIVE invalide : blocks manquant.")
+
+    max_words = _max_words_for(payload)
+    blocks: List[Dict[str, str]] = []
+
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        role = _clean(item.get("role"), "body").lower()
+        if role not in ALLOWED_ROLES:
+            role = "body"
+        text = _strip_labels(_clean(item.get("text")))
+        if not text:
+            continue
+
+        if role in {"hook", "body", "cta"}:
+            limit = max_words
+            if role == "hook":
+                limit = 26
+            elif role == "cta":
+                limit = 24
+            text = _trim_words(text, limit)
+            text = _mobile_linebreak(text)
+        elif role == "slide":
+            text = _trim_words(text, 34)
+            text = _mobile_linebreak(text)
+
+        blocks.append({"role": role, "text": text})
+
+    if not blocks:
+        raise SocialAILiveError("Réponse Social AI LIVE vide.")
+
+    return blocks[:12]
 
 
-def _context_prompt(payload: Dict[str, Any]) -> str:
-    return f"""
-CONTEXTE UTILISATEUR À RESPECTER À 100 %
-- Format demandé : {_clean(payload.get('format'), 'post')}
-- Réseau : {_clean(payload.get('network'), 'Instagram')}
-- Objectif : {_clean(payload.get('goal') or payload.get('objective'), 'Autorité')}
-- Catégorie / angle : {_clean(payload.get('category'), 'Conseils')}
-- Ton demandé : {_clean(payload.get('tone'), 'direct, humain, premium')}
-- Marché inféré : {_infer_market(payload)}
-- Offre / produit / sujet : {_clip(payload.get('offer') or payload.get('product') or payload.get('subject') or payload.get('prompt'), 1000)}
-- Audience : {_clip(payload.get('audience') or payload.get('target'), 1000)}
-- Douleur : {_clip(payload.get('pain'), 800)}
-- Promesse / résultat : {_clip(payload.get('promise') or payload.get('result'), 800)}
-- Objection : {_clip(payload.get('objection'), 600)}
-- CTA souhaité : {_clip(payload.get('cta'), 500)}
-- Brief libre : {_clip(payload.get('prompt') or payload.get('brief') or payload.get('context'), 2000)}
-
-OBÉISSANCE STRICTE
-- Tu ne remplaces jamais la demande par un conseil général.
-- Si le brief dit "commence par", tu commences par cette intention.
-- Si le brief dit "arrête de", tu écris une première idée en "arrête de ...".
-- Si le brief contient MRR / formation / produit digital, tu parles de publication, exécution, contenu, prospects, ventes, vidéos, formations ou stratégies achetées.
-""".strip()
-
+# -----------------------------------------------------------------------------
+# Prompting LIVE — no static fallback
+# -----------------------------------------------------------------------------
 
 def _system_prompt() -> str:
-    return f"""
-Tu es SOCIAL AI RESET TRUTH.
-Tu écris pour des créateurs business, MRR, produits digitaux, coachs, indépendants et e-commerce.
-Tu ne fais PAS de conseils corporate.
-Tu ne fais PAS de mini-article.
-Tu ne fais PAS de motivation creuse.
-Tu écris comme quelqu'un qui connaît vraiment le terrain.
+    return """
+Tu es SOCIAL AI LIVE — copywriter terrain pour entrepreneurs du digital.
 
-RÈGLE ABSOLUE : ZÉRO PAVÉ
-- jamais de paragraphe compact ;
-- jamais de cours marketing ;
-- jamais de dissertation ;
-- jamais "voici pourquoi" en mode article ;
-- 1 idée forte = 1 post.
+Tu n'es PAS un coach motivationnel.
+Tu n'es PAS un prof marketing.
+Tu n'es PAS LinkedIn corporate.
+Tu n'écris jamais de pavés.
 
-STYLE OBLIGATOIRE
-- mobile-first ;
+MISSION
+Écrire un contenu social prêt à publier, court, mobile-first, spécifique et incarné.
+Le lecteur doit penser : « putain, c'est moi ».
+
+RÈGLES NON NÉGOCIABLES
+- une seule idée forte par génération ;
 - phrases courtes ;
 - beaucoup de respiration ;
-- vérité qui pique ;
-- situation concrète ;
-- douleur réelle ;
-- exemple terrain ;
-- chute mémorable ;
-- publiable immédiatement.
+- zéro paragraphe compact ;
+- zéro théorie ;
+- zéro conseil vague ;
+- zéro motivation bullshit ;
+- zéro formule corporate ;
+- zéro mention LGD / Le Générateur Digital sauf si l'utilisateur le demande explicitement ;
+- obéir au brief, pas l'interpréter librement.
 
 INTERDITS ABSOLUS
-- vous méritez ;
-- croyez en vous ;
-- passez à l'action ;
-- écoutez votre audience ;
-- contenu authentique ;
-- apportez de la valeur ;
-- optimisez votre stratégie ;
-- stratégie gagnante ;
-- boostez votre présence ;
-- créez du contenu de qualité ;
-- identifiez une niche ;
-- dans le monde d'aujourd'hui ;
-- il est essentiel.
+"vous méritez", "croyez en vous", "passez à l'action", "contenu authentique", "écoutez votre audience", "apportez de la valeur", "optimisez votre stratégie", "il est essentiel", "découvrez comment", "boostez votre présence", "construire une relation", "communauté", "sois constant".
 
-SI MRR / PRODUITS DIGITAUX
-Tu dois utiliser le terrain réel :
-formations achetées, vidéos TikTok, stratégies, page blanche, contenu publié, prospects, ventes, exécution, peur de poster, consommation passive.
-Tu ne dois PAS parler de gourous, niche ou authenticité sauf si l'utilisateur le demande.
+SI LE CONTEXTE EST MRR / PRODUITS DIGITAUX
+Tu dois parler terrain :
+formations achetées, vidéos TikTok, stratégies sauvegardées, page blanche, publication, contenu posté, prospects, ventes, exécution.
 
-SI "ARRÊTE DE" EST DEMANDÉ
-Tu commences par un angle proche de :
-"Si tu débutes dans [niche] :"
+SI LE BRIEF DEMANDE DE COMMENCER PAR CE QUE L'AUDIENCE DOIT ARRÊTER DE FAIRE
+Tu dois commencer par :
+"Si tu débutes dans le MRR :"
 
-Puis :
+puis :
 "arrête de ..."
 
-RÉFÉRENCE VÉRITÉ À IMITER EN STYLE, RYTHME ET DENSITÉ
-{TRUTH_STYLE}
+STYLE VÉRITÉ À IMITER
+Si tu débutes dans le MRR :
 
-SORTIE TECHNIQUE
+arrête de regarder des vidéos toute la journée.
+
+Oui.
+
+Vraiment.
+
+Parce qu'à un moment :
+
+tu n'as plus un problème d'information.
+
+Tu as un problème d'exécution.
+
+Tu regardes :
+
+une vidéo TikTok
+une autre stratégie
+une autre méthode
+
+Et le soir ?
+
+Toujours zéro contenu publié.
+
+Zéro prospect.
+
+Zéro vente.
+
+Le vrai déclic :
+
+publier imparfaitement.
+
+Parce qu'un contenu imparfait posté aujourd'hui…
+
+bat toujours une stratégie “parfaite” restée dans ta tête.
+
+SORTIE
 Réponds uniquement en JSON valide.
 Aucun markdown.
 Aucun texte hors JSON.
 """.strip()
 
 
-def _quality_frame(payload: Dict[str, Any]) -> str:
-    category = _clean(payload.get("category"), "Conseils").lower()
-    network = _clean(payload.get("network"), "Instagram").lower()
-    fmt = _clean(payload.get("format"), "post").lower()
-    goal = _clean(payload.get("goal") or payload.get("objective"), "Autorité").lower()
-    market = _infer_market(payload)
-
-    category_line = "Donne un conseil utile, précis, sauvegardable. Une seule idée."
-    if "algorith" in category:
-        category_line = "Explique un principe d'algorithme en une action terrain simple : hook, rétention, sauvegarde, commentaire, timing ou recyclage."
-    elif "viral" in category:
-        category_line = "Crée une vérité relatable et partageable. Pas de buzz vide."
-    elif "conversion" in category or "vente" in category or "convert" in goal:
-        category_line = "Crée une prise de conscience qui rapproche de la décision sans vendre lourdement."
-    elif "mrr" in category or "MRR" in market:
-        category_line = "Parle au débutant MRR qui consomme, hésite, publie peu, veut vendre mais reste bloqué."
-
-    if "tiktok" in network or "reel" in fmt:
-        format_line = "Vidéo courte : 1 phrase par ligne, hook immédiat, aucun paragraphe."
-        max_words = "90 à 110 mots maximum."
-    elif "linkedin" in network:
-        format_line = "LinkedIn : point de vue net, respirant. Jamais article."
-        max_words = "120 à 145 mots maximum."
-    elif "story" in fmt:
-        format_line = "Story : ultra court, impact immédiat, très peu de texte."
-        max_words = "25 à 55 mots maximum."
-    else:
-        format_line = "Instagram/Facebook : mobile-first, lignes courtes, respiration, punchline utile."
-        max_words = "80 à 125 mots maximum."
-
-    strict_start = ""
-    if _wants_stop_doing(payload) and _is_mrr(payload):
-        strict_start = """
-DÉBUT OBLIGATOIRE
-La première ligne doit être proche de :
-"Si tu débutes dans le MRR :"
-
-La deuxième idée doit commencer par :
-"arrête de ..."
-
-Ne parle pas de gourous.
-Ne parle pas de niche.
-Ne parle pas d'authenticité.
-Ne parle pas de confiance en général.
+def _context_prompt(payload: Dict[str, Any]) -> str:
+    return f"""
+CONTEXTE À RESPECTER STRICTEMENT
+Format : {_format(payload)}
+Réseau : {_network(payload)}
+Objectif : {_goal(payload)}
+Catégorie / angle : {_category(payload)}
+Ton : {_clean(payload.get('tone'), 'direct, premium, humain, anti-blabla')}
+Marché inféré : {_infer_market(payload)}
+Offre / sujet : {_clip(payload.get('offer') or payload.get('product') or payload.get('subject') or payload.get('prompt'), 900)}
+Audience : {_clip(payload.get('audience') or payload.get('target'), 900)}
+Douleur : {_clip(payload.get('pain'), 700)}
+Promesse / résultat : {_clip(payload.get('promise') or payload.get('result'), 700)}
+Objection : {_clip(payload.get('objection'), 500)}
+CTA souhaité : {_clip(payload.get('cta'), 500)}
+Brief libre exact : {_clip(payload.get('prompt') or payload.get('brief') or payload.get('context'), 1800)}
 """.strip()
-    elif _wants_stop_doing(payload):
-        strict_start = """
+
+
+def _quality_prompt(payload: Dict[str, Any]) -> str:
+    market = _infer_market(payload)
+    fmt = _format(payload).lower()
+    network = _network(payload).lower()
+    category = _category(payload).lower()
+    goal = _goal(payload).lower()
+
+    if "story" in fmt:
+        max_line = "35 à 55 mots maximum."
+    elif "reel" in fmt or "tiktok" in network:
+        max_line = "90 à 115 mots maximum."
+    elif "linkedin" in fmt or "linkedin" in network:
+        max_line = "120 à 145 mots maximum, respirant, jamais article."
+    elif "carrousel" in fmt:
+        max_line = "Chaque slide : 12 à 28 mots maximum."
+    else:
+        max_line = "80 à 118 mots maximum."
+
+    category_rule = "Donne une vérité utile et spécifique."
+    if "mrr" in category or "mrr" in market.lower():
+        category_rule = "Parle au débutant MRR qui consomme trop, publie peu, doute, veut vendre mais n'exécute pas."
+    elif "algorith" in category:
+        category_rule = "Donne un conseil algorithme simple et applicable : hook, rétention, sauvegarde, commentaire, timing ou recyclage."
+    elif "viral" in category:
+        category_rule = "Écris une vérité partageable, relatable, sans buzz vide."
+    elif "conversion" in category or "convert" in goal or "vente" in category:
+        category_rule = "Crée une prise de conscience qui rapproche d'une décision sans argumentaire lourd."
+    elif "conseil" in category:
+        category_rule = "Une seule idée utile que l'audience peut appliquer aujourd'hui."
+
+    start_rule = ""
+    if _wants_stop(payload) and _is_mrr(payload):
+        start_rule = """
 DÉBUT OBLIGATOIRE
-La première idée doit commencer par "arrête de ...".
-Ne transforme pas ça en conseil général.
+Le hook doit commencer par :
+Si tu débutes dans le MRR :
+
+La ligne suivante doit commencer par :
+arrête de ...
+
+Ne parle pas des gourous.
+Ne parle pas de contenu authentique.
+Ne parle pas de communauté.
+""".strip()
+    elif _wants_stop(payload):
+        start_rule = """
+DÉBUT OBLIGATOIRE
+Le hook ou la première ligne doit commencer par :
+arrête de ...
 """.strip()
 
     return f"""
 CADRE QUALITÉ
-- Marché : {market}
-- Angle prioritaire : {category_line}
-- Format : {format_line}
-- Longueur : {max_words}
-{strict_start}
+{max_line}
+{category_rule}
+{start_rule}
 
-STRUCTURE POST SIMPLE
+STRUCTURE POUR POST SIMPLE
 1. Situation spécifique.
 2. Vérité qui pique.
 3. Exemple terrain.
 4. Déclic.
 5. Phrase mémorable.
-6. CTA uniquement si utile.
+6. CTA court seulement si utile.
 
-OBLIGATION DE STYLE
-- pas de long paragraphe ;
-- pas de conseil vague ;
-- pas de phrase corporate ;
-- pas de morale ;
-- pas de "il faut" répété ;
-- pas de liste interminable ;
-- chaque ligne doit être lisible sur mobile.
+NE PAS ÉCRIRE
+- un article ;
+- un résumé marketing ;
+- une leçon générale ;
+- un conseil bateau ;
+- un post motivation.
 """.strip()
 
 
-def _single_generation_user_prompt(payload: Dict[str, Any]) -> str:
-    fmt = _clean(payload.get("format"), "post").lower()
+def _single_generation_prompt(payload: Dict[str, Any]) -> str:
     seed = random.randint(10000, 999999)
+    fmt = _format(payload).lower()
 
-    if fmt == "carrousel":
-        blocks_rule = "Retourne 6 blocks role='slide' + 1 block role='cta'. Chaque slide = 16 mots max."
-    elif fmt == "reel":
-        blocks_rule = "Retourne 1 block role='hook', 1 block role='body' en script vidéo respirant, 1 block role='cta'."
+    if "carrousel" in fmt:
+        blocks_rule = "Retourne 6 blocks role='slide' + 1 block role='cta'. Une seule idée par slide."
+    elif "reel" in fmt:
+        blocks_rule = "Retourne 1 block role='hook', 1 block role='body' en script vidéo court, 1 block role='cta'."
     else:
-        blocks_rule = "Retourne exactement 3 blocks : role='hook', role='body', role='cta'. Le body doit être court, aéré, mobile-first."
+        blocks_rule = "Retourne exactement 3 blocks : hook, body, cta. Aucun texte long."
 
     return f"""
 {_context_prompt(payload)}
 
-{_quality_frame(payload)}
+{_quality_prompt(payload)}
 
 VARIATION LIVE
-Seed créatif : {seed}
-Tu dois produire un angle réel, pas une reformulation générique.
-
-CONTRAINTE PRINCIPALE
-Écris comme si l'utilisateur allait poster dans Instagram maintenant.
-Le texte doit donner l'impression : "putain, il parle de moi".
+Seed : {seed}
+Génère un angle vivant et spécifique, pas un template.
 
 {blocks_rule}
 
-FORMAT JSON STRICT
+JSON STRICT
 {{
   "title": "titre interne court",
   "blocks": [
@@ -615,35 +618,43 @@ FORMAT JSON STRICT
 """.strip()
 
 
-def _repair_user_prompt(payload: Dict[str, Any], bad_text: str) -> str:
+def _repair_prompt(payload: Dict[str, Any], bad_text: str, reason: str) -> str:
     return f"""
-Le contenu suivant est REFUSÉ :
-{_clip(bad_text, 1400)}
+Le contenu précédent est REFUSÉ.
+Raison : {reason}
 
-Raison : trop générique, trop lourd, hors sujet ou pas assez mobile-first.
+Contenu refusé :
+{_clip(bad_text, 1500)}
+
+Réécris entièrement.
 
 {_context_prompt(payload)}
 
-{_quality_frame(payload)}
+{_quality_prompt(payload)}
 
-Réécris entièrement.
-Tu dois te rapprocher du rythme de cette référence :
-{TRUTH_STYLE}
+RÈGLES DE CORRECTION
+- Pas de pavé.
+- Pas de phrase corporate.
+- Pas de motivation creuse.
+- Pas de conseil vague.
+- Si MRR : parle d'exécution, vidéos, formations, publication, prospects, ventes.
+- Si le brief demande "arrête de" : commence par "arrête de".
+- Fais respirer chaque ligne.
 
-JSON STRICT avec blocks hook/body/cta.
+JSON strict avec blocks hook/body/cta.
 """.strip()
 
 
-def _plan_90_user_prompt(payload: Dict[str, Any]) -> str:
+def _plan_90_prompt(payload: Dict[str, Any]) -> str:
     return f"""
 {_context_prompt(payload)}
 
-MISSION : PLAN 90 JOURS DE CONSEILS EXPERTS
+MISSION LIVE IA : PLAN 90 JOURS
 Crée un calendrier de 90 jours pour aider l'utilisateur à conseiller son audience.
-Ne génère PAS 90 posts complets.
-Génère 90 angles courts, variés, actionnables, non répétitifs.
+Ne génère pas 90 posts complets.
+Génère 90 angles courts, utiles, variés, non répétitifs.
 
-CHAQUE JOUR DOIT CONTENIR
+Chaque jour :
 - day
 - theme
 - angle
@@ -658,10 +669,9 @@ RÈGLES
 - 90 jours exactement.
 - Aucun angle générique.
 - Aucun doublon.
-- Zéro pavé.
-- Alternance : conseil, erreur, algorithme, viralité douce, objection, conversion, storytelling, lead magnet, régularité, recyclage, CTA, preuve, confiance, anti-page blanche.
-- hook_seed = court, spécifique, publiable.
-- Jamais LGD.
+- Mobile-first.
+- Spécifique à la niche.
+- Pas de LGD.
 
 JSON STRICT
 {{
@@ -683,7 +693,7 @@ JSON STRICT
 """.strip()
 
 
-def _generate_json(prompt: str, *, max_tokens: int, temperature: float) -> Dict[str, Any]:
+def _openai_json(prompt: str, *, max_tokens: int, temperature: float) -> Dict[str, Any]:
     client = _get_client()
     response = client.chat.completions.create(
         model=_model(),
@@ -704,58 +714,56 @@ def _generate_json(prompt: str, *, max_tokens: int, temperature: float) -> Dict[
     return _extract_json(raw)
 
 
+# -----------------------------------------------------------------------------
+# Public API service functions
+# -----------------------------------------------------------------------------
+
 def estimate_tokens(*parts: Any) -> int:
-    text = " ".join(str(p or "") for p in parts)
+    text = " ".join(str(part or "") for part in parts)
     return max(1, int(len(text) / 4))
-
-
-def _postprocess_blocks(blocks: List[Dict[str, str]], payload: Dict[str, Any]) -> List[Dict[str, str]]:
-    processed: List[Dict[str, str]] = []
-    for block in blocks:
-        role = _clean(block.get("role"), "body").lower()
-        text = _clean(block.get("text"))
-        if role in {"hook", "body", "cta"}:
-            text = _trim_to_mobile(text, payload)
-            text = _split_mobile_lines(text)
-        processed.append({"role": role if role in ALLOWED_ROLES else "body", "text": text})
-    return processed
 
 
 def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
     safe_payload = _sanitize_payload_text(dict(payload or {}))
-    prompt = _single_generation_user_prompt(safe_payload)
-    data = _generate_json(prompt, max_tokens=950, temperature=0.84 + random.random() * 0.08)
+
+    data = _openai_json(
+        _single_generation_prompt(safe_payload),
+        max_tokens=900,
+        temperature=0.86 + random.random() * 0.08,
+    )
     data = _sanitize_payload_text(data)
     blocks = _normalize_blocks(data.get("blocks"), safe_payload)
-    blocks = _postprocess_blocks(blocks, safe_payload)
 
-    full_text = _flat_text_from_blocks(blocks)
-    repair_attempts = 0
-    while _looks_weak(full_text, safe_payload) and repair_attempts < 3:
-        repair_attempts += 1
-        repair_prompt = _repair_user_prompt(safe_payload, full_text)
-        data = _generate_json(repair_prompt, max_tokens=900, temperature=0.9 + random.random() * 0.06)
+    full_text = _flat_text(blocks)
+    weak, reason = _looks_weak(full_text, safe_payload)
+    attempts = 0
+    while weak and attempts < 3:
+        attempts += 1
+        data = _openai_json(
+            _repair_prompt(safe_payload, full_text, reason),
+            max_tokens=780,
+            temperature=0.92 + random.random() * 0.05,
+        )
         data = _sanitize_payload_text(data)
         blocks = _normalize_blocks(data.get("blocks"), safe_payload)
-        blocks = _postprocess_blocks(blocks, safe_payload)
-        full_text = _flat_text_from_blocks(blocks)
+        full_text = _flat_text(blocks)
+        weak, reason = _looks_weak(full_text, safe_payload)
 
-    if _looks_weak(full_text, safe_payload):
-        raise SocialAILiveError("Social AI LIVE a refusé de livrer un contenu faible après régénération.")
+    if weak:
+        raise SocialAILiveError(f"Qualité Social AI refusée après 3 corrections LIVE : {reason}")
 
     performance = data.get("performance") if isinstance(data.get("performance"), dict) else {}
-
     return {
         "ok": True,
-        "mode": "live_ai_reset_truth_zero_pave_verified",
+        "mode": "live_ai_truth_reset_no_fallback",
         "title": _clean(data.get("title"), "Social AI LIVE"),
         "blocks": blocks,
         "performance": {
-            "recommended_format": _clean(performance.get("recommended_format"), "Post court mobile-first ou Reel selon le réseau."),
-            "publish_tip": _clean(performance.get("publish_tip"), "Publie quand ton audience peut lire calmement, puis mesure les réponses qualifiées."),
+            "recommended_format": _clean(performance.get("recommended_format"), "Post mobile-first court."),
+            "publish_tip": _clean(performance.get("publish_tip"), "Publie quand ton audience peut répondre, puis mesure les commentaires qualifiés."),
             "algorithm_tip": _clean(performance.get("algorithm_tip"), "La première ligne doit faire comprendre en 3 secondes pourquoi le lecteur est concerné."),
             "visual_idea": _clean(performance.get("visual_idea"), "Une phrase forte en grand, peu de texte, contraste lisible."),
-            "variation_idea": _clean(performance.get("variation_idea"), "Réécris le même angle avec une situation terrain différente."),
+            "variation_idea": _clean(performance.get("variation_idea"), "Teste le même angle avec une douleur ou objection différente."),
         },
         "angles": _normalize_string_list(data.get("angles"), limit=8),
     }
@@ -763,8 +771,7 @@ def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def generate_social_ai_90_day_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
     safe_payload = _sanitize_payload_text(dict(payload or {}))
-    prompt = _plan_90_user_prompt(safe_payload)
-    data = _generate_json(prompt, max_tokens=6500, temperature=0.78)
+    data = _openai_json(_plan_90_prompt(safe_payload), max_tokens=6500, temperature=0.78)
     data = _sanitize_payload_text(data)
 
     raw_days = data.get("days")
@@ -794,7 +801,7 @@ def generate_social_ai_90_day_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "ok": True,
-        "mode": "live_ai_90_day_plan_reset_truth",
+        "mode": "live_ai_90_day_plan_truth_reset",
         "title": _clean(data.get("title"), "Plan 90 jours de conseils"),
         "days": days,
     }
@@ -815,7 +822,7 @@ def generate_social_ai_day_from_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"Bénéfice audience : {_clean(day_data.get('audience_benefit'))}",
             f"Conseil algorithme : {_clean(day_data.get('algorithm_tip'))}",
             f"CTA : {_clean(day_data.get('cta_type'))}",
-            "Génère maintenant le post complet de ce jour. Fais court, spécifique, mobile-first, non générique, zéro pavé.",
+            "Génère le post complet de ce jour. Court, spécifique, mobile-first, zéro pavé.",
         ]
     ).strip()
     return generate_social_ai_live(merged)

@@ -21,12 +21,16 @@ ALLOWED_ROLES = {"hook", "body", "cta", "slide", "title"}
 FORBIDDEN_WEAK_PHRASES = [
     "vous méritez",
     "croyez en vous",
+    "crois en toi",
     "passez à l'action",
+    "passe à l'action",
     "connectez-vous avec votre audience",
     "écoutez votre audience",
     "ecoutez votre audience",
     "contenu authentique",
+    "authenticité",
     "apportez de la valeur",
+    "apporter de la valeur",
     "il est essentiel",
     "dans le monde d'aujourd'hui",
     "découvrez comment",
@@ -38,6 +42,32 @@ FORBIDDEN_WEAK_PHRASES = [
     "résultats concrets",
     "resultats concrets",
     "votre potentiel",
+    "libérez votre potentiel",
+    "transformez votre vie",
+    "boostez votre présence",
+    "stratégie gagnante",
+]
+
+MRR_TOKENS = [
+    "mrr",
+    "master resale",
+    "produit digital",
+    "produits digitaux",
+    "formation",
+    "formations",
+    "affiliation",
+    "revente",
+]
+
+STOP_TOKENS = [
+    "arrête",
+    "arrete",
+    "stop",
+    "doit arrêter",
+    "doit arreter",
+    "arrêter de faire",
+    "arreter de faire",
+    "stop doing",
 ]
 
 
@@ -74,6 +104,43 @@ def _model() -> str:
     )
 
 
+def _all_context(payload: Dict[str, Any]) -> str:
+    return " ".join(
+        _clean(payload.get(key))
+        for key in [
+            "format",
+            "network",
+            "goal",
+            "objective",
+            "category",
+            "tone",
+            "prompt",
+            "brief",
+            "context",
+            "offer",
+            "product",
+            "subject",
+            "audience",
+            "target",
+            "pain",
+            "promise",
+            "result",
+            "objection",
+            "cta",
+        ]
+    ).lower()
+
+
+def _is_mrr(payload: Dict[str, Any]) -> bool:
+    raw = _all_context(payload)
+    return any(token in raw for token in MRR_TOKENS)
+
+
+def _wants_stop_doing(payload: Dict[str, Any]) -> bool:
+    raw = _all_context(payload)
+    return any(token in raw for token in STOP_TOKENS)
+
+
 def _extract_json(raw: str) -> Dict[str, Any]:
     text = _clean(raw)
     text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE).strip()
@@ -106,7 +173,7 @@ def _strip_labels(text: str) -> str:
         cleaned,
     )
     cleaned = cleaned.replace("**", "")
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(r"\n{4,}", "\n\n", cleaned)
     return cleaned.strip()
 
 
@@ -137,11 +204,85 @@ def _sanitize_payload_text(data: Dict[str, Any]) -> Dict[str, Any]:
     return data
 
 
-def _normalize_blocks(value: Any) -> List[Dict[str, str]]:
+def _split_mobile_lines(text: str) -> str:
+    """Force un rendu respirant sans transformer le sens."""
+    raw = _strip_labels(text)
+    if not raw:
+        return raw
+
+    # Préserve les lignes existantes quand elles sont déjà courtes.
+    source_lines = [line.strip() for line in raw.split("\n")]
+    out: List[str] = []
+
+    for line in source_lines:
+        if not line:
+            if out and out[-1] != "":
+                out.append("")
+            continue
+
+        if len(line.split()) <= 11:
+            out.append(line)
+            continue
+
+        # Coupe les phrases longues en fragments courts mobile-first.
+        chunks = re.split(r"(?<=[.!?…])\s+", line)
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            words = chunk.split()
+            if len(words) <= 11:
+                out.append(chunk)
+                continue
+            for i in range(0, len(words), 8):
+                out.append(" ".join(words[i : i + 8]).strip())
+
+    cleaned: List[str] = []
+    previous_blank = False
+    for line in out:
+        blank = not line.strip()
+        if blank and previous_blank:
+            continue
+        cleaned.append(line)
+        previous_blank = blank
+
+    return "\n\n".join(line for line in cleaned if line.strip())
+
+
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\b[\wÀ-ÿ'-]+\b", text or ""))
+
+
+def _max_words_for(payload: Dict[str, Any]) -> int:
+    fmt = _clean(payload.get("format"), "post").lower()
+    network = _clean(payload.get("network"), "Instagram").lower()
+    if "story" in fmt:
+        return 65
+    if "reel" in fmt or "tiktok" in network:
+        return 120
+    if "linkedin" in network or "linkedin" in fmt:
+        return 160
+    if "carrousel" in fmt:
+        return 45
+    return 135
+
+
+def _trim_to_mobile(text: str, payload: Dict[str, Any]) -> str:
+    max_words = _max_words_for(payload)
+    words = re.findall(r"\S+", text or "")
+    if len(words) <= max_words:
+        return text.strip()
+    clipped = " ".join(words[:max_words]).strip()
+    clipped = re.sub(r"[,;:]?$", "", clipped).strip()
+    return clipped + "."
+
+
+def _normalize_blocks(value: Any, payload: Dict[str, Any] | None = None) -> List[Dict[str, str]]:
     if not isinstance(value, list):
         raise SocialAILiveError("Réponse Social AI LIVE invalide : blocks manquant.")
 
     blocks: List[Dict[str, str]] = []
+    payload = payload or {}
     for item in value:
         if not isinstance(item, dict):
             continue
@@ -150,6 +291,9 @@ def _normalize_blocks(value: Any) -> List[Dict[str, str]]:
         if role not in ALLOWED_ROLES:
             role = "body"
         if text:
+            if role in {"body", "hook", "cta"}:
+                text = _trim_to_mobile(text, payload)
+                text = _split_mobile_lines(text)
             blocks.append({"role": role, "text": text})
 
     if not blocks:
@@ -178,24 +322,34 @@ def _flat_text_from_blocks(blocks: List[Dict[str, str]]) -> str:
     return "\n\n".join(_clean(block.get("text")) for block in blocks if _clean(block.get("text")))
 
 
-def _looks_weak(text: str) -> bool:
+def _has_long_paragraph(text: str) -> bool:
+    for paragraph in re.split(r"\n\s*\n", text or ""):
+        if _word_count(paragraph) > 34:
+            return True
+    return False
+
+
+def _looks_weak(text: str, payload: Dict[str, Any] | None = None) -> bool:
+    payload = payload or {}
     lower = text.lower()
     if any(phrase in lower for phrase in FORBIDDEN_WEAK_PHRASES):
         return True
-    if len(text.split()) > 230:
+    if _word_count(text) > _max_words_for(payload) + 25:
+        return True
+    if _has_long_paragraph(text):
         return True
     if "marketing digital" in lower and "mrr" not in lower and "formation" not in lower and "offre" not in lower:
-        # Le texte reste trop générique si le sujet demandé est large.
+        return True
+    if _is_mrr(payload) and not any(token in lower for token in ["mrr", "formation", "formations", "publier", "contenu", "vente", "prospect", "vidéo", "video"]):
+        return True
+    if _wants_stop_doing(payload) and not any(token in lower for token in ["arrête", "arrete", "stop"]):
         return True
     return False
 
 
 def _infer_market(payload: Dict[str, Any]) -> str:
-    raw = " ".join(
-        _clean(payload.get(key))
-        for key in ["prompt", "brief", "context", "offer", "product", "subject", "audience", "target", "category"]
-    ).lower()
-    if any(token in raw for token in ["mrr", "master resale", "revente", "produit digital", "produits digitaux", "affiliation"]):
+    raw = _all_context(payload)
+    if any(token in raw for token in MRR_TOKENS):
         return "MRR / produits digitaux"
     if any(token in raw for token in ["coach", "consultant", "accompagnement", "mentor"]):
         return "coaching / service"
@@ -208,7 +362,7 @@ def _infer_market(payload: Dict[str, Any]) -> str:
 
 def _context_prompt(payload: Dict[str, Any]) -> str:
     return f"""
-CONTEXTE UTILISATEUR À RESPECTER
+CONTEXTE UTILISATEUR À RESPECTER À 100 %
 - Format demandé : {_clean(payload.get('format'), 'post')}
 - Réseau : {_clean(payload.get('network'), 'Instagram')}
 - Objectif : {_clean(payload.get('goal') or payload.get('objective'), 'Autorité')}
@@ -223,69 +377,125 @@ CONTEXTE UTILISATEUR À RESPECTER
 - CTA souhaité : {_clip(payload.get('cta'), 500)}
 - Brief libre : {_clip(payload.get('prompt') or payload.get('brief') or payload.get('context'), 2200)}
 
-SI LE BRIEF EST FLOU
-Tu dois choisir une situation concrète, pas écrire général.
-Exemples de situations concrètes possibles :
-- l'audience consomme plus de contenu qu'elle n'en publie ;
-- elle achète des formations mais ne passe pas à l'action ;
-- elle veut vendre mais n'ose pas publier ;
-- elle change de stratégie tous les trois jours ;
-- elle confond apprendre et avancer ;
-- elle veut être crédible mais parle trop vaguement ;
-- elle a une offre mais aucune confiance réelle de son audience.
+OBÉISSANCE STRICTE AU BRIEF
+- Si le brief dit "commence par", tu dois commencer exactement par cette intention.
+- Si le brief dit "arrête de", la première idée doit être "arrête de ...".
+- Si le brief contient MRR / formation / produit digital, tu dois parler de publication, exécution, contenu, prospects, ventes ou formations achetées.
+- Tu n'as pas le droit de partir sur un autre angle plus général.
 """.strip()
 
 
 def _system_prompt() -> str:
     return """
-Tu es SOCIAL AI V4 FINAL — cerveau LIVE premium pour créer des contenus sociaux que l'utilisateur peut publier directement.
+Tu es SOCIAL AI HARDLOCK — cerveau LIVE premium pour posts sociaux courts, humains et publiables.
 
-RÈGLE MARQUE ABSOLUE
-Tu ne mentionnes jamais LGD, Le Générateur Digital, une plateforme interne, un outil ou une marque non explicitement fournie par l'utilisateur.
+RÈGLE ABSOLUE : ZÉRO PAVÉ
+Tu n'écris jamais d'article.
+Tu n'écris jamais de paragraphe lourd.
+Tu n'écris jamais de cours marketing.
+Tu n'écris jamais de dissertation LinkedIn.
+
+RÈGLE MARQUE
+Tu ne mentionnes jamais LGD, Le Générateur Digital, une plateforme interne, un outil ou une marque non explicitement donnée par l'utilisateur.
 L'utilisateur doit apparaître comme la personne intéressante à suivre dans SA niche.
 
-TA MISSION
-Créer un contenu court, lisible, humain, spécifique, mobile-first, qui donne envie de dire : « putain, c'est vrai ».
-Tu ne donnes pas un cours marketing. Tu écris un vrai post social.
-Le contenu doit aider l'utilisateur à conseiller son audience, créer autorité, confiance, commentaires, leads ou ventes.
+MISSION
+Créer un contenu mobile-first que l'utilisateur peut copier-coller immédiatement.
+Le lecteur doit penser : "putain, c'est vrai".
 
-CE QUE TU DOIS ABSOLUMENT ÉVITER
-Interdits :
-- « vous méritez », « croyez en vous », « passez à l'action » ;
-- « contenu authentique », « écoutez votre audience », « comprenez ses besoins » ;
-- « il est essentiel », « dans le monde d'aujourd'hui », « découvrez comment » ;
-- phrases motivationnelles vagues ;
-- article mini-blog ;
-- paragraphes longs ;
-- ton LinkedIn corporate ;
-- blabla marketing abstrait ;
-- labels HOOK / BODY / CTA dans le texte final.
+STYLE OBLIGATOIRE
+- phrases courtes ;
+- respiration forte ;
+- une seule idée par post ;
+- tension concrète dès la première ligne ;
+- douleur réelle ;
+- conseil utile ;
+- zéro blabla ;
+- zéro phrase motivationnelle ;
+- zéro corporate ;
+- zéro vocabulaire de guru.
 
-MÉTHODE INVISIBLE OBLIGATOIRE
-Avant d'écrire, tu dois raisonner mentalement en 5 étapes :
-1. Identifier le vrai humain derrière le brief : débutant MRR, coach, e-commerçant, créateur, indépendant, etc.
-2. Identifier le comportement qui bloque : consommer sans publier, vouloir tout optimiser, attendre d'être prêt, parler trop vague, vendre trop tôt, changer de méthode.
-3. Choisir UNE vérité utile qui pique mais aide.
-4. Transformer cette vérité en conseil simple, mémorable, sauvegardable.
-5. Écrire en phrases courtes, respirantes, avec une tension dès la première ligne.
+INTERDITS ABSOLUS
+- "vous méritez" ;
+- "croyez en vous" ;
+- "passez à l'action" ;
+- "écoutez votre audience" ;
+- "contenu authentique" ;
+- "apportez de la valeur" ;
+- "optimisez votre stratégie" ;
+- "dans le monde d'aujourd'hui" ;
+- "il est essentiel" ;
+- "découvrez comment" ;
+- "boostez votre présence" ;
+- "libérez votre potentiel".
 
-STYLE À PRODUIRE
-- Mobile-first.
-- Phrases courtes.
-- Beaucoup de respiration.
-- Une idée forte.
-- Pas plus de 120 à 170 mots pour un post Instagram/Facebook.
-- Ton direct, humain, premium, sans agression.
-- Spécifique au contexte utilisateur.
-- Si MRR / produits digitaux : parler de formations achetées, page blanche, publication, tunnel, vente, audience silencieuse, exécution.
-- Si coaching/service : parler de crédibilité, expertise, confiance, peur de vendre, message trop flou.
-- Si e-commerce : parler de désir, preuve, offre, décision, objections.
+FORMAT POST INSTAGRAM / FACEBOOK
+80 à 135 mots maximum.
+Lignes courtes.
+Beaucoup de sauts de ligne.
+Aucun bloc compact.
 
-TEST QUALITÉ AVANT SORTIE
-Si le contenu ressemble à une réponse ChatGPT générique, réécris mentalement.
-Si le hook pourrait aller sur n'importe quel sujet, réécris.
-Si le conseil tient en « sois authentique » ou « écoute ton audience », réécris.
-Si le post n'a pas une phrase que l'audience pourrait sauvegarder, réécris.
+FORMAT REEL / TIKTOK
+90 à 120 mots maximum.
+Phrase écran par phrase écran.
+Hook en 2 secondes.
+
+FORMAT LINKEDIN
+Plus mature, mais toujours respirant.
+160 mots maximum.
+Jamais pavé.
+
+FORMAT CARROUSEL
+Une idée par slide.
+Très court.
+Pas de paragraphes.
+
+SI LE CONTEXTE EST MRR / PRODUITS DIGITAUX
+Tu dois parler de choses terrain :
+formations achetées, vidéos TikTok, stratégie, publication, page blanche, contenu publié, prospects, ventes, exécution.
+Pas de motivation.
+Pas de "gourous" sauf si l'utilisateur le demande.
+
+SI LE BRIEF DEMANDE "ARRÊTE DE FAIRE ÇA"
+Le post doit commencer par :
+"Si tu débutes dans [niche] :\n\narrête de ..."
+
+RÉFÉRENCE DE STYLE À IMITER
+Si tu débutes dans le MRR :
+
+arrête de regarder des vidéos toute la journée.
+
+Oui.
+
+Vraiment.
+
+Parce qu'à un moment :
+
+tu n'as plus un problème d'information.
+
+Tu as un problème d'exécution.
+
+Tu regardes :
+
+une vidéo TikTok
+une autre stratégie
+une autre méthode
+
+Et le soir ?
+
+Toujours zéro contenu publié.
+
+Zéro prospect.
+
+Zéro vente.
+
+Le vrai déclic :
+
+publier imparfaitement.
+
+Parce qu'un contenu imparfait posté aujourd'hui…
+
+bat toujours une stratégie “parfaite” restée dans ta tête.
 
 SORTIE TECHNIQUE
 Réponds uniquement en JSON valide.
@@ -301,9 +511,9 @@ def _quality_frame(payload: Dict[str, Any]) -> str:
     goal = _clean(payload.get("goal") or payload.get("objective"), "Autorité").lower()
     market = _infer_market(payload)
 
-    category_line = "Donne un conseil utile, spécifique, sauvegardable."
+    category_line = "Donne un conseil utile, spécifique, sauvegardable. Une seule idée."
     if "algorith" in category:
-        category_line = "Explique un principe algorithme terrain avec une action simple : hook, rétention, sauvegarde, commentaire, timing ou recyclage. Aucun cours."
+        category_line = "Explique un principe algorithme terrain en une action simple : hook, rétention, sauvegarde, commentaire, timing ou recyclage. Aucun cours."
     elif "viral" in category:
         category_line = "Crée une vérité relatable, partageable, avec une phrase mémorable. Pas de buzz vide."
     elif "conversion" in category or "vente" in category or "convert" in goal:
@@ -312,17 +522,36 @@ def _quality_frame(payload: Dict[str, Any]) -> str:
         category_line = "Parle au débutant MRR / produits digitaux qui consomme, hésite, publie peu, veut vendre mais reste bloqué."
 
     if "tiktok" in network or "reel" in fmt:
-        format_line = "Format vidéo court : phrases très courtes, 1 idée par ligne, hook en 2 secondes."
-        max_words = "90 à 130 mots maximum."
+        format_line = "Vidéo courte : 1 phrase par ligne, hook immédiat, aucun paragraphe."
+        max_words = "90 à 120 mots maximum."
     elif "linkedin" in network:
-        format_line = "Format LinkedIn : autorité calme, point de vue net, mais pas d'article lourd."
-        max_words = "140 à 220 mots maximum."
+        format_line = "LinkedIn : point de vue net, mais respirant. Aucun article."
+        max_words = "140 à 160 mots maximum."
     elif "story" in fmt:
-        format_line = "Format Story : ultra court, impact immédiat, très peu de texte."
-        max_words = "45 à 80 mots maximum."
+        format_line = "Story : ultra court, impact immédiat, très peu de texte."
+        max_words = "35 à 65 mots maximum."
     else:
-        format_line = "Format Instagram/Facebook post : lisible sur mobile, lignes courtes, respiration, punchline utile."
-        max_words = "100 à 170 mots maximum."
+        format_line = "Instagram/Facebook : mobile-first, lignes courtes, respiration, punchline utile."
+        max_words = "80 à 135 mots maximum."
+
+    strict_start = ""
+    if _wants_stop_doing(payload) and _is_mrr(payload):
+        strict_start = """
+DÉBUT OBLIGATOIRE POUR CE CAS
+La première ligne du hook doit être proche de :
+"Si tu débutes dans le MRR :"
+
+La suite immédiate doit commencer par :
+"arrête de ..."
+
+Ne pars pas sur les gourous, la motivation ou un angle général.
+""".strip()
+    elif _wants_stop_doing(payload):
+        strict_start = """
+DÉBUT OBLIGATOIRE POUR CE CAS
+La première idée doit commencer par "arrête de ...".
+Ne transforme pas ça en conseil général.
+""".strip()
 
     return f"""
 CADRE QUALITÉ SPÉCIFIQUE
@@ -330,22 +559,24 @@ CADRE QUALITÉ SPÉCIFIQUE
 - Angle prioritaire : {category_line}
 - Adaptation format : {format_line}
 - Longueur : {max_words}
+{strict_start}
 
-STRUCTURE RECOMMANDÉE POUR POST SIMPLE
-1. Première ligne = vérité qui accroche.
-2. 2 à 4 lignes de situation concrète.
-3. Une phrase de déclic.
-4. Un conseil simple.
-5. Une phrase mémorable.
-6. CTA humain optionnel.
+STRUCTURE OBLIGATOIRE POUR POST SIMPLE
+1. Ligne 1 = situation spécifique.
+2. Ligne 2 = "arrête de..." si demandé.
+3. Mini tension concrète.
+4. Exemple terrain.
+5. Déclic.
+6. Phrase mémorable.
+7. CTA seulement si utile.
 
-EXEMPLES DE STYLE AUTORISÉ
+EXEMPLES AUTORISÉS
 - « Tu consommes plus de contenu que tu n'en publies. »
-- « Le problème, ce n'est pas ton manque d'idées. C'est que tu changes d'angle avant d'avoir testé le premier. »
+- « Tu n'as plus un problème d'information. Tu as un problème d'exécution. »
 - « Un contenu imparfait publié bat une idée parfaite restée dans ta tête. »
 - « Si ton audience ne comprend pas ton message en 3 secondes, elle ne va pas deviner la suite. »
 
-EXEMPLES DE STYLE INTERDIT
+EXEMPLES INTERDITS
 - « Vous méritez de réussir. »
 - « Connectez-vous à votre audience. »
 - « Optimisez votre stratégie marketing. »
@@ -358,11 +589,11 @@ def _single_generation_user_prompt(payload: Dict[str, Any]) -> str:
     seed = random.randint(10000, 999999)
 
     if fmt == "carrousel":
-        blocks_rule = "Retourne 6 blocks role='slide' + 1 block role='cta'. Texte court par slide. Pas de paragraphe."
+        blocks_rule = "Retourne 6 blocks role='slide' + 1 block role='cta'. Chaque slide = 18 mots max. Pas de paragraphe."
     elif fmt == "reel":
         blocks_rule = "Retourne 1 block role='hook', 1 block role='body' sous forme de script vidéo respirant, 1 block role='cta'."
     else:
-        blocks_rule = "Retourne exactement 3 blocks : role='hook', role='body', role='cta'. Le body doit rester court, aéré, mobile-first."
+        blocks_rule = "Retourne exactement 3 blocks : role='hook', role='body', role='cta'. Le body doit être court, aéré, mobile-first."
 
     return f"""
 {_context_prompt(payload)}
@@ -378,7 +609,9 @@ CONTRAINTE PRINCIPALE
 Pas de théorie.
 Pas de phrase générique.
 Pas de mini-article.
+Pas de pavé.
 Pas de motivation creuse.
+Pas de guru talk.
 
 {blocks_rule}
 
@@ -404,22 +637,26 @@ FORMAT JSON STRICT
 
 def _repair_user_prompt(payload: Dict[str, Any], bad_text: str) -> str:
     return f"""
-Le contenu suivant est refusé car il est trop générique, trop lourd ou trop motivationnel :
+Le contenu suivant est REFUSÉ.
+Il est trop générique, trop lourd, hors sujet ou pas assez mobile-first :
 
-{_clip(bad_text, 1800)}
+{_clip(bad_text, 1600)}
 
 Réécris-le entièrement.
 
 {_context_prompt(payload)}
 
-RÈGLES DE RÉÉCRITURE
-- Fais court.
-- Fais spécifique.
-- Fais mobile-first.
-- Commence par une vérité concrète.
-- Évite absolument : vous méritez, croyez en vous, passez à l'action, contenu authentique, écoutez votre audience, optimisez votre stratégie.
-- Si le brief concerne MRR / business digital : parle d'exécution réelle, publication, page blanche, formations achetées, audience silencieuse, ventes irrégulières.
-- Donne une seule idée forte.
+{_quality_frame(payload)}
+
+RÈGLES DE RÉÉCRITURE NON NÉGOCIABLES
+- 80 à 135 mots maximum pour Instagram/Facebook.
+- Aucune phrase de motivation.
+- Aucune phrase corporate.
+- Aucun paragraphe compact.
+- Une seule idée forte.
+- Si MRR : parle d'exécution, publication, contenu, prospects, ventes, formations achetées.
+- Si le brief demande "arrête de", commence par "arrête de".
+- Fais respirer chaque ligne.
 
 JSON STRICT avec blocks hook/body/cta.
 """.strip()
@@ -450,7 +687,7 @@ RÈGLES
 - Aucun angle générique.
 - Aucun doublon.
 - Alterne : conseil d'autorité, erreur fréquente, algorithme, viralité douce, objection, conversion, storytelling, lead magnet, régularité, recyclage, CTA, preuve, confiance, anti-page blanche.
-- Chaque hook_seed doit déjà être spécifique et publiable.
+- Chaque hook_seed doit être court, spécifique et publiable.
 - Jamais LGD, jamais marque interne.
 
 JSON STRICT
@@ -482,9 +719,9 @@ def _generate_json(prompt: str, *, max_tokens: int, temperature: float) -> Dict[
             {"role": "user", "content": prompt},
         ],
         temperature=temperature,
-        top_p=0.92,
-        frequency_penalty=0.72,
-        presence_penalty=0.65,
+        top_p=0.88,
+        frequency_penalty=0.95,
+        presence_penalty=0.75,
         max_tokens=max_tokens,
         response_format={"type": "json_object"},
     )
@@ -499,25 +736,42 @@ def estimate_tokens(*parts: Any) -> int:
     return max(1, int(len(text) / 4))
 
 
+def _postprocess_blocks(blocks: List[Dict[str, str]], payload: Dict[str, Any]) -> List[Dict[str, str]]:
+    processed: List[Dict[str, str]] = []
+    for block in blocks:
+        role = _clean(block.get("role"), "body").lower()
+        text = _clean(block.get("text"))
+        if role in {"hook", "body", "cta"}:
+            text = _trim_to_mobile(text, payload)
+            text = _split_mobile_lines(text)
+        processed.append({"role": role if role in ALLOWED_ROLES else "body", "text": text})
+    return processed
+
+
 def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
     safe_payload = _sanitize_payload_text(dict(payload or {}))
     prompt = _single_generation_user_prompt(safe_payload)
-    data = _generate_json(prompt, max_tokens=1600, temperature=0.88 + random.random() * 0.07)
+    data = _generate_json(prompt, max_tokens=1050, temperature=0.82 + random.random() * 0.08)
     data = _sanitize_payload_text(data)
-    blocks = _normalize_blocks(data.get("blocks"))
+    blocks = _normalize_blocks(data.get("blocks"), safe_payload)
+    blocks = _postprocess_blocks(blocks, safe_payload)
 
     full_text = _flat_text_from_blocks(blocks)
-    if _looks_weak(full_text):
+    repair_attempts = 0
+    while _looks_weak(full_text, safe_payload) and repair_attempts < 2:
+        repair_attempts += 1
         repair_prompt = _repair_user_prompt(safe_payload, full_text)
-        data = _generate_json(repair_prompt, max_tokens=1450, temperature=0.94)
+        data = _generate_json(repair_prompt, max_tokens=950, temperature=0.9 + random.random() * 0.06)
         data = _sanitize_payload_text(data)
-        blocks = _normalize_blocks(data.get("blocks"))
+        blocks = _normalize_blocks(data.get("blocks"), safe_payload)
+        blocks = _postprocess_blocks(blocks, safe_payload)
+        full_text = _flat_text_from_blocks(blocks)
 
     performance = data.get("performance") if isinstance(data.get("performance"), dict) else {}
 
     return {
         "ok": True,
-        "mode": "live_ai_true_brain_v4_final_mobile_first",
+        "mode": "live_ai_hardlock_v5_zero_pave_mobile_first",
         "title": _clean(data.get("title"), "Social AI LIVE"),
         "blocks": blocks,
         "performance": {
@@ -534,7 +788,7 @@ def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
 def generate_social_ai_90_day_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
     safe_payload = _sanitize_payload_text(dict(payload or {}))
     prompt = _plan_90_user_prompt(safe_payload)
-    data = _generate_json(prompt, max_tokens=6500, temperature=0.82)
+    data = _generate_json(prompt, max_tokens=6500, temperature=0.78)
     data = _sanitize_payload_text(data)
 
     raw_days = data.get("days")
@@ -564,7 +818,7 @@ def generate_social_ai_90_day_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "ok": True,
-        "mode": "live_ai_90_day_plan_v4_final",
+        "mode": "live_ai_90_day_plan_v5_zero_pave",
         "title": _clean(data.get("title"), "Plan 90 jours de conseils"),
         "days": days,
     }
@@ -585,7 +839,7 @@ def generate_social_ai_day_from_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"Bénéfice audience : {_clean(day_data.get('audience_benefit'))}",
             f"Conseil algorithme : {_clean(day_data.get('algorithm_tip'))}",
             f"CTA : {_clean(day_data.get('cta_type'))}",
-            "Génère maintenant le post complet de ce jour. Fais court, spécifique, mobile-first, non générique.",
+            "Génère maintenant le post complet de ce jour. Fais court, spécifique, mobile-first, non générique, zéro pavé.",
         ]
     ).strip()
     return generate_social_ai_live(merged)

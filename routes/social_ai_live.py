@@ -234,6 +234,7 @@ def social_ai_live_plan_90_days(
 
     return {
         **result,
+        
         "tokens_consumed": consumed,
         "quota": quota,
     }

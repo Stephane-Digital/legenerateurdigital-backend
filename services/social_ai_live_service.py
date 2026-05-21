@@ -4,7 +4,7 @@ import json
 import os
 import random
 import re
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal
 
 try:
     from openai import OpenAI
@@ -90,6 +90,7 @@ def _normalize_blocks(value: Any) -> List[Dict[str, str]]:
         if role not in allowed:
             role = "body"
         if text:
+            text = _strip_post_labels(text)
             blocks.append({"role": role, "text": text})
 
     if not blocks:
@@ -115,6 +116,13 @@ def _normalize_string_list(value: Any, limit: int = 12) -> List[str]:
     return out
 
 
+def _strip_post_labels(text: str) -> str:
+    cleaned = str(text or "")
+    cleaned = re.sub(r"(?im)^\s*(HOOK|BODY|CTA|TITRE|LÉGENDE|LEGENDE|SLIDE\s*\d*|POST|CAPTION)\s*[:：-]\s*", "", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _forbidden_brand_filter(text: str, allowed_offer: str = "") -> str:
     """Empêche la marque interne d'apparaître sauf si l'utilisateur l'a explicitement donnée."""
     allowed = "lgd" in allowed_offer.lower() or "générateur digital" in allowed_offer.lower() or "generateur digital" in allowed_offer.lower()
@@ -131,7 +139,7 @@ def _sanitize_payload_text(data: Dict[str, Any]) -> Dict[str, Any]:
 
     def walk(value: Any) -> Any:
         if isinstance(value, str):
-            return _forbidden_brand_filter(value, offer)
+            return _forbidden_brand_filter(_strip_post_labels(value), offer)
         if isinstance(value, list):
             return [walk(v) for v in value]
         if isinstance(value, dict):
@@ -143,29 +151,50 @@ def _sanitize_payload_text(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def _system_prompt() -> str:
     return """
-Tu es un stratège social media senior spécialisé marketing digital, copywriting comportemental, contenu d'autorité, algorithmes, viralité propre, conversion et vente douce.
+Tu es SOCIAL AI V2 — cerveau premium de contenu social LIVE.
 
-RÈGLE ABSOLUE
-Tu ne mentionnes jamais LGD, Le Générateur Digital, une plateforme interne, un outil ou une marque non fournie explicitement par l'utilisateur.
+IDENTITÉ MÉTIER
+Tu réunis 5 expertises :
+1. copywriter senior direct-response,
+2. stratège social media spécialisé marketing digital / business en ligne / MRR / coaching / services / produits digitaux,
+3. psychologue comportemental orienté achat et passage à l'action,
+4. créateur de contenu capable de produire du contenu humain, utile, crédible et partageable,
+5. expert algorithmes terrain : hook, rétention, commentaires qualifiés, sauvegardes, répétition, recyclage.
+
+RÈGLE ABSOLUE MARQUE
+Tu ne mentionnes jamais LGD, Le Générateur Digital, une plateforme interne, un outil ou une marque non explicitement fournie par l'utilisateur.
 L'utilisateur final doit apparaître comme l'expert utile auprès de SON audience.
+La marque interne est invisible. Le contenu parle toujours du produit, de l'audience, de la douleur et du résultat de l'utilisateur.
 
-MISSION
-Produire du contenu qui fait dire : « ce post comprend exactement mon audience ».
-Le contenu doit libérer l'utilisateur de la page blanche, l'aider à prodiguer des conseils crédibles à son audience, construire confiance, autorité, engagement et ventes.
+MISSION COMMERCIALE
+Produire un contenu qui donne envie à l'utilisateur de dire : « je peux poster ça maintenant ».
+Le contenu doit créer un vrai effet : « c'est exactement ce que mon audience vit ».
+Tu dois aider l'utilisateur à prodiguer des conseils à son audience, paraître crédible, créer confiance, autorité, commentaires, leads et ventes.
 
-STYLE
-Humain, spécifique, premium, net, utile, jamais corporate, jamais générique, jamais bullshit guru.
-Pas de titres techniques dans le post final : pas de HOOK:, BODY:, CTA:.
-Pas de phrases IA classiques comme « dans le monde d'aujourd'hui », « il est essentiel de », « découvrez comment ».
+INTERDICTIONS TOTALES
+- Pas de phrases génériques : « il est essentiel de », « dans le monde d'aujourd'hui », « découvrez comment », « contenu authentique », « connectez-vous avec votre audience », « apportez de la valeur ».
+- Pas de conseil bateau : écouter son audience, être authentique, publier régulièrement, comprendre ses besoins, optimiser sa stratégie.
+- Pas de ton corporate, pas de LinkedIn mou, pas de coach bullshit, pas de blabla théorique.
+- Pas de labels dans le contenu final : pas de HOOK:, BODY:, CTA:.
+- Pas de promesses magiques, pas de faux chiffres, pas de faux témoignages.
+- Pas de « nous », « notre », « votre outil », sauf si l'utilisateur le demande clairement.
 
-MÉTHODE INVISIBLE
-1. Identifier la tension émotionnelle exacte.
-2. Trouver l'angle le plus utile : conseil, erreur, déclic, algorithme, viralité, objection, conversion ou storytelling.
-3. Écrire un contenu directement publiable.
-4. Ajouter une recommandation de performance séparée, jamais injectée dans le post.
+MÉTHODE INVISIBLE OBLIGATOIRE
+Avant d'écrire, tu fais mentalement ceci :
+1. Traduire le brief flou en situation concrète.
+2. Identifier la douleur émotionnelle exacte : fatigue, dispersion, honte, surcharge, page blanche, peur de vendre, manque de clarté, ventes irrégulières.
+3. Choisir une tension qui arrête le scroll.
+4. Donner UNE idée forte, pas dix conseils moyens.
+5. Écrire avec scènes concrètes, phrases courtes, respiration, contraste, vérité utile.
+6. Finir par un CTA naturel adapté à l'objectif.
 
-FORMAT DE RÉPONSE
-Réponds uniquement en JSON valide, sans markdown.
+QUALITÉ ATTENDUE
+Le post doit être spécifique, humain, net, premium, publiable, utile, non générique.
+Chaque génération doit avoir un angle différent, même sur le même sujet.
+Si le brief est vague, tu infères une situation concrète dans le marketing digital ou le business en ligne.
+
+SORTIE TECHNIQUE
+Réponds uniquement en JSON valide, sans markdown, sans texte hors JSON.
 """.strip()
 
 
@@ -185,34 +214,126 @@ CONTEXTE UTILISATEUR
 - CTA souhaité : {_clip(payload.get('cta'), 500)}
 - Brief libre : {_clip(payload.get('prompt') or payload.get('brief') or payload.get('context'), 2500)}
 
-EXIGENCE QUALITÉ
-Le contenu doit être précis, publiable immédiatement, orienté résultat tangible et assez fort pour justifier un abonnement mensuel.
-Si le brief est flou, infère intelligemment une audience marketing digital / business en ligne, mais reste utile et concret.
+INTERPRÉTATION SI CONTEXTE FLOU
+Si l'utilisateur donne seulement une idée vague, transforme-la en contenu concret pour entrepreneur / créateur / vendeur de produit digital.
+Ne reste jamais abstrait. Utilise le vécu réel : page blanche, trop de conseils, trop d'outils, fatigue de publier, peur de mal faire, ventes irrégulières, audience silencieuse.
 """.strip()
+
+
+def _quality_frame(category: str, network: str, fmt: str) -> str:
+    cat = category.lower()
+    net = network.lower()
+    fmt_l = fmt.lower()
+
+    if "algorith" in cat:
+        category_rules = """
+ANGLE PRIORITAIRE : CONSEIL ALGORITHME TERRAIN
+Tu dois expliquer un principe concret : premières lignes, rétention, watch time, sauvegardes, commentaires qualifiés, recyclage, régularité ou timing.
+Mais tu ne fais jamais un cours. Tu écris un post que l'utilisateur peut publier pour conseiller son audience.
+Le conseil doit être actionnable aujourd'hui.
+""".strip()
+    elif "viral" in cat:
+        category_rules = """
+ANGLE PRIORITAIRE : VIRALITÉ DOUCE
+Tu dois produire une vérité partageable, relatable, qui crée un « moi aussi ».
+Pas de putaclic. Pas de buzz vide.
+Le contenu doit contenir une phrase mémorable que l'audience pourrait sauvegarder ou partager.
+""".strip()
+    elif "conseil" in cat:
+        category_rules = """
+ANGLE PRIORITAIRE : CONSEIL D'AUTORITÉ
+Tu dois donner un conseil qui fait paraître l'utilisateur crédible dans sa niche.
+Une idée forte. Une correction simple. Une action claire.
+Le lecteur doit repartir avec : « je sais quoi faire maintenant ».
+""".strip()
+    elif "conversion" in cat or "vente" in cat:
+        category_rules = """
+ANGLE PRIORITAIRE : CONVERSION / VENTE DOUCE
+Tu dois créer désir, confiance et prochaine action, sans pousser lourdement.
+Le contenu doit faire comprendre pourquoi agir maintenant est logique.
+""".strip()
+    elif "hook" in cat:
+        category_rules = """
+ANGLE PRIORITAIRE : HOOKS PSYCHOLOGIQUES
+Tu dois générer des ouvertures qui nomment une tension précise dès la première ligne.
+Chaque hook doit être court, humain, spécifique et difficile à ignorer.
+""".strip()
+    else:
+        category_rules = """
+ANGLE PRIORITAIRE : CONTENU UTILE ET CONVERSIONNEL
+Tu dois combiner tension, conseil, clarté, crédibilité et CTA naturel.
+""".strip()
+
+    if "tiktok" in net or "reel" in fmt_l:
+        network_rules = """
+ADAPTATION RÉSEAU
+Phrases très courtes. Pattern interrupt. Rythme vidéo. Une idée par phrase. Pas de paragraphe lourd.
+""".strip()
+    elif "linkedin" in net:
+        network_rules = """
+ADAPTATION RÉSEAU
+Autorité calme, point de vue net, crédibilité business, pas de punchline cheap.
+""".strip()
+    elif "facebook" in net:
+        network_rules = """
+ADAPTATION RÉSEAU
+Conversation naturelle, proximité, sensation de parler à une vraie personne.
+""".strip()
+    else:
+        network_rules = """
+ADAPTATION RÉSEAU
+Instagram / multi-réseaux : lisible, émotionnel, sauvegardable, visuel, facile à lire sur mobile.
+""".strip()
+
+    return f"{category_rules}\n\n{network_rules}"
 
 
 def _single_generation_user_prompt(payload: Dict[str, Any]) -> str:
     format_txt = _clean(payload.get("format"), "post").lower()
+    network = _clean(payload.get("network"), "Instagram")
     category = _clean(payload.get("category"), "Conseils")
 
     if format_txt == "carrousel":
-        expected = "6 à 8 blocks avec role='slide', chaque slide courte, visuelle et forte. Dernier block role='cta'."
+        expected = "6 à 8 blocks avec role='slide'. Chaque slide doit être courte, visuelle, forte, sans phrase molle. Dernier block role='cta'."
+        structure = "Slide 1 tension / Slide 2 vécu / Slide 3 erreur / Slide 4 vérité / Slide 5 méthode / Slide 6 action / Slide 7 CTA si utile."
     elif format_txt == "reel":
         expected = "1 hook très court + 1 body sous forme de script vidéo rythmé + 1 cta optionnel."
+        structure = "Ouverture choc 2 secondes, scène relatable, tension, déclic, action, CTA court."
     else:
-        expected = "1 hook + 1 body + 1 cta naturel si utile."
+        expected = "1 hook + 1 body + 1 cta naturel."
+        structure = "Hook précis, tension vécue, vérité utile, conseil concret, action simple, CTA naturel."
+
+    seed = random.randint(1000, 999999)
 
     return f"""
 {_context_prompt(payload)}
 
-TYPE DE GÉNÉRATION
-Génère un contenu LIVE IA dans la catégorie : {category}.
+{_quality_frame(category, network, format_txt)}
+
+VARIATION LIVE
+Seed créatif : {seed}
+Même si le sujet ressemble à une génération précédente, tu dois changer l'angle, les exemples, la tension et le CTA.
+
+OBJECTIF QUALITÉ IMMÉDIAT
+Ne produis pas un texte « correct ».
+Produis un texte que l'utilisateur peut poster avec fierté.
+Le lecteur doit ressentir : « cette personne comprend exactement mon problème ».
+
+TEST ANTI-GÉNÉRIQUE
+Avant de répondre, vérifie mentalement :
+- Est-ce que ce post pourrait être publié par n'importe qui ? Si oui, réécris.
+- Est-ce qu'il contient une vérité concrète ? Sinon, réécris.
+- Est-ce qu'il donne un conseil précis ou une prise de conscience utile ? Sinon, réécris.
+- Est-ce qu'il évite les phrases bateau ? Sinon, réécris.
+
+STRUCTURE ATTENDUE
+{structure}
 
 ATTENDU BLOCKS
 {expected}
 
-CONSEIL DE PERFORMANCE
-Ajoute une section performance séparée avec :
+CONSEIL DE PERFORMANCE SÉPARÉ
+Ajoute une section performance séparée, non destinée au canvas :
 - recommended_format
 - publish_tip
 - algorithm_tip
@@ -243,17 +364,23 @@ def _plan_90_user_prompt(payload: Dict[str, Any]) -> str:
     return f"""
 {_context_prompt(payload)}
 
-MISSION SPÉCIALE
-Crée un calendrier stratégique de 90 jours de conseils à donner à l'audience.
-Chaque jour doit avoir un angle différent. Ne génère pas 90 posts complets.
-Le plan doit donner envie de revenir chaque jour générer le post LIVE.
+MISSION SPÉCIALE : PLAN 90 JOURS CONSEILS EXPERTS
+Crée un calendrier stratégique de 90 jours pour aider l'utilisateur à conseiller son audience et devenir une personne intéressante à suivre.
+Ne génère pas 90 posts complets.
+Génère 90 jours d'angles précis, variés, actionnables, non répétitifs.
 
 RÈGLES DU PLAN
 - 90 jours exactement.
 - Aucun doublon d'angle.
-- Alterner : conseils d'autorité, algorithmes, viralité douce, erreurs, objections, conversion, storytelling, lead magnet, confiance, action simple.
-- Chaque jour doit être concret et orienté résultat.
+- Chaque jour doit pouvoir devenir un post LIVE IA fort.
+- Alterner : conseils d'autorité, algorithmes, viralité douce, erreurs, objections, conversion, storytelling, lead magnet, confiance, action simple, régularité, timing, recyclage, CTA, preuve, persona, anti-page blanche.
+- Chaque jour doit aider l'audience avec un conseil concret.
 - Ne mentionne jamais LGD ou une marque non donnée par l'utilisateur.
+
+QUALITÉ DES JOURS
+Chaque hook_seed doit déjà donner envie de cliquer.
+Chaque audience_benefit doit être tangible.
+Chaque algorithm_tip doit être simple, prudent et applicable.
 
 JSON STRICT
 {{
@@ -284,10 +411,11 @@ def _generate_json(prompt: str, *, max_tokens: int, temperature: float) -> Dict[
             {"role": "user", "content": prompt},
         ],
         temperature=temperature,
-        top_p=0.92,
-        frequency_penalty=0.35,
-        presence_penalty=0.25,
+        top_p=0.94,
+        frequency_penalty=0.55,
+        presence_penalty=0.45,
         max_tokens=max_tokens,
+        response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or ""
     if not raw.strip():
@@ -303,7 +431,7 @@ def estimate_tokens(*parts: Any) -> int:
 def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
     safe_payload = _sanitize_payload_text(dict(payload or {}))
     prompt = _single_generation_user_prompt(safe_payload)
-    data = _generate_json(prompt, max_tokens=1500, temperature=0.88 + random.random() * 0.04)
+    data = _generate_json(prompt, max_tokens=1900, temperature=0.92 + random.random() * 0.05)
     data = _sanitize_payload_text(data)
 
     blocks = _normalize_blocks(data.get("blocks"))
@@ -311,12 +439,12 @@ def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "ok": True,
-        "mode": "live_ai",
+        "mode": "live_ai_true_brain_v2",
         "title": _clean(data.get("title"), "Social AI LIVE"),
         "blocks": blocks,
         "performance": {
             "recommended_format": _clean(performance.get("recommended_format"), "Post court ou Reel selon le réseau."),
-            "publish_tip": _clean(performance.get("publish_tip"), "Teste deux créneaux et garde celui qui déclenche le plus de réponses qualifiées."),
+            "publish_tip": _clean(performance.get("publish_tip"), "Teste deux créneaux proches et garde celui qui déclenche le plus de réponses qualifiées."),
             "algorithm_tip": _clean(performance.get("algorithm_tip"), "Les premières lignes doivent créer une raison claire de rester."),
             "visual_idea": _clean(performance.get("visual_idea"), "Visuel simple avec une phrase forte en grand."),
             "variation_idea": _clean(performance.get("variation_idea"), "Reposte le même angle avec une objection différente."),
@@ -328,7 +456,7 @@ def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
 def generate_social_ai_90_day_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
     safe_payload = _sanitize_payload_text(dict(payload or {}))
     prompt = _plan_90_user_prompt(safe_payload)
-    data = _generate_json(prompt, max_tokens=5200, temperature=0.78)
+    data = _generate_json(prompt, max_tokens=6200, temperature=0.84)
     data = _sanitize_payload_text(data)
 
     raw_days = data.get("days")
@@ -358,7 +486,7 @@ def generate_social_ai_90_day_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "ok": True,
-        "mode": "live_ai_90_day_plan",
+        "mode": "live_ai_90_day_plan_true_brain_v2",
         "title": _clean(data.get("title"), "Plan 90 jours de conseils"),
         "days": days,
     }
@@ -379,6 +507,7 @@ def generate_social_ai_day_from_plan(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"Bénéfice audience : {_clean(day_data.get('audience_benefit'))}",
             f"Conseil algorithme : {_clean(day_data.get('algorithm_tip'))}",
             f"CTA : {_clean(day_data.get('cta_type'))}",
+            "Génère maintenant le post complet de ce jour avec un angle différent, concret et publiable.",
         ]
     ).strip()
     return generate_social_ai_live(merged)

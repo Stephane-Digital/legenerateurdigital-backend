@@ -676,7 +676,16 @@ STRUCTURE OBLIGATOIRE POUR POST SIMPLE
 4. Exemple terrain.
 5. Déclic.
 6. Phrase mémorable.
-7. CTA seulement si utile.
+7. CTA OBLIGATOIRE.
+
+RÈGLE CTA HARD-LOCK
+Le post doit TOUJOURS finir par une action claire adaptée à l'objectif :
+- Éduquer → sauvegarde, commentaire, prise de conscience
+- Convertir → commentaire, DM, lead, clic
+- Attirer → réaction, opinion, partage
+- Autorité → retour d'expérience, objection, avis
+Jamais de fin sèche.
+Jamais de post sans CTA.
 
 EXEMPLES AUTORISÉS
 - « Tu consommes plus de contenu que tu n'en publies. »
@@ -701,7 +710,7 @@ def _single_generation_user_prompt(payload: Dict[str, Any]) -> str:
     elif fmt == "reel":
         blocks_rule = "Retourne 1 block role='hook', 1 block role='body' sous forme de script vidéo respirant, 1 block role='cta'."
     else:
-        blocks_rule = "Retourne exactement 3 blocks : role='hook', role='body', role='cta'. Le body doit être court, aéré, mobile-first."
+        blocks_rule = "Retourne exactement 3 blocks obligatoires : role='hook', role='body', role='cta'. Le body doit être court, aéré, mobile-first. Le block role='cta' ne doit jamais être vide."
 
     return f"""
 {_context_prompt(payload)}
@@ -737,7 +746,7 @@ FORMAT JSON STRICT
   "blocks": [
     {{"role": "hook", "text": "..."}},
     {{"role": "body", "text": "..."}},
-    {{"role": "cta", "text": "..."}}
+    {{"role": "cta", "text": "CTA court, naturel et cohérent avec l'objectif"}}
   ],
   "performance": {{
     "recommended_format": "...",
@@ -852,6 +861,73 @@ def estimate_tokens(*parts: Any) -> int:
     return max(1, int(len(text) / 4))
 
 
+def _goal_label(payload: Dict[str, Any]) -> str:
+    return _clean(payload.get("goal") or payload.get("objective"), "").lower()
+
+
+def _cta_seed(payload: Dict[str, Any], existing_text: str = "") -> str:
+    goal = _goal_label(payload)
+    network = _clean(payload.get("network"), "Instagram").lower()
+    raw = _all_context(payload) + " " + str(existing_text or "").lower()
+
+    if "convert" in goal or "vente" in goal or "dm" in goal or "lead" in goal:
+        options = [
+            "Commente “PLAN” si tu veux une version simple à appliquer.",
+            "Écris-moi “PLAN” en DM si tu veux avancer sans repartir de zéro.",
+            "Dis-moi où tu bloques aujourd'hui, je te réponds avec une piste simple.",
+            "Garde ce post et passe à l'action aujourd'hui.",
+        ]
+    elif "attirer" in goal or "attention" in goal or "engagement" in goal or "comment" in goal:
+        options = [
+            "Tu te reconnais là-dedans ? Dis-le en commentaire.",
+            "Partage ça à quelqu'un qui repousse encore sa première publication.",
+            "Dis-moi en commentaire : tu bloques sur quoi en ce moment ?",
+            "Sauvegarde ce post pour la prochaine fois où tu repousses encore.",
+        ]
+    elif "autor" in goal or "expert" in goal:
+        options = [
+            "Tu vois souvent cette erreur ? Dis-moi en commentaire.",
+            "Garde cette règle pour ton prochain contenu.",
+            "Quelle erreur tu vois le plus dans ta niche ?",
+            "Sauvegarde ce rappel avant ta prochaine publication.",
+        ]
+    else:
+        options = [
+            "Sauvegarde ce post pour ta prochaine publication.",
+            "Dis-moi en commentaire : qu'est-ce qui te bloque aujourd'hui ?",
+            "Garde ça en tête avant de publier ton prochain contenu.",
+            "Teste ça sur ton prochain post et observe la différence.",
+        ]
+
+    if _is_mrr(payload):
+        options.extend([
+            "Dis-moi en commentaire : qu'est-ce qui t'empêche de publier aujourd'hui ?",
+            "Sauvegarde ce post avant de regarder une vidéo de plus.",
+            "Publie une version imparfaite aujourd'hui, puis reviens me dire ce que ça a débloqué.",
+        ])
+
+    index = abs(hash((raw, network, random.randint(0, 9999)))) % len(options)
+    return options[index]
+
+
+def _has_cta_block(blocks: List[Dict[str, str]]) -> bool:
+    for block in blocks:
+        role = _clean(block.get("role"), "").lower()
+        text = _clean(block.get("text"))
+        if role == "cta" and text:
+            return True
+    return False
+
+
+def _ensure_cta_block(blocks: List[Dict[str, str]], payload: Dict[str, Any]) -> List[Dict[str, str]]:
+    if _has_cta_block(blocks):
+        return blocks
+
+    full_text = _flat_text_from_blocks(blocks)
+    cta = _split_mobile_lines(_trim_to_mobile(_cta_seed(payload, full_text), payload))
+    return [*blocks, {"role": "cta", "text": cta}]
+
+
 def _postprocess_blocks(blocks: List[Dict[str, str]], payload: Dict[str, Any]) -> List[Dict[str, str]]:
     processed: List[Dict[str, str]] = []
     for block in blocks:
@@ -871,6 +947,7 @@ def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
     data = _sanitize_payload_text(data)
     blocks = _blocks_from_response(data, safe_payload)
     blocks = _postprocess_blocks(blocks, safe_payload)
+    blocks = _ensure_cta_block(blocks, safe_payload)
 
     full_text = _flat_text_from_blocks(blocks)
     repair_attempts = 0
@@ -881,6 +958,7 @@ def generate_social_ai_live(payload: Dict[str, Any]) -> Dict[str, Any]:
         data = _sanitize_payload_text(data)
         blocks = _blocks_from_response(data, safe_payload)
         blocks = _postprocess_blocks(blocks, safe_payload)
+        blocks = _ensure_cta_block(blocks, safe_payload)
         full_text = _flat_text_from_blocks(blocks)
 
     performance = data.get("performance") if isinstance(data.get("performance"), dict) else {}

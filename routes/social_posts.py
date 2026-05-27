@@ -5,19 +5,15 @@ import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import get_db
 
-# ✅ IMPORTANT: dans ton codebase tu as parfois routes.auth et parfois services.auth_service
 try:
     from routes.auth import get_current_user
 except Exception:  # pragma: no cover
     from services.auth_service import get_current_user  # type: ignore
-
-from models.social_post_model import SocialPost
-
-from schemas.social_post_schema import SocialPostCreateSchema, SocialPostResponseSchema
 
 router = APIRouter(prefix="/social-posts", tags=["Social Posts"])
 
@@ -26,7 +22,6 @@ def _current_user_id(user: Any) -> int:
     if isinstance(user, dict):
         return int(user.get("id"))
     return int(user.id)
-
 
 
 def _safe_json_loads(value: Any) -> Any:
@@ -58,96 +53,135 @@ def _extract_title(content: Any) -> Optional[str]:
 
 def _extract_format(content: Any) -> Optional[str]:
     if isinstance(content, dict):
-        return content.get("format") or content.get("post_format") or content.get("kind")
+        return (
+            content.get("format")
+            or content.get("post_format")
+            or content.get("kind")
+            or content.get("type")
+        )
     return None
 
 
-def _serialize_post(post: SocialPost) -> Dict[str, Any]:
-    # contenu est stocké en JSON string dans la DB (Text)
-    content_obj = _safe_json_loads(getattr(post, "contenu", None))
-
-    title = _extract_title(content_obj)
-    fmt = _extract_format(content_obj)
-
-    # ✅ compat "network" attendu par certains fronts
-    reseau = getattr(post, "reseau", None)
-
-    # ✅ compat dates: certains fronts attendent scheduled_at / scheduled_for
-    date_prog = getattr(post, "date_programmee", None)
+def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    content_obj = _safe_json_loads(row.get("contenu"))
+    date_prog = row.get("date_programmee")
 
     return {
-        "id": post.id,
-        "user_id": post.user_id,
-        "reseau": reseau,
-        "network": reseau,
-        "statut": getattr(post, "statut", None),
-        "titre": title,
-        "title": title,
-        "format": fmt,
+        "id": row.get("id"),
+        "user_id": row.get("user_id"),
+        "reseau": row.get("reseau"),
+        "network": row.get("reseau"),
+        "statut": row.get("statut"),
+        "status": row.get("statut"),
+        "titre": _extract_title(content_obj),
+        "title": _extract_title(content_obj),
+        "format": _extract_format(content_obj),
         "contenu": content_obj,
-        "date_programmee": date_prog,
-        "scheduled_at": date_prog,
-        "scheduled_for": date_prog,
-        "supprimer_apres": bool(getattr(post, "supprimer_apres", False)),
+        "content": content_obj,
+        "date_programmee": date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog,
+        "scheduled_at": date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog,
+        "scheduled_for": date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog,
+        "published_at": row.get("published_at").isoformat() if hasattr(row.get("published_at"), "isoformat") else row.get("published_at"),
+        "supprimer_apres": bool(row.get("supprimer_apres", False)),
+        "created_at": row.get("created_at").isoformat() if hasattr(row.get("created_at"), "isoformat") else row.get("created_at"),
+        "updated_at": row.get("updated_at").isoformat() if hasattr(row.get("updated_at"), "isoformat") else row.get("updated_at"),
     }
 
 
-# ✅ Évite le 307 redirect /social-posts -> /social-posts/
-@router.get("", response_model=List[SocialPostResponseSchema])
-@router.get("/", response_model=List[SocialPostResponseSchema])
-def list_social_posts(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    posts = (
-        db.query(SocialPost)
-        .filter(SocialPost.user_id == _current_user_id(user))
-        .order_by(SocialPost.date_programmee.desc())
-        .all()
-    )
-    return [_serialize_post(p) for p in posts]
+def _normalize_payload_content(payload: Dict[str, Any]) -> Dict[str, Any]:
+    content_obj: Any = payload.get("contenu")
+    if content_obj is None:
+        content_obj = payload.get("content") or {}
+
+    if isinstance(content_obj, str):
+        parsed = _safe_json_loads(content_obj)
+        content_obj = {"text": parsed} if isinstance(parsed, str) else parsed
+
+    if not isinstance(content_obj, dict):
+        content_obj = {"value": content_obj}
+
+    for key in ("titre", "title", "text", "caption", "format", "image_url", "media_url", "ui", "layers", "slides", "kind", "type"):
+        if payload.get(key) is not None and key not in content_obj:
+            content_obj[key] = payload.get(key)
+
+    if "type" not in content_obj:
+        content_obj["type"] = payload.get("type") or payload.get("kind") or payload.get("format") or "post"
+
+    return content_obj
 
 
-# ✅ Évite le 307 redirect /social-posts -> /social-posts/
-@router.post("", response_model=SocialPostResponseSchema)
-@router.post("/", response_model=SocialPostResponseSchema)
-def create_social_post(payload: SocialPostCreateSchema, db: Session = Depends(get_db), user=Depends(get_current_user)):
+@router.get("")
+@router.get("/")
+def list_social_posts(db: Session = Depends(get_db), user=Depends(get_current_user)) -> List[Dict[str, Any]]:
     """
-    Création brute d'un SocialPost (utilisée par certaines parties du front).
-    ⚠️ Le modèle officiel (social_post_model.py) n'a PAS 'titre' ni 'format'.
-    On stocke tout dans 'contenu' (JSON string) mais on renvoie aussi titre/format/network en compat.
+    DB-safe PROD route.
+    Ne dépend pas du modèle ORM pour éviter tout crash si le modèle contient
+    une colonne absente de la table Render.
+    """
+    sql = text(
+        """
+        SELECT id, user_id, reseau, statut, contenu, date_programmee,
+               published_at, supprimer_apres, created_at, updated_at
+        FROM social_posts
+        WHERE user_id = :user_id
+        ORDER BY date_programmee DESC NULLS LAST, id DESC
+        """
+    )
+    try:
+        rows = db.execute(sql, {"user_id": _current_user_id(user)}).mappings().all()
+        return [_serialize_row(dict(r)) for r in rows]
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"social-posts list failed: {e}")
+
+
+@router.post("")
+@router.post("/")
+def create_social_post(payload: Dict[str, Any], db: Session = Depends(get_db), user=Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Création brute SocialPost, DB-safe.
+    On écrit uniquement les colonnes confirmées en PROD.
     """
     try:
-        reseau = (payload.reseau or "").strip().lower()
+        reseau = str(payload.get("reseau") or payload.get("network") or "").strip().lower() or "instagram"
+        statut = str(payload.get("statut") or payload.get("status") or "draft").strip().lower() or "draft"
+        content_obj = _normalize_payload_content(payload)
 
-        content_obj: Any = payload.contenu
-        if isinstance(content_obj, str):
-            content_obj = _safe_json_loads(content_obj)
-            if isinstance(content_obj, str):
-                content_obj = {"text": content_obj}
-        if content_obj is None:
-            content_obj = {}
+        date_programmee = payload.get("date_programmee") or payload.get("scheduled_at") or payload.get("scheduled_for")
+        supprimer_apres = bool(payload.get("supprimer_apres", False))
 
-        # ✅ si le front envoie titre/format à plat, on les injecte dans le contenu JSON
-        if isinstance(content_obj, dict):
-            if payload.titre and "titre" not in content_obj and "title" not in content_obj:
-                content_obj["titre"] = payload.titre
-            if payload.format and "format" not in content_obj:
-                content_obj["format"] = payload.format
-
-        post = SocialPost(
-            user_id=_current_user_id(user),
-            reseau=reseau,
-            statut=payload.statut or "draft",
-            contenu=json.dumps(content_obj, ensure_ascii=False),
-            date_programmee=payload.date_programmee,
-            supprimer_apres=bool(payload.supprimer_apres),
+        sql = text(
+            """
+            INSERT INTO social_posts
+                (user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at)
+            VALUES
+                (:user_id, :reseau, :statut, :contenu, :date_programmee, :supprimer_apres, NOW(), NOW())
+            RETURNING id, user_id, reseau, statut, contenu, date_programmee,
+                      published_at, supprimer_apres, created_at, updated_at
+            """
         )
 
-        db.add(post)
+        row = db.execute(
+            sql,
+            {
+                "user_id": _current_user_id(user),
+                "reseau": reseau,
+                "statut": statut,
+                "contenu": json.dumps(content_obj, ensure_ascii=False),
+                "date_programmee": date_programmee,
+                "supprimer_apres": supprimer_apres,
+            },
+        ).mappings().first()
+
         db.commit()
-        db.refresh(post)
-        return _serialize_post(post)
+
+        if not row:
+            raise HTTPException(status_code=500, detail="Insertion social post impossible")
+
+        return _serialize_row(dict(row))
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"social-posts create failed: {e}")

@@ -19,11 +19,13 @@ class SocialPost(Base):
     date_programmee = Column(DateTime, nullable=True)
     published_at = Column(DateTime, nullable=True)
 
-    # ✅ Publication réelle Planner
-    platform_post_id = Column(String(255), nullable=True)
-    publish_error = Column(Text, nullable=True)
-    publish_result_raw = Column(Text, nullable=True)
-    last_publish_attempt_at = Column(DateTime, nullable=True)
+   # ✅ Publication réelle Planner
+# TEMP FIX PROD — colonne absente en DB Render
+# platform_post_id = Column(String(255), nullable=True)
+
+publish_error = Column(Text, nullable=True)
+publish_result_raw = Column(Text, nullable=True)
+last_publish_attempt_at = Column(DateTime, nullable=True)
 
     supprimer_apres = Column(Boolean, default=False)
 

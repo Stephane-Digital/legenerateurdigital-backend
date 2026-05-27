@@ -34,3 +34,4 @@ class SocialPost(Base):
 
     user = relationship("User", back_populates="social_posts")
     logs = relationship("SocialPostLog", back_populates="post", cascade="all, delete-orphan")
+

@@ -17,9 +17,8 @@ except Exception:  # pragma: no cover
 
 try:
     from models.social_post_model import SocialPost
-    
-except Exception:  # pragma: no cover
-    from models.social_post import SocialPost  # type: ignore
+except Exception:
+    from models.social_post_model import SocialPost  # type: ignore
 
 from schemas.social_post_schema import SocialPostCreateSchema, SocialPostResponseSchema
 

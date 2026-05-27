@@ -15,14 +15,18 @@ try:
 except Exception:  # pragma: no cover
     from services.auth_service import get_current_user  # type: ignore
 
-try:
-    from models.social_post_model import SocialPost
-except Exception:
-    from models.social_post_model import SocialPost  # type: ignore
+from models.social_post_model import SocialPost
 
 from schemas.social_post_schema import SocialPostCreateSchema, SocialPostResponseSchema
 
 router = APIRouter(prefix="/social-posts", tags=["Social Posts"])
+
+
+def _current_user_id(user: Any) -> int:
+    if isinstance(user, dict):
+        return int(user.get("id"))
+    return int(user.id)
+
 
 
 def _safe_json_loads(value: Any) -> Any:
@@ -94,7 +98,7 @@ def _serialize_post(post: SocialPost) -> Dict[str, Any]:
 def list_social_posts(db: Session = Depends(get_db), user=Depends(get_current_user)):
     posts = (
         db.query(SocialPost)
-        .filter(SocialPost.user_id == user.id)
+        .filter(SocialPost.user_id == _current_user_id(user))
         .order_by(SocialPost.date_programmee.desc())
         .all()
     )
@@ -129,7 +133,7 @@ def create_social_post(payload: SocialPostCreateSchema, db: Session = Depends(ge
                 content_obj["format"] = payload.format
 
         post = SocialPost(
-            user_id=user.id,
+            user_id=_current_user_id(user),
             reseau=reseau,
             statut=payload.statut or "draft",
             contenu=json.dumps(content_obj, ensure_ascii=False),

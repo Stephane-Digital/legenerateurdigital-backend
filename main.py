@@ -126,12 +126,12 @@ print("================================")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://legenerateurdigital-front.vercel.app"
-    ],
+    allow_origins=allow_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 

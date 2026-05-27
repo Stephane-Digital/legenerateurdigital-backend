@@ -59,6 +59,22 @@ def _safe_read_json(path: Path) -> Optional[Any]:
         return None
 
 
+def _safe_json_loads(value: Any) -> Optional[Any]:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+    return None
+
+
 def _current_user_id(current_user: Any) -> int:
     """
     Compat helper:
@@ -85,9 +101,26 @@ def _current_user_id(current_user: Any) -> int:
 
 
 # ---------------------------------------------------------------------
-# DB helpers (avoid relying on ORM columns that may not exist in DB)
-# Table expected: library_items(id, user_id, title, description, file_url, created_at)
+# DB helpers (Render PROD safe)
 # ---------------------------------------------------------------------
+
+def _ensure_content_json_column(db: Session) -> None:
+    """
+    LGD PROD FIX — Render filesystem is ephemeral.
+    Editor archives must survive restarts, so JSON drafts are also stored
+    directly in PostgreSQL in library_items.content_json.
+
+    Safe: IF NOT EXISTS, no destructive migration.
+    """
+    try:
+        db.execute(text("ALTER TABLE library_items ADD COLUMN IF NOT EXISTS content_json TEXT"))
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Do not crash the app during list routes if migration cannot run.
+        # save/raw will still use legacy file mode when possible.
+        pass
+
 
 def _row_to_item(row: Any) -> Dict[str, Any]:
     # row mapping from SQLAlchemy text result
@@ -115,14 +148,18 @@ def _row_to_item(row: Any) -> Dict[str, Any]:
         item["kind"] = _guess_kind(abs_path.name, item["mime_type"])
     else:
         item["size"] = None
-        item["mime_type"] = None
-        item["filename"] = None
-        item["kind"] = _guess_kind(item["file_url"], None)
+        # If the item is a JSON archive stored in DB, keep it as JSON even if
+        # the Render local file no longer exists.
+        mime, _ = mimetypes.guess_type(str(item["file_url"]))
+        item["mime_type"] = mime or "application/json" if str(item["file_url"]).lower().endswith(".json") else None
+        item["filename"] = Path(str(item["file_url"]).lstrip("/")).name if item["file_url"] else None
+        item["kind"] = _guess_kind(item["file_url"], item["mime_type"])
 
     return item
 
 
 def _db_list_items(db: Session, user_id: int) -> List[Dict[str, Any]]:
+    _ensure_content_json_column(db)
     q = text(
         "SELECT id, user_id, title, description, file_url, created_at "
         "FROM library_items WHERE user_id = :uid "
@@ -133,6 +170,7 @@ def _db_list_items(db: Session, user_id: int) -> List[Dict[str, Any]]:
 
 
 def _db_get_item(db: Session, user_id: int, item_id: int) -> Dict[str, Any]:
+    _ensure_content_json_column(db)
     q = text(
         "SELECT id, user_id, title, description, file_url, created_at "
         "FROM library_items WHERE id = :id AND user_id = :uid"
@@ -143,24 +181,75 @@ def _db_get_item(db: Session, user_id: int, item_id: int) -> Dict[str, Any]:
     return _row_to_item(row)
 
 
-def _db_insert_item(db: Session, user_id: int, title: str, description: Optional[str], file_url: str) -> Dict[str, Any]:
+def _db_get_content_json(db: Session, user_id: int, item_id: int) -> Optional[Any]:
+    _ensure_content_json_column(db)
+    try:
+        row = db.execute(
+            text("SELECT content_json FROM library_items WHERE id = :id AND user_id = :uid"),
+            {"id": item_id, "uid": user_id},
+        ).mappings().first()
+        if not row:
+            return None
+        return _safe_json_loads(row.get("content_json"))
+    except Exception:
+        db.rollback()
+        return None
+
+
+def _db_insert_item(
+    db: Session,
+    user_id: int,
+    title: str,
+    description: Optional[str],
+    file_url: str,
+    content_json: Optional[Any] = None,
+) -> Dict[str, Any]:
+    _ensure_content_json_column(db)
+
+    content_json_text = None
+    if content_json is not None:
+        content_json_text = json.dumps(content_json, ensure_ascii=False)
+
     q = text(
-        "INSERT INTO library_items (user_id, title, description, file_url, created_at) "
-        "VALUES (:user_id, :title, :description, :file_url, :created_at) "
+        "INSERT INTO library_items (user_id, title, description, file_url, content_json, created_at) "
+        "VALUES (:user_id, :title, :description, :file_url, :content_json, :created_at) "
         "RETURNING id, user_id, title, description, file_url, created_at"
     )
     created_at = datetime.utcnow()
-    row = db.execute(
-        q,
-        {
-            "user_id": user_id,
-            "title": title,
-            "description": description,
-            "file_url": file_url,
-            "created_at": created_at,
-        },
-    ).mappings().first()
-    db.commit()
+
+    try:
+        row = db.execute(
+            q,
+            {
+                "user_id": user_id,
+                "title": title,
+                "description": description,
+                "file_url": file_url,
+                "content_json": content_json_text,
+                "created_at": created_at,
+            },
+        ).mappings().first()
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Fallback if content_json column could not be created in a restricted DB.
+        q_legacy = text(
+            "INSERT INTO library_items (user_id, title, description, file_url, created_at) "
+            "VALUES (:user_id, :title, :description, :file_url, :created_at) "
+            "RETURNING id, user_id, title, description, file_url, created_at"
+        )
+        row = db.execute(
+            q_legacy,
+            {
+                "user_id": user_id,
+                "title": title,
+                "description": description,
+                "file_url": file_url,
+                "created_at": created_at,
+            },
+        ).mappings().first()
+        db.commit()
+
     if not row:
         raise HTTPException(status_code=500, detail="Insert failed")
     return _row_to_item(row)
@@ -235,7 +324,7 @@ async def upload_file(
         ext = guessed
 
     safe_title = title or (file.filename or "Fichier")
-    # store
+
     import uuid
     token = uuid.uuid4().hex
     stored_name = f"{_guess_kind(file.filename or '', file.content_type)}__{token}{ext}"
@@ -262,6 +351,10 @@ async def save_draft(
       "title": "Post — Janvier",
       "data": {...}   // JSON to store
     }
+
+    PROD Render safe:
+    - writes JSON to local file as legacy compatibility
+    - ALSO stores JSON in library_items.content_json so it survives redeploys/restarts
     """
     user_id = _current_user_id(current_user)
 
@@ -276,10 +369,15 @@ async def save_draft(
     token = uuid.uuid4().hex
     stored_name = f"{kind}__{token}.json"
     dest = UPLOADS_DIR / stored_name
-    dest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    # Legacy local write, best effort only.
+    try:
+        dest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
     file_url = f"/uploads/library/{stored_name}"
-    item = _db_insert_item(db, user_id, title, None, file_url)
+    item = _db_insert_item(db, user_id, title, None, file_url, content_json=data)
     return item
 
 
@@ -300,7 +398,7 @@ async def save_carrousel_legacy(
 ):
     """
     Legacy endpoint used by the editor intelligent.
-    It stores the given payload as a JSON file and creates a library item.
+    It stores the given payload as JSON in DB first, with local file as best-effort compatibility.
     """
     user_id = _current_user_id(current_user)
 
@@ -308,11 +406,15 @@ async def save_carrousel_legacy(
     token = uuid.uuid4().hex
     stored_name = f"lgd_carrousel_v5__{token}.json"
     dest = UPLOADS_DIR / stored_name
-    dest.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    try:
+        dest.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
     file_url = f"/uploads/library/{stored_name}"
     title = f"Carrousel — {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
-    item = _db_insert_item(db, user_id, title, None, file_url)
+    item = _db_insert_item(db, user_id, title, None, file_url, content_json=payload)
     return item
 
 
@@ -323,10 +425,27 @@ def get_raw(
     current_user: User = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+
+    # DB-first: Render filesystem is ephemeral.
+    content_json = _db_get_content_json(db, user_id, item_id)
+    if content_json is not None:
+        return JSONResponse(content_json)
+
     item = _db_get_item(db, user_id, item_id)
     abs_path = _abs_path_from_file_url(item["file_url"])
+
     if not abs_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        # Legacy archive whose local file has disappeared after Render restart.
+        # Return a safe empty wrapper instead of crashing the frontend with 404 loops.
+        return JSONResponse(
+            {
+                "kind": item.get("kind") or "legacy_missing_file",
+                "payload": {},
+                "missing_file": True,
+                "id": item_id,
+                "title": item.get("title"),
+            }
+        )
 
     mime, _ = mimetypes.guess_type(str(abs_path))
     mime = mime or "application/octet-stream"

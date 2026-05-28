@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -19,21 +19,23 @@ try:
 except Exception:  # pragma: no cover
     from models.social_post import SocialPost  # type: ignore
 
-
 router = APIRouter(prefix="/planner", tags=["Planner"])
 
 
 # ============================================================
-# LGD PLANNER — VERSION COMPAT ÉDITEUR / MODAL MÉDIA
+# LGD PLANNER — ROUTES COMPAT FRONTEND PROD
 # ------------------------------------------------------------
-# Objectif :
-# - accepter les endpoints réellement appelés par le frontend :
-#   GET  /planner/posts
-#   POST /planner/schedule-post
-#   POST /planner/schedule-carrousel
-# - conserver l'ancien POST /planner/schedule
-# - stocker le payload visuel complet dans SocialPost.contenu
-#   sans modifier le modèle ni la DB.
+# Frontend actuel :
+# - POST /planner/schedule-post
+# - POST /planner/schedule-carrousel
+# - GET  /planner/posts
+#
+# Modèle DB actuel : SocialPost
+# - reseau
+# - statut
+# - contenu (JSON string)
+# - date_programmee
+# - supprimer_apres
 # ============================================================
 
 
@@ -53,41 +55,42 @@ def _safe_json_loads(value: Any) -> Any:
     return value
 
 
-def _first_text(*values: Any) -> str:
-    for value in values:
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
+def _safe_json_dumps(value: Any) -> str:
+    try:
+        return json.dumps(value if value is not None else {}, ensure_ascii=False)
+    except Exception:
+        return json.dumps({"raw": str(value)}, ensure_ascii=False)
 
 
-def _parse_datetime(payload: Dict[str, Any]) -> Optional[datetime]:
-    raw = _first_text(
-        payload.get("scheduled_at"),
-        payload.get("date_programmee"),
-        payload.get("scheduled_for"),
-        payload.get("date"),
-    )
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
 
-    if payload.get("date") and payload.get("time"):
-        raw = f"{payload.get('date')}T{payload.get('time')}"
-
+    raw = str(value or "").strip()
     if not raw:
         return None
 
+    # JS ISO may end with Z
+    raw = raw.replace("Z", "+00:00")
+
     candidates = [
         raw,
-        raw.replace("Z", "+00:00"),
-        raw.replace(" ", "T"),
+        raw.replace("T", " "),
     ]
 
     for candidate in candidates:
         try:
-            dt = datetime.fromisoformat(candidate)
-            return dt.replace(tzinfo=None)
+            parsed = datetime.fromisoformat(candidate)
+            # DB model usually stores naive datetime.
+            if parsed.tzinfo is not None:
+                parsed = parsed.replace(tzinfo=None)
+            return parsed
         except Exception:
             pass
 
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
             return datetime.strptime(raw, fmt)
         except Exception:
@@ -96,110 +99,74 @@ def _parse_datetime(payload: Dict[str, Any]) -> Optional[datetime]:
     return None
 
 
-def _extract_contenu(payload: Dict[str, Any], forced_type: Optional[str] = None) -> Dict[str, Any]:
-    raw_contenu = payload.get("contenu")
-    contenu = _safe_json_loads(raw_contenu)
+def _extract_title(content: Any) -> str:
+    if isinstance(content, dict):
+        return str(
+            content.get("titre")
+            or content.get("title")
+            or content.get("name")
+            or content.get("text_title")
+            or "Publication LGD"
+        )
+    return "Publication LGD"
 
-    if not isinstance(contenu, dict):
-        contenu = {"text": str(contenu or "")}
 
-    fmt = _first_text(
-        forced_type,
-        payload.get("format"),
-        contenu.get("format"),
-        contenu.get("type"),
-    ).lower()
+def _extract_format(content: Any) -> str:
+    if isinstance(content, dict):
+        return str(
+            content.get("format")
+            or content.get("type")
+            or content.get("kind")
+            or "post"
+        )
+    return "post"
 
-    if "carrousel" in fmt or "carousel" in fmt:
-        final_type = "carrousel"
+
+def _normalize_content(payload: Dict[str, Any], forced_type: str) -> Dict[str, Any]:
+    raw_content = payload.get("contenu")
+    if isinstance(raw_content, str):
+        parsed = _safe_json_loads(raw_content)
+        content: Dict[str, Any] = parsed if isinstance(parsed, dict) else {"text": raw_content}
+    elif isinstance(raw_content, dict):
+        content = dict(raw_content)
     else:
-        final_type = "post"
+        content = {}
 
-    title = _first_text(
-        payload.get("titre"),
-        payload.get("title"),
-        contenu.get("titre"),
-        contenu.get("title"),
-        "Publication LGD",
-    )
+    title = payload.get("titre") or payload.get("title") or content.get("titre") or content.get("title")
+    if title:
+        content.setdefault("titre", title)
+        content.setdefault("title", title)
 
-    network = _first_text(
-        payload.get("network"),
-        payload.get("reseau"),
-        contenu.get("network"),
-        contenu.get("reseau"),
-        "instagram",
-    ).lower()
+    content["type"] = forced_type
+    content.setdefault("format", forced_type)
 
-    preview_image = _first_text(
-        payload.get("planner_preview_image"),
-        payload.get("preview_image"),
-        payload.get("rendered_image"),
-        contenu.get("planner_preview_image"),
-        contenu.get("preview_image"),
-        contenu.get("rendered_image"),
-    )
+    # Preserve all visual payload fields sent by the frontend.
+    for key in (
+        "preview_image",
+        "planner_preview_image",
+        "rendered_image",
+        "previewImage",
+        "plannerPreviewImage",
+        "renderedImage",
+        "layers",
+        "slides",
+        "ui",
+        "caption",
+        "text",
+        "description",
+        "carrousel_id",
+    ):
+        if key in payload and payload.get(key) is not None and key not in content:
+            content[key] = payload.get(key)
 
-    # On garde volontairement les layers/slides complets si le frontend les envoie.
-    # Ces données sont indispensables au modal Planner pour reconstruire le visuel.
-    if isinstance(payload.get("slides"), list) and not isinstance(contenu.get("slides"), list):
-        contenu["slides"] = payload.get("slides")
+    if forced_type == "carrousel":
+        slides = payload.get("slides") or content.get("slides") or []
+        if isinstance(slides, list):
+            content["slides"] = slides
+        if payload.get("carrousel_id") is not None:
+            content["carrousel_id"] = payload.get("carrousel_id")
 
-    if payload.get("carrousel_id") is not None and contenu.get("carrousel_id") is None:
-        contenu["carrousel_id"] = payload.get("carrousel_id")
-
-    contenu.update(
-        {
-            "type": final_type,
-            "format": final_type,
-            "titre": title,
-            "title": title,
-            "network": network,
-            "reseau": network,
-            "source": contenu.get("source") or "editor",
-        }
-    )
-
-    if preview_image:
-        contenu["preview_image"] = preview_image
-        contenu["planner_preview_image"] = preview_image
-        contenu["rendered_image"] = preview_image
-
-    return contenu
-
-
-def _extract_title(content_obj: Any) -> Optional[str]:
-    if isinstance(content_obj, dict):
-        return (
-            content_obj.get("titre")
-            or content_obj.get("title")
-            or content_obj.get("name")
-            or content_obj.get("text_title")
-        )
-    return None
-
-
-def _extract_format(content_obj: Any) -> Optional[str]:
-    if isinstance(content_obj, dict):
-        return (
-            content_obj.get("format")
-            or content_obj.get("type")
-            or content_obj.get("post_format")
-            or content_obj.get("kind")
-        )
-    return None
-
-
-def _extract_preview(content_obj: Any) -> str:
-    if not isinstance(content_obj, dict):
-        return ""
-    return _first_text(
-        content_obj.get("planner_preview_image"),
-        content_obj.get("preview_image"),
-        content_obj.get("rendered_image"),
-        content_obj.get("previewImage"),
-        content_obj.get("renderedImage"),
-    )
+    return content
 
 
 def _serialize_post(post: SocialPost) -> Dict[str, Any]:
@@ -207,90 +174,89 @@ def _serialize_post(post: SocialPost) -> Dict[str, Any]:
     if not isinstance(content_obj, dict):
         content_obj = {"text": str(content_obj or "")}
 
-    reseau = getattr(post, "reseau", None)
-    date_prog = getattr(post, "date_programmee", None)
-    preview = _extract_preview(content_obj)
+    reseau = getattr(post, "reseau", None) or content_obj.get("network") or content_obj.get("reseau") or "instagram"
+    date_programmee = getattr(post, "date_programmee", None)
     title = _extract_title(content_obj)
     fmt = _extract_format(content_obj)
+    statut = getattr(post, "statut", None) or "scheduled"
 
     return {
         "id": post.id,
-        "post_id": post.id,
-        "planner_id": post.id,
         "user_id": post.user_id,
         "reseau": reseau,
         "network": reseau,
-        "statut": getattr(post, "statut", None),
-        "status": getattr(post, "statut", None),
+        "statut": statut,
+        "status": statut,
         "titre": title,
         "title": title,
         "format": fmt,
+        "type": content_obj.get("type") or fmt,
         "contenu": content_obj,
         "content": content_obj,
-        "date_programmee": date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog,
-        "scheduled_at": date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog,
-        "scheduled_for": date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog,
+        "date_programmee": date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee,
+        "scheduled_at": date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee,
+        "scheduled_for": date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee,
         "supprimer_apres": bool(getattr(post, "supprimer_apres", False)),
-        "preview_image": preview or None,
-        "planner_preview_image": preview or None,
-        "rendered_image": preview or None,
+        # Flatten visual fields for AssistedPublishModal compatibility.
+        "preview_image": content_obj.get("preview_image") or content_obj.get("planner_preview_image") or content_obj.get("rendered_image"),
+        "planner_preview_image": content_obj.get("planner_preview_image") or content_obj.get("preview_image") or content_obj.get("rendered_image"),
+        "rendered_image": content_obj.get("rendered_image") or content_obj.get("planner_preview_image") or content_obj.get("preview_image"),
+        "layers": content_obj.get("layers"),
+        "slides": content_obj.get("slides"),
+        "ui": content_obj.get("ui"),
     }
 
 
-def _create_planner_post(
-    payload: Dict[str, Any],
-    db: Session,
-    user: Any,
-    forced_type: Optional[str] = None,
-) -> Dict[str, Any]:
-    try:
-        contenu = _extract_contenu(payload, forced_type=forced_type)
+def _create_planner_post(payload: Dict[str, Any], forced_type: str, db: Session, user: Any) -> Dict[str, Any]:
+    network = str(payload.get("network") or payload.get("reseau") or "instagram").lower().strip()
+    scheduled_at = _parse_datetime(payload.get("scheduled_at") or payload.get("date_programmee") or payload.get("date"))
 
-        network = _first_text(
-            payload.get("network"),
-            payload.get("reseau"),
-            contenu.get("network"),
-            contenu.get("reseau"),
-            "instagram",
-        ).lower()
+    content = _normalize_content(payload, forced_type)
+    content["network"] = network
+    content["reseau"] = network
+    if scheduled_at:
+        content["scheduled_at"] = scheduled_at.isoformat()
+        content["date_programmee"] = scheduled_at.isoformat()
 
-        date_programmee = _parse_datetime(payload)
+    post = SocialPost(
+        user_id=user.id,
+        reseau=network,
+        statut=str(payload.get("statut") or payload.get("status") or "scheduled"),
+        contenu=_safe_json_dumps(content),
+        date_programmee=scheduled_at,
+        supprimer_apres=bool(payload.get("supprimer_apres", False)),
+    )
 
-        post = SocialPost(
-            user_id=user.id,
-            reseau=network,
-            statut=_first_text(payload.get("statut"), payload.get("status"), "scheduled"),
-            contenu=json.dumps(contenu, ensure_ascii=False),
-            date_programmee=date_programmee,
-            supprimer_apres=bool(payload.get("supprimer_apres", False)),
-        )
-
-        db.add(post)
-        db.commit()
-        db.refresh(post)
-
-        return _serialize_post(post)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+    return _serialize_post(post)
 
 
 @router.get("/posts")
-@router.get("/posts/")
 def list_planner_posts(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    posts = (
-        db.query(SocialPost)
-        .filter(SocialPost.user_id == user.id)
-        .order_by(SocialPost.date_programmee.desc().nullslast(), SocialPost.id.desc())
-        .all()
-    )
-    return [_serialize_post(post) for post in posts]
+    try:
+        posts = (
+            db.query(SocialPost)
+            .filter(SocialPost.user_id == user.id)
+            .order_by(SocialPost.date_programmee.desc().nullslast(), SocialPost.id.desc())
+            .all()
+        )
+        return [_serialize_post(post) for post in posts]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("")
+@router.get("/")
+def list_planner_root(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    return list_planner_posts(db=db, user=user)
 
 
 @router.post("/schedule-post")
@@ -299,23 +265,66 @@ def schedule_post(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return _create_planner_post(payload, db, user, forced_type="post")
+    try:
+        return _create_planner_post(payload, "post", db, user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/schedule-carrousel")
-def schedule_carrousel_v5(
+def schedule_carrousel(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return _create_planner_post(payload, db, user, forced_type="carrousel")
+    try:
+        return _create_planner_post(payload, "carrousel", db, user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
+# Legacy aliases kept for older frontend calls.
 @router.post("/schedule")
 def schedule_legacy(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    forced_type = "carrousel" if payload.get("slides") or payload.get("carrousel_id") else None
-    return _create_planner_post(payload, db, user, forced_type=forced_type)
+    forced_type = "carrousel" if payload.get("slides") or payload.get("carrousel_id") else "post"
+    try:
+        return _create_planner_post(payload, forced_type, db, user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/posts/{post_id}/status")
+@router.put("/posts/{post_id}/status")
+def update_post_status(
+    post_id: int,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    post = db.query(SocialPost).filter(SocialPost.id == post_id, SocialPost.user_id == user.id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post Planner introuvable")
+
+    post.statut = str(payload.get("statut") or payload.get("status") or post.statut or "scheduled")
+    if post.statut == "published":
+        try:
+            post.published_at = datetime.utcnow()
+        except Exception:
+            pass
+
+    db.commit()
+    db.refresh(post)
+    return _serialize_post(post)

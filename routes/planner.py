@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -19,36 +19,32 @@ try:
 except Exception:  # pragma: no cover
     from models.social_post import SocialPost  # type: ignore
 
+
 router = APIRouter(prefix="/planner", tags=["Planner"])
 
 
 # ============================================================
-# LGD PLANNER — ROUTES COMPAT FRONTEND PROD
-# ------------------------------------------------------------
-# Frontend actuel :
-# - POST /planner/schedule-post
-# - POST /planner/schedule-carrousel
-# - GET  /planner/posts
-#
-# Modèle DB actuel : SocialPost
-# - user_id
+# LGD PLANNER — SAFE BACKEND COMPAT
+# Compatible modèle réel :
 # - reseau
+# - contenu
 # - statut
-# - contenu (JSON string)
 # - date_programmee
 # - supprimer_apres
+#
+# Objectif :
+# - stopper les 500 / 502
+# - conserver le payload complet dans contenu JSON
+# - exposer /planner/posts pour le frontend Planner
+# - exposer /planner/schedule-post et /planner/schedule-carrousel
 # ============================================================
 
 
 def _get_user_id(user: Any) -> int:
-    """Compat get_current_user: peut retourner un objet User OU un dict JWT/user."""
-    if user is None:
-        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
-
     if isinstance(user, dict):
         raw = user.get("id") or user.get("user_id") or user.get("sub")
     else:
-        raw = getattr(user, "id", None) or getattr(user, "user_id", None) or getattr(user, "sub", None)
+        raw = getattr(user, "id", None) or getattr(user, "user_id", None)
 
     try:
         uid = int(raw)
@@ -56,8 +52,7 @@ def _get_user_id(user: Any) -> int:
         uid = 0
 
     if uid <= 0:
-        raise HTTPException(status_code=401, detail="Utilisateur invalide")
-
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
     return uid
 
 
@@ -67,13 +62,13 @@ def _safe_json_loads(value: Any) -> Any:
     if isinstance(value, (dict, list)):
         return value
     if isinstance(value, str):
-        s = value.strip()
-        if not s:
+        text = value.strip()
+        if not text:
             return {}
         try:
-            return json.loads(s)
+            return json.loads(text)
         except Exception:
-            return value
+            return {"text": value}
     return value
 
 
@@ -85,20 +80,30 @@ def _safe_json_dumps(value: Any) -> str:
 
 
 def _parse_datetime(value: Any) -> Optional[datetime]:
-    if value is None:
+    if not value:
         return None
+
     if isinstance(value, datetime):
-        return value.replace(tzinfo=None) if value.tzinfo is not None else value
+        return value
 
-    raw = str(value or "").strip()
-    if not raw:
+    text = str(value).strip()
+    if not text:
         return None
 
-    raw = raw.replace("Z", "+00:00")
+    # Compat ISO envoyé par le frontend :
+    # 2026-05-28T21:56:00+02:00
+    # 2026-05-28T21:56
+    # 2026-05-28 21:56
+    candidates = [
+        text,
+        text.replace("Z", "+00:00"),
+        text.replace("T", " "),
+    ]
 
-    for candidate in (raw, raw.replace("T", " ")):
+    for candidate in candidates:
         try:
             parsed = datetime.fromisoformat(candidate)
+            # SQLAlchemy/Postgres actuel accepte mieux du naive dans ce projet.
             if parsed.tzinfo is not None:
                 parsed = parsed.replace(tzinfo=None)
             return parsed
@@ -107,109 +112,65 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
 
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(raw, fmt)
+            return datetime.strptime(text.replace("T", " "), fmt)
         except Exception:
             pass
 
     return None
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str):
+            v = value.strip()
+            if v:
+                return v
+    return ""
+
+
 def _extract_title(content: Any) -> str:
     if isinstance(content, dict):
-        return str(
-            content.get("titre")
-            or content.get("title")
-            or content.get("name")
-            or content.get("text_title")
-            or "Publication LGD"
+        return _first_text(
+            content.get("titre"),
+            content.get("title"),
+            content.get("name"),
+            content.get("text_title"),
+            content.get("caption"),
+            content.get("text"),
         )
-    return "Publication LGD"
+    return ""
 
 
 def _extract_format(content: Any) -> str:
     if isinstance(content, dict):
-        return str(
-            content.get("format")
-            or content.get("type")
-            or content.get("kind")
-            or "post"
+        return _first_text(
+            content.get("format"),
+            content.get("type"),
+            content.get("kind"),
+            content.get("post_format"),
         )
-    return "post"
-
-
-def _normalize_content(payload: Dict[str, Any], forced_type: str) -> Dict[str, Any]:
-    raw_content = payload.get("contenu")
-
-    if isinstance(raw_content, str):
-        parsed = _safe_json_loads(raw_content)
-        content: Dict[str, Any] = parsed if isinstance(parsed, dict) else {"text": raw_content}
-    elif isinstance(raw_content, dict):
-        content = dict(raw_content)
-    else:
-        content = {}
-
-    title = payload.get("titre") or payload.get("title") or content.get("titre") or content.get("title")
-    if title:
-        content.setdefault("titre", title)
-        content.setdefault("title", title)
-
-    content["type"] = forced_type
-    content.setdefault("format", forced_type)
-
-    # Préserve tout le payload visuel envoyé par le frontend.
-    for key in (
-        "preview_image",
-        "planner_preview_image",
-        "rendered_image",
-        "previewImage",
-        "plannerPreviewImage",
-        "renderedImage",
-        "layers",
-        "slides",
-        "ui",
-        "caption",
-        "text",
-        "description",
-        "carrousel_id",
-    ):
-        if key in payload and payload.get(key) is not None and key not in content:
-            content[key] = payload.get(key)
-
-    if forced_type == "carrousel":
-        slides = payload.get("slides") or content.get("slides") or []
-        if isinstance(slides, list):
-            content["slides"] = slides
-        if payload.get("carrousel_id") is not None:
-            content["carrousel_id"] = payload.get("carrousel_id")
-
-    return content
+    return ""
 
 
 def _serialize_post(post: SocialPost) -> Dict[str, Any]:
     content_obj = _safe_json_loads(getattr(post, "contenu", None))
-    if not isinstance(content_obj, dict):
-        content_obj = {"text": str(content_obj or "")}
 
-    reseau = getattr(post, "reseau", None) or content_obj.get("network") or content_obj.get("reseau") or "instagram"
-    date_programmee = getattr(post, "date_programmee", None)
-    title = _extract_title(content_obj)
-    fmt = _extract_format(content_obj)
+    reseau = getattr(post, "reseau", None) or ""
     statut = getattr(post, "statut", None) or "scheduled"
+    date_programmee = getattr(post, "date_programmee", None)
 
-    preview_image = (
-        content_obj.get("planner_preview_image")
-        or content_obj.get("preview_image")
-        or content_obj.get("rendered_image")
-        or content_obj.get("plannerPreviewImage")
-        or content_obj.get("previewImage")
-        or content_obj.get("renderedImage")
+    title = _extract_title(content_obj) or "Publication LGD"
+    fmt = _extract_format(content_obj) or "post"
+
+    scheduled_iso = (
+        date_programmee.isoformat()
+        if hasattr(date_programmee, "isoformat")
+        else date_programmee
     )
 
-    date_value = date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee
-
     return {
-        "id": post.id,
-        "user_id": post.user_id,
+        "id": getattr(post, "id", None),
+        "user_id": getattr(post, "user_id", None),
         "reseau": reseau,
         "network": reseau,
         "statut": statut,
@@ -217,38 +178,91 @@ def _serialize_post(post: SocialPost) -> Dict[str, Any]:
         "titre": title,
         "title": title,
         "format": fmt,
-        "type": content_obj.get("type") or fmt,
         "contenu": content_obj,
         "content": content_obj,
-        "date_programmee": date_value,
-        "scheduled_at": date_value,
-        "scheduled_for": date_value,
+        "date_programmee": scheduled_iso,
+        "scheduled_at": scheduled_iso,
+        "scheduled_for": scheduled_iso,
         "supprimer_apres": bool(getattr(post, "supprimer_apres", False)),
-        "preview_image": preview_image,
-        "planner_preview_image": preview_image,
-        "rendered_image": preview_image,
-        "layers": content_obj.get("layers"),
-        "slides": content_obj.get("slides"),
-        "ui": content_obj.get("ui"),
     }
 
 
-def _create_planner_post(payload: Dict[str, Any], forced_type: str, db: Session, user: Any) -> Dict[str, Any]:
-    user_id = _get_user_id(user)
-    network = str(payload.get("network") or payload.get("reseau") or "instagram").lower().strip()
-    scheduled_at = _parse_datetime(payload.get("scheduled_at") or payload.get("date_programmee") or payload.get("date"))
+def _build_content_from_payload(payload: Dict[str, Any], forced_type: Optional[str] = None) -> Dict[str, Any]:
+    contenu = payload.get("contenu")
+    if isinstance(contenu, str):
+        contenu = _safe_json_loads(contenu)
+    if not isinstance(contenu, dict):
+        contenu = {}
 
-    content = _normalize_content(payload, forced_type)
-    content["network"] = network
-    content["reseau"] = network
-    if scheduled_at:
-        content["scheduled_at"] = scheduled_at.isoformat()
-        content["date_programmee"] = scheduled_at.isoformat()
+    post_type = forced_type or payload.get("format") or contenu.get("type") or "post"
+
+    merged: Dict[str, Any] = {
+        **contenu,
+        "type": "carrousel" if str(post_type).lower().startswith("carrousel") else "post",
+        "format": payload.get("format") or contenu.get("format") or post_type,
+        "titre": payload.get("titre") or payload.get("title") or contenu.get("titre") or contenu.get("title") or "Publication LGD",
+        "title": payload.get("titre") or payload.get("title") or contenu.get("title") or contenu.get("titre") or "Publication LGD",
+        "caption": payload.get("caption") or contenu.get("caption") or contenu.get("text") or "",
+        "text": payload.get("text") or contenu.get("text") or contenu.get("caption") or "",
+        "network": payload.get("network") or payload.get("reseau") or contenu.get("network") or "instagram",
+        "scheduled_at": payload.get("scheduled_at") or payload.get("date_programmee") or contenu.get("scheduled_at"),
+    }
+
+    # Conservation complète des données visuelles.
+    for key in (
+        "layers",
+        "slides",
+        "ui",
+        "canvas",
+        "draft",
+        "payload",
+        "preview_image",
+        "planner_preview_image",
+        "rendered_image",
+        "previewImage",
+        "plannerPreviewImage",
+        "renderedImage",
+        "image_url",
+        "media_url",
+        "thumbnail_url",
+        "carrousel_id",
+    ):
+        if key in payload and payload.get(key) is not None:
+            merged[key] = payload.get(key)
+        if isinstance(contenu, dict) and key in contenu and contenu.get(key) is not None:
+            merged[key] = contenu.get(key)
+
+    if "slides" not in merged and isinstance(payload.get("slides"), list):
+        merged["slides"] = payload["slides"]
+
+    return merged
+
+
+def _create_planner_post(
+    payload: Dict[str, Any],
+    db: Session,
+    user: Any,
+    forced_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    user_id = _get_user_id(user)
+
+    network = _first_text(payload.get("network"), payload.get("reseau"), "instagram").lower()
+    scheduled_at = _parse_datetime(
+        payload.get("scheduled_at")
+        or payload.get("date_programmee")
+        or payload.get("date")
+    )
+
+    if scheduled_at is None:
+        # Sécurité : éviter un 500 si le frontend oublie la date.
+        scheduled_at = datetime.utcnow()
+
+    content = _build_content_from_payload(payload, forced_type=forced_type)
 
     post = SocialPost(
         user_id=user_id,
         reseau=network,
-        statut=str(payload.get("statut") or payload.get("status") or "scheduled"),
+        statut=payload.get("statut") or payload.get("status") or "scheduled",
         contenu=_safe_json_dumps(content),
         date_programmee=scheduled_at,
         supprimer_apres=bool(payload.get("supprimer_apres", False)),
@@ -257,105 +271,123 @@ def _create_planner_post(payload: Dict[str, Any], forced_type: str, db: Session,
     db.add(post)
     db.commit()
     db.refresh(post)
+
     return _serialize_post(post)
-
-
-@router.get("/posts")
-def list_planner_posts(
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    try:
-        user_id = _get_user_id(user)
-        posts = (
-            db.query(SocialPost)
-            .filter(SocialPost.user_id == user_id)
-            .order_by(SocialPost.date_programmee.desc().nullslast(), SocialPost.id.desc())
-            .all()
-        )
-        return [_serialize_post(post) for post in posts]
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("")
 @router.get("/")
-def list_planner_root(
+@router.get("/posts")
+def list_planner_posts(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: Any = Depends(get_current_user),
 ):
-    return list_planner_posts(db=db, user=user)
+    user_id = _get_user_id(user)
+
+    posts = (
+        db.query(SocialPost)
+        .filter(SocialPost.user_id == user_id)
+        .order_by(SocialPost.date_programmee.asc())
+        .all()
+    )
+
+    return [_serialize_post(post) for post in posts]
 
 
 @router.post("/schedule-post")
 def schedule_post(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: Any = Depends(get_current_user),
 ):
     try:
-        return _create_planner_post(payload, "post", db, user)
+        return _create_planner_post(payload, db=db, user=user, forced_type="post")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/schedule-carrousel")
 def schedule_carrousel(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: Any = Depends(get_current_user),
 ):
     try:
-        return _create_planner_post(payload, "carrousel", db, user)
+        return _create_planner_post(payload, db=db, user=user, forced_type="carrousel")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
-# Alias legacy pour anciens appels frontend.
 @router.post("/schedule")
 def schedule_legacy(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: Any = Depends(get_current_user),
 ):
-    forced_type = "carrousel" if payload.get("slides") or payload.get("carrousel_id") else "post"
     try:
-        return _create_planner_post(payload, forced_type, db, user)
+        forced_type = "carrousel" if payload.get("slides") or payload.get("carrousel_id") else "post"
+
+        # Compat ancien format date + time.
+        if payload.get("date") and payload.get("time") and not payload.get("scheduled_at"):
+            payload = {
+                **payload,
+                "scheduled_at": f"{payload.get('date')}T{payload.get('time')}:00",
+            }
+
+        return _create_planner_post(payload, db=db, user=user, forced_type=forced_type)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.patch("/posts/{post_id}/status")
-@router.put("/posts/{post_id}/status")
-def update_post_status(
+@router.post("/{post_id}/status")
+def update_planner_post_status(
     post_id: int,
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: Any = Depends(get_current_user),
 ):
     user_id = _get_user_id(user)
-    post = db.query(SocialPost).filter(SocialPost.id == post_id, SocialPost.user_id == user_id).first()
+    post = (
+        db.query(SocialPost)
+        .filter(SocialPost.id == post_id, SocialPost.user_id == user_id)
+        .first()
+    )
+
     if not post:
-        raise HTTPException(status_code=404, detail="Post Planner introuvable")
+        raise HTTPException(status_code=404, detail="Post introuvable")
 
-    post.statut = str(payload.get("statut") or payload.get("status") or post.statut or "scheduled")
-    if post.statut == "published":
-        try:
-            post.published_at = datetime.utcnow()
-        except Exception:
-            pass
-
+    post.statut = payload.get("statut") or payload.get("status") or post.statut
     db.commit()
     db.refresh(post)
+
     return _serialize_post(post)
+
+
+@router.delete("/{post_id}")
+def delete_planner_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+    user: Any = Depends(get_current_user),
+):
+    user_id = _get_user_id(user)
+    post = (
+        db.query(SocialPost)
+        .filter(SocialPost.id == post_id, SocialPost.user_id == user_id)
+        .first()
+    )
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Post introuvable")
+
+    db.delete(post)
+    db.commit()
+    return {"ok": True}

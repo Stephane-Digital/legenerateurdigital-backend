@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -31,12 +31,34 @@ router = APIRouter(prefix="/planner", tags=["Planner"])
 # - GET  /planner/posts
 #
 # Modèle DB actuel : SocialPost
+# - user_id
 # - reseau
 # - statut
 # - contenu (JSON string)
 # - date_programmee
 # - supprimer_apres
 # ============================================================
+
+
+def _get_user_id(user: Any) -> int:
+    """Compat get_current_user: peut retourner un objet User OU un dict JWT/user."""
+    if user is None:
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+
+    if isinstance(user, dict):
+        raw = user.get("id") or user.get("user_id") or user.get("sub")
+    else:
+        raw = getattr(user, "id", None) or getattr(user, "user_id", None) or getattr(user, "sub", None)
+
+    try:
+        uid = int(raw)
+    except Exception:
+        uid = 0
+
+    if uid <= 0:
+        raise HTTPException(status_code=401, detail="Utilisateur invalide")
+
+    return uid
 
 
 def _safe_json_loads(value: Any) -> Any:
@@ -66,24 +88,17 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value
+        return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
     raw = str(value or "").strip()
     if not raw:
         return None
 
-    # JS ISO may end with Z
     raw = raw.replace("Z", "+00:00")
 
-    candidates = [
-        raw,
-        raw.replace("T", " "),
-    ]
-
-    for candidate in candidates:
+    for candidate in (raw, raw.replace("T", " ")):
         try:
             parsed = datetime.fromisoformat(candidate)
-            # DB model usually stores naive datetime.
             if parsed.tzinfo is not None:
                 parsed = parsed.replace(tzinfo=None)
             return parsed
@@ -124,6 +139,7 @@ def _extract_format(content: Any) -> str:
 
 def _normalize_content(payload: Dict[str, Any], forced_type: str) -> Dict[str, Any]:
     raw_content = payload.get("contenu")
+
     if isinstance(raw_content, str):
         parsed = _safe_json_loads(raw_content)
         content: Dict[str, Any] = parsed if isinstance(parsed, dict) else {"text": raw_content}
@@ -140,7 +156,7 @@ def _normalize_content(payload: Dict[str, Any], forced_type: str) -> Dict[str, A
     content["type"] = forced_type
     content.setdefault("format", forced_type)
 
-    # Preserve all visual payload fields sent by the frontend.
+    # Préserve tout le payload visuel envoyé par le frontend.
     for key in (
         "preview_image",
         "planner_preview_image",
@@ -180,6 +196,17 @@ def _serialize_post(post: SocialPost) -> Dict[str, Any]:
     fmt = _extract_format(content_obj)
     statut = getattr(post, "statut", None) or "scheduled"
 
+    preview_image = (
+        content_obj.get("planner_preview_image")
+        or content_obj.get("preview_image")
+        or content_obj.get("rendered_image")
+        or content_obj.get("plannerPreviewImage")
+        or content_obj.get("previewImage")
+        or content_obj.get("renderedImage")
+    )
+
+    date_value = date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee
+
     return {
         "id": post.id,
         "user_id": post.user_id,
@@ -193,14 +220,13 @@ def _serialize_post(post: SocialPost) -> Dict[str, Any]:
         "type": content_obj.get("type") or fmt,
         "contenu": content_obj,
         "content": content_obj,
-        "date_programmee": date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee,
-        "scheduled_at": date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee,
-        "scheduled_for": date_programmee.isoformat() if hasattr(date_programmee, "isoformat") else date_programmee,
+        "date_programmee": date_value,
+        "scheduled_at": date_value,
+        "scheduled_for": date_value,
         "supprimer_apres": bool(getattr(post, "supprimer_apres", False)),
-        # Flatten visual fields for AssistedPublishModal compatibility.
-        "preview_image": content_obj.get("preview_image") or content_obj.get("planner_preview_image") or content_obj.get("rendered_image"),
-        "planner_preview_image": content_obj.get("planner_preview_image") or content_obj.get("preview_image") or content_obj.get("rendered_image"),
-        "rendered_image": content_obj.get("rendered_image") or content_obj.get("planner_preview_image") or content_obj.get("preview_image"),
+        "preview_image": preview_image,
+        "planner_preview_image": preview_image,
+        "rendered_image": preview_image,
         "layers": content_obj.get("layers"),
         "slides": content_obj.get("slides"),
         "ui": content_obj.get("ui"),
@@ -208,6 +234,7 @@ def _serialize_post(post: SocialPost) -> Dict[str, Any]:
 
 
 def _create_planner_post(payload: Dict[str, Any], forced_type: str, db: Session, user: Any) -> Dict[str, Any]:
+    user_id = _get_user_id(user)
     network = str(payload.get("network") or payload.get("reseau") or "instagram").lower().strip()
     scheduled_at = _parse_datetime(payload.get("scheduled_at") or payload.get("date_programmee") or payload.get("date"))
 
@@ -219,7 +246,7 @@ def _create_planner_post(payload: Dict[str, Any], forced_type: str, db: Session,
         content["date_programmee"] = scheduled_at.isoformat()
 
     post = SocialPost(
-        user_id=user.id,
+        user_id=user_id,
         reseau=network,
         statut=str(payload.get("statut") or payload.get("status") or "scheduled"),
         contenu=_safe_json_dumps(content),
@@ -239,13 +266,16 @@ def list_planner_posts(
     user=Depends(get_current_user),
 ):
     try:
+        user_id = _get_user_id(user)
         posts = (
             db.query(SocialPost)
-            .filter(SocialPost.user_id == user.id)
+            .filter(SocialPost.user_id == user_id)
             .order_by(SocialPost.date_programmee.desc().nullslast(), SocialPost.id.desc())
             .all()
         )
         return [_serialize_post(post) for post in posts]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -289,7 +319,7 @@ def schedule_carrousel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Legacy aliases kept for older frontend calls.
+# Alias legacy pour anciens appels frontend.
 @router.post("/schedule")
 def schedule_legacy(
     payload: Dict[str, Any],
@@ -314,7 +344,8 @@ def update_post_status(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    post = db.query(SocialPost).filter(SocialPost.id == post_id, SocialPost.user_id == user.id).first()
+    user_id = _get_user_id(user)
+    post = db.query(SocialPost).filter(SocialPost.id == post_id, SocialPost.user_id == user_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post Planner introuvable")
 

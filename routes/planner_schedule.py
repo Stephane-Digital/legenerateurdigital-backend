@@ -60,6 +60,153 @@ def _short(value: Any, limit: int = 1200) -> str:
     return text_value if len(text_value) <= limit else text_value[:limit] + "…"
 
 
+def _looks_like_media(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    v = value.strip().lower()
+    return (
+        v.startswith("http://")
+        or v.startswith("https://")
+        or v.startswith("blob:")
+        or v.startswith("data:image/")
+    )
+
+
+def _safe_media_value(value: Any, *, max_data_url: int = 1_800_000) -> str:
+    """
+    Planner mobile needs a persisted visual, but Render must not receive
+    unlimited Canva/base64 payloads. We keep URLs and reasonably-sized data URLs.
+    """
+    if not isinstance(value, str):
+        return ""
+
+    v = value.strip()
+    if not v:
+        return ""
+
+    lower = v.lower()
+    if lower.startswith("http://") or lower.startswith("https://") or lower.startswith("blob:"):
+        return v
+
+    if lower.startswith("data:image/") and len(v) <= max_data_url:
+        return v
+
+    return ""
+
+
+def _first_media_from_layers(layers: Any) -> str:
+    if not isinstance(layers, list):
+        return ""
+
+    for layer in layers:
+        if not isinstance(layer, dict):
+            continue
+
+        for key in (
+            "planner_preview_image",
+            "preview_image",
+            "rendered_image",
+            "src",
+            "url",
+            "image",
+            "imageUrl",
+            "image_url",
+            "media_url",
+            "mediaUrl",
+            "preview_url",
+            "previewUrl",
+            "thumbnail_url",
+            "thumbnailUrl",
+            "background",
+            "backgroundUrl",
+            "background_url",
+        ):
+            media = _safe_media_value(layer.get(key))
+            if media:
+                return media
+
+    return ""
+
+
+def _first_media_from_slides(slides: Any) -> str:
+    if not isinstance(slides, list):
+        return ""
+
+    for slide in slides:
+        if not isinstance(slide, dict):
+            continue
+
+        for key in (
+            "planner_preview_image",
+            "preview_image",
+            "rendered_image",
+            "image_url",
+            "media_url",
+            "imageUrl",
+            "mediaUrl",
+            "preview_url",
+            "previewUrl",
+            "thumbnail_url",
+            "thumbnailUrl",
+            "src",
+            "url",
+            "background",
+            "backgroundUrl",
+            "background_url",
+        ):
+            media = _safe_media_value(slide.get(key))
+            if media:
+                return media
+
+        nested = (
+            _first_media_from_layers(slide.get("layers"))
+            or _first_media_from_layers(slide.get("elements"))
+            or _first_media_from_layers(slide.get("objects"))
+        )
+        if nested:
+            return nested
+
+    return ""
+
+
+def _extract_persisted_media(obj: Dict[str, Any]) -> str:
+    for key in (
+        "planner_preview_image",
+        "plannerPreviewImage",
+        "preview_image",
+        "previewImage",
+        "rendered_image",
+        "renderedImage",
+        "media_url",
+        "mediaUrl",
+        "image_url",
+        "imageUrl",
+        "preview_url",
+        "previewUrl",
+        "thumbnail_url",
+        "thumbnailUrl",
+        "cover_url",
+        "coverUrl",
+    ):
+        media = _safe_media_value(obj.get(key))
+        if media:
+            return media
+
+    for key in ("payload", "draft", "canvas", "editor", "content", "contenu"):
+        nested = obj.get(key)
+        if isinstance(nested, dict):
+            media = _extract_persisted_media(nested)
+            if media:
+                return media
+
+    return (
+        _first_media_from_layers(obj.get("layers"))
+        or _first_media_from_layers(obj.get("elements"))
+        or _first_media_from_layers(obj.get("objects"))
+        or _first_media_from_slides(obj.get("slides"))
+    )
+
+
 def _strip_heavy(value: Any, depth: int = 0) -> Any:
     if depth > 8:
         return None
@@ -74,8 +221,6 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
 
     if isinstance(value, dict):
         blocked = {
-            "preview_image",
-            "planner_preview_image",
             "runtimeImages",
             "runtime_images",
             "imageData",
@@ -85,11 +230,29 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
             "base64",
             "blob",
         }
+        media_keys = {
+            "preview_image",
+            "planner_preview_image",
+            "rendered_image",
+            "media_url",
+            "image_url",
+            "preview_url",
+            "thumbnail_url",
+            "cover_url",
+        }
         out: Dict[str, Any] = {}
         for k, v in value.items():
             if k in blocked:
                 continue
-            if k in {"src", "url", "image_url", "media_url"} and isinstance(v, str) and v.startswith("data:image/"):
+            if k in media_keys:
+                media = _safe_media_value(v)
+                if media:
+                    out[k] = media
+                continue
+            if k in {"src", "url"} and isinstance(v, str) and v.startswith("data:image/"):
+                media = _safe_media_value(v)
+                if media:
+                    out[k] = media
                 continue
             out[k] = _strip_heavy(v, depth + 1)
         return out
@@ -127,6 +290,7 @@ def _content_summary(content: Any, fallback_title: Optional[str] = None, fallbac
 
     slides = obj.get("slides") if isinstance(obj.get("slides"), list) else []
     layers = obj.get("layers") if isinstance(obj.get("layers"), list) else []
+    media_url = _extract_persisted_media(obj)
 
     return {
         "type": post_type,
@@ -137,7 +301,12 @@ def _content_summary(content: Any, fallback_title: Optional[str] = None, fallbac
         "text": _short(caption, 1800),
         "slides_count": len(slides),
         "layers_count": len(layers),
-        "has_visual": bool(slides or layers or obj.get("has_visual")),
+        "media_url": media_url or None,
+        "image_url": media_url or None,
+        "preview_image": media_url or None,
+        "planner_preview_image": media_url or None,
+        "rendered_image": media_url or None,
+        "has_visual": bool(media_url or slides or layers or obj.get("has_visual")),
     }
 
 
@@ -182,7 +351,11 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "date_programmee": iso_date,
         "scheduled_at": iso_date,
         "scheduled_for": iso_date,
-        "media_url": None,
+        "media_url": content_obj.get("media_url"),
+        "image_url": content_obj.get("image_url"),
+        "preview_image": content_obj.get("preview_image"),
+        "planner_preview_image": content_obj.get("planner_preview_image"),
+        "rendered_image": content_obj.get("rendered_image"),
         "published_at": row.get("published_at").isoformat() if hasattr(row.get("published_at"), "isoformat") else row.get("published_at"),
         "supprimer_apres": bool(row.get("supprimer_apres", False)),
         "created_at": row.get("created_at").isoformat() if hasattr(row.get("created_at"), "isoformat") else row.get("created_at"),

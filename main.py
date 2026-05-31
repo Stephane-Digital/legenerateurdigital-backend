@@ -50,7 +50,7 @@ from routes.systeme_webhooks import router as systeme_webhooks_router
 from routes.email_analytics_dashboard import router as email_analytics_router
 from routes.lead_engine_ai import router as lead_engine_ai_router
 #from routes import planner_make
-from routes.ai_caption import router as ai_caption_router
+#from routes.ai_caption import router as ai_caption_router
 from routes.password_reset import router as password_reset_router
 from routes.trend_radar import router as trend_radar_router
 from routes.cmo_ai import router as cmo_ai_router
@@ -187,7 +187,7 @@ app.include_router(systeme_webhooks_router)
 app.include_router(email_analytics_router)
 app.include_router(lead_engine_ai_router)
 #app.include_router(planner_make.router)
-app.include_router(ai_caption_router)
+#app.include_router(ai_caption_router)
 app.include_router(password_reset_router)
 app.include_router(trend_radar_router)
 app.include_router(cmo_ai_router)

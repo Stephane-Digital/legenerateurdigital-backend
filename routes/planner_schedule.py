@@ -212,8 +212,12 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
         return None
 
     if isinstance(value, str):
-        if value.startswith("data:image/") or len(value) > 5000:
+        if value.strip().startswith("data:image/"):
+            return value.strip()[:150000]
+
+        if len(value) > 5000:
             return ""
+
         return value
 
     if isinstance(value, list):
@@ -258,7 +262,6 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
         return out
 
     return value
-
 
 def _content_summary(content: Any, fallback_title: Optional[str] = None, fallback_type: str = "post") -> Dict[str, Any]:
     obj = _safe_json_loads(content)

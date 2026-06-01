@@ -88,8 +88,10 @@ def _safe_media_value(value: Any, *, max_data_url: int = 1_800_000) -> str:
     if lower.startswith("http://") or lower.startswith("https://") or lower.startswith("blob:"):
         return v
 
-    if lower.startswith("data:image/") and len(v) <= max_data_url:
-        return v
+    if lower.startswith("data:image/"):
+        # LGD mobile Planner: persist a lightweight preview instead of dropping it.
+        # Full editor/base64 payloads stay protected by truncation.
+        return v[:150000]
 
     return ""
 
@@ -214,10 +216,8 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
     if isinstance(value, str):
         if value.strip().startswith("data:image/"):
             return value.strip()[:150000]
-
         if len(value) > 5000:
             return ""
-
         return value
 
     if isinstance(value, list):
@@ -243,6 +243,14 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
             "preview_url",
             "thumbnail_url",
             "cover_url",
+            "previewImage",
+            "plannerPreviewImage",
+            "renderedImage",
+            "mediaUrl",
+            "imageUrl",
+            "previewUrl",
+            "thumbnailUrl",
+            "coverUrl",
         }
         out: Dict[str, Any] = {}
         for k, v in value.items():
@@ -262,6 +270,7 @@ def _strip_heavy(value: Any, depth: int = 0) -> Any:
         return out
 
     return value
+
 
 def _content_summary(content: Any, fallback_title: Optional[str] = None, fallback_type: str = "post") -> Dict[str, Any]:
     obj = _safe_json_loads(content)

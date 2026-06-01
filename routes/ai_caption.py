@@ -1,11 +1,22 @@
+from __future__ import annotations
+
+import os
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
 from routes.auth import get_current_user
-from services.ai_quota_service import update_quota
 from services.ai_quota_service import get_or_create_quota
+from services.ai_quota_service import update_quota
+
+try:
+    from openai import OpenAI
+except Exception:  # pragma: no cover
+    OpenAI = None  # type: ignore
+
 
 router = APIRouter(prefix="/ai-caption", tags=["AI Caption"])
 
@@ -15,7 +26,7 @@ class CaptionRequest(BaseModel):
     network: str = "instagram"
     tone: str = "premium"
     objective: str = "conversion"
-    existing_caption: str | None = None
+    existing_caption: Optional[str] = None
     include_hashtags: bool = False
     include_cta: bool = False
     language: str = "fr"
@@ -24,7 +35,14 @@ class CaptionRequest(BaseModel):
 
 
 def _clean_text(value: str | None) -> str:
-    return " ".join(str(value or "").strip().split())
+    return " ".join(str(value or "").replace("\r", " ").strip().split())
+
+
+def _clean_multiline(value: str | None) -> str:
+    text = str(value or "").replace("\r", "").strip()
+    while "\n\n\n" in text:
+        text = text.replace("\n\n\n", "\n\n")
+    return text
 
 
 def _capitalize_first(value: str) -> str:
@@ -34,9 +52,70 @@ def _capitalize_first(value: str) -> str:
     return value[0].upper() + value[1:]
 
 
+def _choose_model() -> str:
+    return (
+        os.getenv("OPENAI_CAPTION_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "").strip()
+        or "gpt-4o-mini"
+    )
+
+
+def _get_openai_client() -> Optional["OpenAI"]:
+    if OpenAI is None:
+        return None
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    return OpenAI(api_key=api_key)
+
+
+def _source_from_prompt(prompt: str) -> str:
+    """
+    Frontend sends a structured prompt containing the real content detected in
+    the post/layers. We extract that core content so fallback hashtags/CTA do not
+    use technical labels like "RÈGLES STRICTES".
+    """
+    text = _clean_multiline(prompt)
+    if not text:
+        return ""
+
+    marker = "Texte réel détecté dans le post / visuel / layers / Performeur Réseaux :"
+    rules = "RÈGLES STRICTES :"
+
+    if marker in text:
+        text = text.split(marker, 1)[1].strip()
+
+    if rules in text:
+        text = text.split(rules, 1)[0].strip()
+
+    # Remove common meta lines while preserving the actual post text.
+    kept: list[str] = []
+    for line in text.splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        lower = clean.lower()
+        if lower.startswith("source réelle"):
+            continue
+        if lower.startswith("titre :"):
+            continue
+        if lower.startswith("réseau :"):
+            continue
+        if lower.startswith("ton demandé :"):
+            continue
+        if lower.startswith("objectif :"):
+            continue
+        kept.append(clean)
+
+    return _clean_multiline("\n".join(kept)) or _clean_text(prompt)
+
+
 def _infer_keywords(prompt: str) -> list[str]:
+    source = _source_from_prompt(prompt)
     words = (
-        prompt.lower()
+        source.lower()
         .replace("\n", " ")
         .replace(",", " ")
         .replace(".", " ")
@@ -55,6 +134,8 @@ def _infer_keywords(prompt: str) -> list[str]:
         "tout", "tous", "toute", "toutes", "elle", "elles", "il", "ils",
         "the", "and", "your", "this", "that", "from", "into", "au",
         "aux", "de", "du", "la", "le", "un", "en", "ou", "et", "à", "d",
+        "source", "réelle", "publication", "texte", "détecté", "post",
+        "visuel", "layers", "performeur", "réseaux", "titre", "objectif",
     }
 
     keywords: list[str] = []
@@ -70,7 +151,7 @@ def _infer_keywords(prompt: str) -> list[str]:
             continue
         seen.add(cleaned)
         keywords.append(cleaned)
-        if len(keywords) >= 4:
+        if len(keywords) >= 6:
             break
 
     return keywords
@@ -79,35 +160,35 @@ def _infer_keywords(prompt: str) -> list[str]:
 def _hashtags_for_network(network: str) -> list[str]:
     network = network.lower().strip()
     mapping = {
-        "instagram": ["#instagrammarketing", "#contenuinstagram"],
-        "facebook": ["#facebookmarketing", "#contenusocial"],
-        "linkedin": ["#linkedinfr", "#personalbranding"],
-        "pinterest": ["#pinterestmarketing", "#visibiliteweb"],
-        "snapchat": ["#snapchatbusiness", "#contenudigital"],
+        "instagram": ["#instagram", "#contenu"],
+        "facebook": ["#facebook", "#communaute"],
+        "linkedin": ["#linkedin", "#personalbranding"],
+        "pinterest": ["#pinterest", "#inspiration"],
+        "snapchat": ["#snapchat", "#contenu"],
+        "tiktok": ["#tiktok", "#creationdecontenu"],
     }
-    return mapping.get(network, ["#socialmedia", "#marketingdigital"])
+    return mapping.get(network, ["#socialmedia", "#contenu"])
 
 
 def _hashtags_for_objective(objective: str) -> list[str]:
     objective = objective.lower().strip()
     mapping = {
-        "conversion": ["#conversion", "#ventes"],
+        "conversion": ["#conversion", "#passagealaction"],
         "engagement": ["#engagement", "#communaute"],
-        "lead": ["#generationdeleads", "#prospection"],
+        "lead": ["#prospection", "#leads"],
         "visibility": ["#visibilite", "#notoriete"],
     }
-    return mapping.get(objective, ["#strategie", "#businessenligne"])
+    return mapping.get(objective, ["#strategie", "#action"])
 
 
 def build_dynamic_hashtags(data: CaptionRequest) -> str:
     keywords = _infer_keywords(data.prompt)
-    keyword_tags = [f"#{word}" for word in keywords[:4]]
+    keyword_tags = [f"#{word}" for word in keywords[:5]]
 
     tags = [
         *keyword_tags,
         *_hashtags_for_network(data.network),
         *_hashtags_for_objective(data.objective),
-        "#lgd",
     ]
 
     unique_tags: list[str] = []
@@ -127,110 +208,127 @@ def build_cta(data: CaptionRequest) -> str:
     network = data.network.lower().strip()
 
     if objective == "conversion":
-        return "👉 Passe à l’action maintenant et transforme cette idée en résultat concret."
+        return "👉 Passe à l’action aujourd’hui et applique ce conseil dès maintenant."
     if objective == "engagement":
         return (
             "👉 Dis-moi en commentaire ce que tu en penses."
             if network != "linkedin"
-            else "👉 Donne-moi ton avis en commentaire : je veux connaître ton retour."
+            else "👉 Partage ton avis en commentaire : je veux lire ton retour."
         )
     if objective == "lead":
-        return "👉 Écris-moi en message privé si tu veux attirer plus de prospects qualifiés."
+        return "👉 Écris-moi en message privé si tu veux aller plus loin."
     if objective == "visibility":
-        return "👉 Enregistre cette publication et partage-la à quelqu’un qui en a besoin."
-    return "👉 Passe à l’action avec LGD."
+        return "👉 Enregistre cette publication pour y revenir plus tard."
+    return "👉 Passe à l’action dès aujourd’hui."
 
 
-def build_intro(data: CaptionRequest) -> str:
+def _fallback_caption(data: CaptionRequest, cta_text: str = "", hashtags_text: str = "") -> str:
+    source = _source_from_prompt(data.prompt)
+    safe_source = _capitalize_first(_clean_text(source)) or "Cette publication"
+
     tone = data.tone.lower().strip()
-    network = data.network.lower().strip()
-
-    if tone == "expert":
-        return "Voici un angle plus structuré pour transformer cette idée en message clair et crédible."
-    if tone == "inspirant":
-        return "Chaque contenu peut devenir un vrai levier de croissance quand le message touche juste."
-    if tone == "direct":
-        return "Allons droit au but : ton message doit être simple, net et impactant."
-
-    if network == "linkedin":
-        return "🚀 Renforce ton positionnement avec une prise de parole claire, utile et premium."
-    if network == "facebook":
-        return "🚀 Capte l’attention rapidement avec une publication fluide, humaine et engageante."
-    if network == "pinterest":
-        return "🚀 Donne envie de cliquer avec une description plus claire, inspirante et orientée résultat."
-    if network == "snapchat":
-        return "🚀 Va à l’essentiel avec un message rapide, fort et mémorable."
-    return "🚀 Passe à un niveau supérieur avec une communication plus claire, plus humaine et plus rentable."
-
-
-def build_body(data: CaptionRequest) -> str:
-    network = data.network.lower().strip()
-
-    if network == "linkedin":
-        return "Sur LinkedIn, la différence se fait sur la clarté, l’angle stratégique et la valeur perçue."
-    if network == "facebook":
-        return "Sur Facebook, il faut créer une proximité immédiate, donner envie de lire jusqu’au bout et déclencher l’interaction."
-    if network == "pinterest":
-        return "Sur Pinterest, une bonne description doit être claire, inspirante et orientée vers une recherche concrète."
-    if network == "snapchat":
-        return "Sur Snapchat, le message doit aller vite, frapper juste et rester naturel."
-    return "Sur Instagram, l’impact visuel doit être soutenu par une légende claire, engageante et bien structurée."
-
-
-def build_objective_line(data: CaptionRequest) -> str:
     objective = data.objective.lower().strip()
 
-    if objective == "conversion":
-        return "L’objectif ici est de créer l’attention, la confiance et le passage à l’action."
+    if tone == "direct":
+        opener = "Allons droit au but."
+    elif tone == "expert":
+        opener = "Voici l’idée à retenir."
+    elif tone == "inspirant":
+        opener = "Parfois, un simple rappel peut changer ta façon d’agir."
+    else:
+        opener = "Un bon visuel mérite une légende claire et alignée."
+
     if objective == "engagement":
-        return "L’objectif ici est de stimuler les réactions, les enregistrements et les partages."
-    if objective == "lead":
-        return "L’objectif ici est de transformer l’intérêt en prospect qualifié."
-    if objective == "visibility":
-        return "L’objectif ici est de renforcer ta visibilité avec un message plus fort et plus lisible."
-    return "L’objectif ici est d’améliorer l’impact global de la publication."
+        angle = "Le but ici est d’ouvrir la discussion et de donner envie de réagir."
+    elif objective == "lead":
+        angle = "Le but ici est de créer une connexion naturelle avec les bonnes personnes."
+    elif objective == "visibility":
+        angle = "Le but ici est de rendre le message plus lisible, plus mémorable et plus partageable."
+    else:
+        angle = "Le but ici est de transformer l’attention en action concrète."
 
-
-def build_variation_line(data: CaptionRequest) -> str:
-    prompt = _clean_text(data.prompt)
-    existing = _clean_text(data.existing_caption)
-
-    if existing and existing != prompt:
-        return "J’ai généré une nouvelle variation pour éviter la répétition et donner un angle plus frais à ta publication."
-
-    if data.post_type.lower().strip() == "carrousel":
-        return "Le format carrousel mérite une accroche forte et une lecture fluide d’une slide à l’autre."
-
-    if data.media_type.lower().strip() == "image":
-        return "L’idée est d’aligner la promesse du visuel avec une légende qui donne envie d’aller plus loin."
-
-    return "Le texte a été pensé pour rester lisible, premium et immédiatement exploitable."
-
-
-def generate_caption_text(data: CaptionRequest, cta_text: str = "", hashtags_text: str = ""):
-    prompt = _clean_text(data.prompt)
-    intro = build_intro(data)
-    body = build_body(data)
-    objective_line = build_objective_line(data)
-    variation_line = build_variation_line(data)
-
-    safe_prompt = _capitalize_first(prompt) if prompt else "Ta publication"
-
-    sections = [
-        intro,
-        body,
-        f'Base de travail : "{safe_prompt}".',
-        objective_line,
-        variation_line,
-    ]
+    caption = "\n\n".join(
+        [
+            opener,
+            safe_source,
+            angle,
+        ]
+    )
 
     if cta_text:
-        sections.append(cta_text)
-
+        caption = f"{caption}\n\n{cta_text}"
     if hashtags_text:
-        sections.append(hashtags_text)
+        caption = f"{caption}\n\n{hashtags_text}"
 
-    return "\n\n".join(section for section in sections if section.strip())
+    return caption.strip()
+
+
+def _build_live_prompt(data: CaptionRequest, *, cta_text: str = "", hashtags_text: str = "") -> str:
+    source = _source_from_prompt(data.prompt)
+    existing = _clean_multiline(data.existing_caption)
+
+    task = "Génère une légende social media en français."
+    if data.include_hashtags:
+        task = "Renvoie uniquement des hashtags pertinents en français, séparés par des espaces."
+    elif data.include_cta:
+        task = "Renvoie uniquement un CTA final en français, sur une seule ligne."
+
+    return f"""
+MISSION
+{task}
+
+SOURCE RÉELLE À RESPECTER
+{source or data.prompt}
+
+PARAMÈTRES
+- Réseau : {data.network}
+- Ton : {data.tone}
+- Objectif : {data.objective}
+- Type de post : {data.post_type}
+- Type média : {data.media_type}
+- Légende existante éventuelle : {existing or "aucune"}
+
+RÈGLES ABSOLUES
+- Reste strictement aligné avec la source réelle.
+- N'invente pas un sujet différent.
+- Ne parle jamais de MRR, LGD, formation, business, présentation mobile ou outil digital si la source ne le mentionne pas clairement.
+- Si la source parle de yoga, concentration, bien-être, santé ou tout autre sujet, reste sur ce sujet.
+- Style humain, clair, prêt à publier.
+- Pas de titre "Voici..." sauf si nécessaire.
+- Pas de markdown.
+- Pas de guillemets autour de la réponse.
+- Si hashtags imposés : {hashtags_text or "aucun hashtag imposé"}.
+- Si CTA imposé : {cta_text or "aucun CTA imposé"}.
+""".strip()
+
+
+def _generate_live_caption(data: CaptionRequest, *, cta_text: str = "", hashtags_text: str = "") -> Optional[str]:
+    client = _get_openai_client()
+    if client is None:
+        return None
+
+    try:
+        response = client.chat.completions.create(
+            model=_choose_model(),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Tu es l'IA Caption Generator de Le Générateur Digital. "
+                        "Tu génères des légendes social media strictement alignées avec le contenu réel fourni. "
+                        "Tu n'inventes jamais un autre sujet."
+                    ),
+                },
+                {"role": "user", "content": _build_live_prompt(data, cta_text=cta_text, hashtags_text=hashtags_text)},
+            ],
+            temperature=0.68,
+            max_tokens=650 if not (data.include_hashtags or data.include_cta) else 220,
+        )
+
+        content = (response.choices[0].message.content or "").strip()
+        return _clean_multiline(content) if content else None
+    except Exception:
+        return None
 
 
 @router.post("/generate")
@@ -275,7 +373,9 @@ def generate_caption(
 
     cta_text = build_cta(payload) if payload.include_cta else ""
     hashtags_text = build_dynamic_hashtags(payload) if payload.include_hashtags else ""
-    caption = generate_caption_text(payload, cta_text=cta_text, hashtags_text=hashtags_text)
+
+    live_caption = _generate_live_caption(payload, cta_text=cta_text, hashtags_text=hashtags_text)
+    caption = live_caption or _fallback_caption(payload, cta_text=cta_text, hashtags_text=hashtags_text)
 
     return {
         "caption": caption,

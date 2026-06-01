@@ -351,11 +351,11 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "date_programmee": iso_date,
         "scheduled_at": iso_date,
         "scheduled_for": iso_date,
-        "media_url": row.get("planner_preview_image") or content_obj.get("media_url"),
-        "image_url": row.get("planner_preview_image") or content_obj.get("image_url"),
-        "preview_image": row.get("planner_preview_image") or content_obj.get("preview_image"),
-        "planner_preview_image": row.get("planner_preview_image") or content_obj.get("planner_preview_image"),
-        "rendered_image": row.get("planner_preview_image") or content_obj.get("rendered_image"),
+        "media_url": content_obj.get("media_url"),
+        "image_url": content_obj.get("image_url"),
+        "preview_image": content_obj.get("preview_image"),
+        "planner_preview_image": content_obj.get("planner_preview_image"),
+        "rendered_image": content_obj.get("rendered_image"),
         "published_at": row.get("published_at").isoformat() if hasattr(row.get("published_at"), "isoformat") else row.get("published_at"),
         "supprimer_apres": bool(row.get("supprimer_apres", False)),
         "created_at": row.get("created_at").isoformat() if hasattr(row.get("created_at"), "isoformat") else row.get("created_at"),
@@ -368,48 +368,6 @@ def _require_future(dt: datetime) -> None:
         raise HTTPException(status_code=400, detail="La date de publication doit être dans le futur")
 
 
-
-
-def _ensure_planner_preview_column(db: Session) -> None:
-    """
-    LGD mobile Planner fix — persist the visual preview outside `contenu`.
-
-    Why:
-    - `contenu` is intentionally listed with SUBSTRING(... 6000) to avoid heavy payloads.
-    - Large data:image previews stored inside JSON get truncated on list routes.
-    - Mobile browsers do not share desktop localStorage/IndexedDB cache.
-
-    This column becomes the backend truth for the Planner preview.
-    Safe migration: non destructive, IF NOT EXISTS.
-    """
-    try:
-        db.execute(text("ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS planner_preview_image TEXT"))
-        db.commit()
-    except Exception:
-        db.rollback()
-
-
-def _is_data_image(value: Any) -> bool:
-    return isinstance(value, str) and value.strip().lower().startswith("data:image/")
-
-
-def _remove_heavy_preview_from_content(content: Dict[str, Any], preview_image: str) -> Dict[str, Any]:
-    """Keep `contenu` lightweight while preserving visual state in DB column."""
-    out = dict(content or {})
-
-    if preview_image and _is_data_image(preview_image):
-        for key in (
-            "media_url",
-            "image_url",
-            "preview_image",
-            "planner_preview_image",
-            "rendered_image",
-        ):
-            out[key] = None
-        out["has_visual"] = True
-
-    return out
-
 def _insert_social_post(
     db: Session,
     *,
@@ -419,19 +377,15 @@ def _insert_social_post(
     date_programmee: datetime,
     supprimer_apres: bool,
 ) -> Dict[str, Any]:
-    _ensure_planner_preview_column(db)
-
-    preview_image = _extract_persisted_media(contenu_obj)
     safe_content = _content_summary(contenu_obj, fallback_type=str(contenu_obj.get("type") or "post"))
-    safe_content = _remove_heavy_preview_from_content(safe_content, preview_image)
 
     sql = text(
         """
         INSERT INTO social_posts
-            (user_id, reseau, statut, contenu, planner_preview_image, date_programmee, supprimer_apres, created_at, updated_at)
+            (user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at)
         VALUES
-            (:user_id, :reseau, :statut, :contenu, :planner_preview_image, :date_programmee, :supprimer_apres, NOW(), NOW())
-        RETURNING id, user_id, reseau, statut, contenu, planner_preview_image, date_programmee,
+            (:user_id, :reseau, :statut, :contenu, :date_programmee, :supprimer_apres, NOW(), NOW())
+        RETURNING id, user_id, reseau, statut, contenu, date_programmee,
                   published_at, supprimer_apres, created_at, updated_at
         """
     )
@@ -443,7 +397,6 @@ def _insert_social_post(
             "reseau": str(reseau),
             "statut": "scheduled",
             "contenu": json.dumps(safe_content, ensure_ascii=False),
-            "planner_preview_image": preview_image or None,
             "date_programmee": date_programmee,
             "supprimer_apres": bool(supprimer_apres),
         },
@@ -463,7 +416,6 @@ def list_planner_posts(db: Session = Depends(get_db), user=Depends(get_current_u
         """
         SELECT id, user_id, reseau, statut,
                SUBSTRING(contenu FROM 1 FOR 6000) AS contenu,
-               planner_preview_image,
                date_programmee, published_at, supprimer_apres, created_at, updated_at
         FROM social_posts
         WHERE user_id = :user_id
@@ -473,7 +425,6 @@ def list_planner_posts(db: Session = Depends(get_db), user=Depends(get_current_u
     )
 
     try:
-        _ensure_planner_preview_column(db)
         rows = db.execute(sql, {"user_id": _user_id(user)}).mappings().all()
         return [_serialize_row(dict(r)) for r in rows]
     except Exception as e:
@@ -596,7 +547,6 @@ def update_manual_post_status(post_id: int, payload: Dict[str, Any], db: Session
         """
     )
 
-    _ensure_planner_preview_column(db)
     row = db.execute(sql, {"status": status, "post_id": int(post_id), "user_id": _user_id(user)}).mappings().first()
 
     if not row:

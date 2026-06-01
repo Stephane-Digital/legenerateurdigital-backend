@@ -88,10 +88,8 @@ def _safe_media_value(value: Any, *, max_data_url: int = 1_800_000) -> str:
     if lower.startswith("http://") or lower.startswith("https://") or lower.startswith("blob:"):
         return v
 
-    if lower.startswith("data:image/"):
-        # LGD mobile Planner: persist a lightweight preview instead of dropping it.
-        # Full editor/base64 payloads stay protected by truncation.
-        return v[:150000]
+    if lower.startswith("data:image/") and len(v) <= max_data_url:
+        return v
 
     return ""
 
@@ -209,13 +207,30 @@ def _extract_persisted_media(obj: Dict[str, Any]) -> str:
     )
 
 
+
+def _ensure_planner_preview_column(db: Session) -> bool:
+    """
+    LGD mobile Planner needs a visual that is not stored inside the truncated
+    JSON `contenu`. This safe column keeps the preview separate from the heavy
+    editor payload.
+    """
+    try:
+        db.execute(text("ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS planner_preview_image TEXT"))
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        return False
+
+
 def _strip_heavy(value: Any, depth: int = 0) -> Any:
     if depth > 8:
         return None
 
     if isinstance(value, str):
-        if value.strip().startswith("data:image/"):
-            return value.strip()[:150000]
+        media = _safe_media_value(value)
+        if media:
+            return media
         if len(value) > 5000:
             return ""
         return value
@@ -348,6 +363,16 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
     iso_date = date_prog.isoformat() if hasattr(date_prog, "isoformat") else date_prog
 
+    persisted_media = _safe_media_value(row.get("planner_preview_image")) or _safe_media_value(content_obj.get("planner_preview_image")) or _safe_media_value(content_obj.get("preview_image")) or _safe_media_value(content_obj.get("media_url")) or _safe_media_value(content_obj.get("image_url")) or _safe_media_value(content_obj.get("rendered_image"))
+
+    if persisted_media:
+        content_obj["media_url"] = persisted_media
+        content_obj["image_url"] = persisted_media
+        content_obj["preview_image"] = persisted_media
+        content_obj["planner_preview_image"] = persisted_media
+        content_obj["rendered_image"] = persisted_media
+        content_obj["has_visual"] = True
+
     return {
         "id": row.get("id"),
         "user_id": row.get("user_id"),
@@ -363,11 +388,11 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "date_programmee": iso_date,
         "scheduled_at": iso_date,
         "scheduled_for": iso_date,
-        "media_url": content_obj.get("media_url"),
-        "image_url": content_obj.get("image_url"),
-        "preview_image": content_obj.get("preview_image"),
-        "planner_preview_image": content_obj.get("planner_preview_image"),
-        "rendered_image": content_obj.get("rendered_image"),
+        "media_url": persisted_media or content_obj.get("media_url"),
+        "image_url": persisted_media or content_obj.get("image_url"),
+        "preview_image": persisted_media or content_obj.get("preview_image"),
+        "planner_preview_image": persisted_media or content_obj.get("planner_preview_image"),
+        "rendered_image": persisted_media or content_obj.get("rendered_image"),
         "published_at": row.get("published_at").isoformat() if hasattr(row.get("published_at"), "isoformat") else row.get("published_at"),
         "supprimer_apres": bool(row.get("supprimer_apres", False)),
         "created_at": row.get("created_at").isoformat() if hasattr(row.get("created_at"), "isoformat") else row.get("created_at"),
@@ -389,30 +414,60 @@ def _insert_social_post(
     date_programmee: datetime,
     supprimer_apres: bool,
 ) -> Dict[str, Any]:
+    planner_preview_image = _extract_persisted_media(contenu_obj)
     safe_content = _content_summary(contenu_obj, fallback_type=str(contenu_obj.get("type") or "post"))
 
-    sql = text(
-        """
-        INSERT INTO social_posts
-            (user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at)
-        VALUES
-            (:user_id, :reseau, :statut, :contenu, :date_programmee, :supprimer_apres, NOW(), NOW())
-        RETURNING id, user_id, reseau, statut, contenu, date_programmee,
-                  published_at, supprimer_apres, created_at, updated_at
-        """
-    )
+    # Keep `contenu` lightweight. The real preview is persisted separately in
+    # social_posts.planner_preview_image so /planner/posts can return it without
+    # needing to parse a huge/truncated JSON payload.
+    if planner_preview_image:
+        safe_content["has_visual"] = True
+    for key in ("media_url", "image_url", "preview_image", "planner_preview_image", "rendered_image"):
+        safe_content[key] = None
 
-    row = db.execute(
-        sql,
-        {
+    has_preview_column = _ensure_planner_preview_column(db)
+
+    if has_preview_column:
+        sql = text(
+            """
+            INSERT INTO social_posts
+                (user_id, reseau, statut, contenu, planner_preview_image, date_programmee, supprimer_apres, created_at, updated_at)
+            VALUES
+                (:user_id, :reseau, :statut, :contenu, :planner_preview_image, :date_programmee, :supprimer_apres, NOW(), NOW())
+            RETURNING id, user_id, reseau, statut, contenu, planner_preview_image, date_programmee,
+                      published_at, supprimer_apres, created_at, updated_at
+            """
+        )
+        params = {
+            "user_id": int(user_id),
+            "reseau": str(reseau),
+            "statut": "scheduled",
+            "contenu": json.dumps(safe_content, ensure_ascii=False),
+            "planner_preview_image": planner_preview_image or None,
+            "date_programmee": date_programmee,
+            "supprimer_apres": bool(supprimer_apres),
+        }
+    else:
+        sql = text(
+            """
+            INSERT INTO social_posts
+                (user_id, reseau, statut, contenu, date_programmee, supprimer_apres, created_at, updated_at)
+            VALUES
+                (:user_id, :reseau, :statut, :contenu, :date_programmee, :supprimer_apres, NOW(), NOW())
+            RETURNING id, user_id, reseau, statut, contenu, date_programmee,
+                      published_at, supprimer_apres, created_at, updated_at
+            """
+        )
+        params = {
             "user_id": int(user_id),
             "reseau": str(reseau),
             "statut": "scheduled",
             "contenu": json.dumps(safe_content, ensure_ascii=False),
             "date_programmee": date_programmee,
             "supprimer_apres": bool(supprimer_apres),
-        },
-    ).mappings().first()
+        }
+
+    row = db.execute(sql, params).mappings().first()
 
     if not row:
         raise HTTPException(status_code=500, detail="Insertion planner impossible")
@@ -423,11 +478,14 @@ def _insert_social_post(
 
 @router.get("/posts")
 def list_planner_posts(db: Session = Depends(get_db), user=Depends(get_current_user)) -> List[Dict[str, Any]]:
-    # Critical: never load full heavy 'contenu' from older rows.
+    has_preview_column = _ensure_planner_preview_column(db)
+
+    preview_select = ", planner_preview_image" if has_preview_column else ""
     sql = text(
-        """
+        f"""
         SELECT id, user_id, reseau, statut,
-               SUBSTRING(contenu FROM 1 FOR 6000) AS contenu,
+               SUBSTRING(contenu FROM 1 FOR 6000) AS contenu
+               {preview_select},
                date_programmee, published_at, supprimer_apres, created_at, updated_at
         FROM social_posts
         WHERE user_id = :user_id
@@ -545,6 +603,8 @@ def update_manual_post_status(post_id: int, payload: Dict[str, Any], db: Session
         raise HTTPException(status_code=400, detail="status invalide")
 
     published_at_value = "NOW()" if status == "published" else "NULL"
+    has_preview_column = _ensure_planner_preview_column(db)
+    preview_select = ", planner_preview_image" if has_preview_column else ""
 
     sql = text(
         f"""
@@ -554,7 +614,8 @@ def update_manual_post_status(post_id: int, payload: Dict[str, Any], db: Session
             updated_at = NOW()
         WHERE id = :post_id AND user_id = :user_id
         RETURNING id, user_id, reseau, statut,
-                  SUBSTRING(contenu FROM 1 FOR 6000) AS contenu,
+                  SUBSTRING(contenu FROM 1 FOR 6000) AS contenu
+                  {preview_select},
                   date_programmee, published_at, supprimer_apres, created_at, updated_at
         """
     )

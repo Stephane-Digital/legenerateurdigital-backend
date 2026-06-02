@@ -11,15 +11,15 @@ except Exception:  # pragma: no cover
 
 
 SYSTEM_PROMPT_DISPATCH = """
-Tu es CMO IA Dispatch, le cerveau marketing stratégique de Le Générateur Digital.
+Tu es Stratège IA Live, le cerveau stratégique business connecté au profil actif du Coach Alex.
 
 Rôle strict :
 - tu ne rédiges PAS le contenu final à la place des modules ;
-- tu analyses le contexte utilisateur ;
+- tu analyses uniquement le contexte utilisateur fourni ;
 - tu décides le levier prioritaire ;
-- tu construis un contexte structuré exploitable par le bon module LGD.
+- tu construis un contexte structuré exploitable par le bon module.
 
-Modules LGD :
+Modules disponibles :
 - emailing : campagnes email orientées offre, séquence, objection, CTA ;
 - lead_engine : lead magnet, landing page, promesse de capture, angle prospect ;
 - editor : post/carrousel/visuel, hook, structure créative, caption directionnelle ;
@@ -30,14 +30,17 @@ Règles absolues :
 - concret, précis, orienté business ;
 - pas de contenu générique ;
 - pas de contenu final long ;
-- chaque champ doit aider le module cible à générer mieux que ChatGPT brut ;
+- chaque champ doit aider le module cible à produire une meilleure sortie ;
 - si une donnée manque, fais une hypothèse utile et explicite-la dans assumptions ;
-- le CMO prépare le brief intelligent, le module produit ensuite.
+- ne cite jamais LGD, Le Générateur Digital, MRR ou l'affiliation LGD sauf si ces éléments sont explicitement présents dans le contexte utilisateur, l'offre, l'objectif ou la niche ;
+- le Stratège prépare le brief intelligent, le module produit ensuite.
 """.strip()
 
 SYSTEM_PROMPT_STRATEGY = """
-Tu es CMO IA V5, le cerveau marketing autonome de Le Générateur Digital.
+Tu es Stratège IA Live, le cerveau stratégique business connecté au profil actif du Coach Alex.
 Tu prends une décision marketing claire et tu fournis une action prioritaire exploitable.
+Tu dois te baser uniquement sur le contexte utilisateur fourni.
+Ne cite jamais LGD, Le Générateur Digital, MRR ou l'affiliation LGD sauf si ces éléments sont explicitement présents dans le contexte utilisateur, l'offre, l'objectif ou la niche.
 Réponse en français, concrète, directe, sans blabla.
 """.strip()
 
@@ -140,7 +143,7 @@ def _fallback_dispatch(*, objective: str, blocker: str, target_module: str, audi
     }
 
     return {
-        "diagnostic": f"L'utilisateur veut : {clean_objective}. Le blocage identifié est : {clean_blocker}. Le CMO doit envoyer un brief structuré au module {module} au lieu de générer un contenu générique.",
+        "diagnostic": f"L'utilisateur veut : {clean_objective}. Le blocage identifié est : {clean_blocker}. Le Stratège IA Live doit envoyer un brief structuré au module {module} au lieu de générer un contenu générique.",
         "decision": {
             "recommended_module": module,
             "priority_action": "Transmettre un contexte marketing cadré au module cible.",
@@ -202,7 +205,7 @@ def _build_module_payloads(context: Dict[str, Any]) -> Dict[str, Any]:
         },
         "coach": {
             "module": "coach",
-            "mission_title": f"Plan CMO — {offer}",
+            "mission_title": f"Plan stratégique — {offer}",
             "brief": f"Objectif : {objective}\nBlocage : {blocker}\nOffre : {offer}\nCible : {audience}\nAngle : {angle}\nPromesse : {promise}\nCTA : {cta}",
             "expected_output": "Plan d'action priorisé, prochaines étapes, risques à éviter, critères de validation.",
             "duration_minutes": 45,
@@ -354,7 +357,7 @@ def _complete_dispatch(data: Dict[str, Any], *, objective: str, blocker: str, ta
         "assumptions": _ensure_list(data.get("assumptions")) or fallback["assumptions"],
         "warnings": _ensure_list(data.get("warnings")),
         "meta": {
-            "module": "CMO IA Dispatch",
+            "module": "Stratège IA Live Dispatch",
             "mode": "analyze_decide_dispatch",
             "model": _choose_model(),
             "content_generation": "disabled_at_cmo_level",
@@ -413,7 +416,7 @@ def generate_cmo_dispatch(
         content = ""
 
     if not content:
-        raise RuntimeError("Réponse OpenAI vide pour CMO IA Dispatch.")
+        raise RuntimeError("Réponse OpenAI vide pour Stratège IA Live Dispatch.")
 
     data = _safe_json_loads(content)
     return _complete_dispatch(data, objective=objective, blocker=blocker, target_module=target_module, audience=audience, offer=offer)
@@ -444,6 +447,12 @@ CONTEXTE BUSINESS
 - Canal préféré : {preferred_channel or "à recommander"}
 - Ton : {tone or "premium, humain, direct"}
 - Niveau utilisateur : {user_level or "intermediate"}
+
+RÈGLES DE CONTEXTE
+- Base-toi sur le contexte actif du Coach Alex.
+- Si le profil est incomplet, reste neutre et universel.
+- N'invente jamais que l'utilisateur vend LGD, du MRR, une formation marketing ou de l'affiliation si ce n'est pas écrit dans le contexte.
+- Si l'objectif actif parle de yoga, immobilier, coaching, nutrition ou tout autre domaine, reste strictement dans ce domaine.
 
 FORMAT STRICT — JSON VALIDE UNIQUEMENT
 {{
@@ -516,11 +525,11 @@ def generate_cmo_strategy(
         content = ""
 
     if not content:
-        raise RuntimeError("Réponse OpenAI vide pour CMO IA V5.")
+        raise RuntimeError("Réponse OpenAI vide pour Stratège IA Live.")
 
     data = _safe_json_loads(content)
     data["meta"] = {
-        "module": "CMO IA V5",
+        "module": "Stratège IA Live",
         "mode": "legacy_strategy_compat",
         "model": _choose_model(),
     }

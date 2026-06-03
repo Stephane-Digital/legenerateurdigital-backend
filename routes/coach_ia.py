@@ -22,6 +22,8 @@ class LiveStrategistIn(BaseModel):
     today: Optional[Dict[str, Any]] = None
     currentMission: Optional[Dict[str, Any]] = None
     generatedAtISO: Optional[str] = None
+    regenerationId: Optional[str] = None
+    regenerationInstruction: Optional[str] = None
 
 
 def _to_int(v: Any, default: int = 0) -> int:

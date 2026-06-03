@@ -310,14 +310,29 @@ def generate_live_strategist(
         if user_name:
             meta["user_name"] = _clean(user_name)[:80]
 
+        regeneration_id = _clean(payload.get("regenerationId"))
+        regeneration_instruction = _clean(payload.get("regenerationInstruction"))
+
+        instruction = (
+            "Analyse le questionnaire, la mission locale et le contexte. "
+            "Produis une mission premium unique, plus humaine que le fallback local. "
+            "Tu dois préserver le positionnement LGD: business digital, action concrète, vente douce, zéro promesse agressive."
+        )
+
+        if regeneration_id:
+            instruction += (
+                "\n\nRÉGÉNÉRATION MANUELLE: l'utilisateur a cliqué sur Régénérer l'analyse. "
+                "Tu dois produire une variation réellement différente: nouvel angle stratégique, nouveaux mots, nouvelles actions, "
+                "sans changer l'objectif business ni inventer de nouvelle offre. "
+                f"Identifiant de variation: {regeneration_id}."
+            )
+            if regeneration_instruction:
+                instruction += f"\nInstruction frontend: {regeneration_instruction}"
+
         user_payload = {
             "meta": meta,
             "payload": payload,
-            "instruction": (
-                "Analyse le questionnaire, la mission locale et le contexte. "
-                "Produis une mission premium unique, plus humaine que le fallback local. "
-                "Tu dois préserver le positionnement LGD: business digital, action concrète, vente douce, zéro promesse agressive."
-            ),
+            "instruction": instruction,
         }
 
         resp = client.chat.completions.create(
@@ -326,7 +341,7 @@ def generate_live_strategist(
                 {"role": "system", "content": sys},
                 {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)[:14000]},
             ],
-            temperature=0.58,
+            temperature=0.72 if _clean(payload.get("regenerationId")) else 0.58,
             max_tokens=1200,
             response_format={"type": "json_object"},
         )

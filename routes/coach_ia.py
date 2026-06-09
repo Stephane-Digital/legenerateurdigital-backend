@@ -9,6 +9,12 @@ from database import get_db
 from routes.auth import get_current_user
 from services.ai.coach_ai import generate_coach_reply, generate_live_strategist
 from services.ai_quota_service import get_or_create_quota, update_quota
+try:
+    from services.coach_profile_service import read_profile, write_profile_patch
+except Exception:  # pragma: no cover - fallback sécurité imports prod
+    read_profile = None  # type: ignore
+    write_profile_patch = None  # type: ignore
+
 
 router = APIRouter(prefix="/coach", tags=["Coach IA"])
 
@@ -62,6 +68,90 @@ def _estimate_tokens(text: str) -> int:
     return max(1, int(len(text or "") / 4))
 
 
+def _clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _detect_project_type(message: str) -> Dict[str, str]:
+    """
+    Détection légère côté route pour enrichir le contexte envoyé au cerveau Alex.
+    La décision profonde reste dans services/ai/coach_ai.py.
+    """
+    msg = _clean_text(message).lower()
+
+    affiliate_keywords = (
+        "affiliation",
+        "affilié",
+        "affilie",
+        "commission",
+        "code liberté",
+        "code liberte",
+        "vendre une formation existante",
+        "promouvoir une formation",
+        "recommander une formation",
+    )
+
+    product_keywords = (
+        "produit digital",
+        "ebook",
+        "e-book",
+        "formation digitale",
+        "créer un produit",
+        "creer un produit",
+        "niche rentable",
+        "produit rentable",
+        "quoi vendre",
+    )
+
+    if any(k in msg for k in affiliate_keywords):
+        return {
+            "business_mode": "affiliate",
+            "project_status": "INTENT_DETECTED",
+            "project_label": "Parcours Affiliation",
+        }
+
+    if any(k in msg for k in product_keywords):
+        return {
+            "business_mode": "digital_product",
+            "project_status": "INTENT_DETECTED",
+            "project_label": "Parcours Création de produit digital",
+        }
+
+    return {}
+
+
+def _read_user_profile_context(db: Session, user_id: int) -> Dict[str, Any]:
+    if read_profile is None:
+        return {}
+
+    try:
+        profile = read_profile(db, user_id) or {}
+        return profile if isinstance(profile, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_project_intent_if_needed(db: Session, user_id: int, intent_patch: Dict[str, str]) -> None:
+    if not intent_patch or write_profile_patch is None:
+        return
+
+    try:
+        write_profile_patch(
+            db,
+            user_id,
+            patch={
+                "alex_business_project": {
+                    **intent_patch,
+                    "source": "coach_chat",
+                }
+            },
+        )
+    except Exception:
+        # Ne jamais casser le chat Coach si la mémoire projet échoue.
+        pass
+
+
+
 @router.post("/chat")
 def chat(
     payload: ChatIn,
@@ -87,13 +177,32 @@ def chat(
     if reserved_quota is None:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
+    # LGD — Coach Alex FormAction V1
+    # On enrichit le contexte avec le profil persistant + intention projet détectée.
+    # Le cerveau métier reste dans services/ai/coach_ai.py.
+    profile_context = _read_user_profile_context(db, user_id)
+    project_intent = _detect_project_type(payload.message)
+
+    if project_intent:
+        _write_project_intent_if_needed(db, user_id, project_intent)
+
+    coach_context: Dict[str, Any] = {
+        **profile_context,
+        "alex_business_project": {
+            **(profile_context.get("alex_business_project") or {}),
+            **project_intent,
+        },
+    }
+
     # Generate response (provider usage may be included)
     result = generate_coach_reply(
         message=payload.message,
         mode="action",
         focus="jour",
-        context=None,
+        context=coach_context,
         user_id=user_id,
+        user_email=getattr(current_user, "email", None),
+        user_name=getattr(current_user, "name", None) or getattr(current_user, "full_name", None),
         plan=(getattr(q, "plan", None) or "essentiel"),
     )
 

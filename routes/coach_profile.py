@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from schemas.coach_profile_schema import CoachProfileOut, CoachProfileReplaceIn, CoachProfileUpdateIn
 from services.coach_profile_service import read_profile, write_profile_patch, write_profile_replace
+
+try:
+    from services.coach_profile_service import patch_business_project
+except Exception:  # pragma: no cover - compat prod si service non encore mis à jour
+    patch_business_project = None  # type: ignore
 
 # --- deps: get_db + current user ---
 try:
@@ -39,6 +47,30 @@ if get_current_user is None:
 router = APIRouter(prefix="/coach-profile", tags=["CoachProfile"])
 
 
+class CoachBusinessProjectPatchIn(BaseModel):
+    """
+    Patch dédié au futur moteur FormAction.
+    Tous les champs sont optionnels pour permettre des sauvegardes progressives.
+    """
+    project_type: Optional[str] = None
+    business_mode: Optional[str] = None
+    project_status: Optional[str] = None
+    project_label: Optional[str] = None
+    project_name: Optional[str] = None
+    offer_name: Optional[str] = None
+    niche: Optional[str] = None
+    audience: Optional[str] = None
+    pain: Optional[str] = None
+    promise: Optional[str] = None
+    product_type: Optional[str] = None
+    price: Optional[str] = None
+    recommended_platform: Optional[str] = None
+    estimated_days_to_launch: Optional[int] = Field(default=None, ge=0)
+    current_step: Optional[str] = None
+    next_action: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
 def _user_id_from_user(u) -> int:
     # LGD: user may be Pydantic model or SQLAlchemy model
     if hasattr(u, "id"):
@@ -46,6 +78,81 @@ def _user_id_from_user(u) -> int:
     if isinstance(u, dict) and "id" in u:
         return int(u["id"])
     raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+
+
+def _clean_project_patch(payload: CoachBusinessProjectPatchIn) -> Dict[str, Any]:
+    data = payload.model_dump(exclude_none=True)
+    extra = data.pop("extra", None)
+
+    if isinstance(extra, dict):
+        data.update(extra)
+
+    return data
+
+
+def _fallback_patch_business_project(db: Session, user_id: int, patch: Dict[str, Any]):
+    """
+    Sécurité si le service dédié n'est pas encore déployé.
+    On reste compatible avec write_profile_patch existant.
+    """
+    current = read_profile(db, user_id)
+    existing = current.get("alex_business_project")
+    if not isinstance(existing, dict):
+        existing = {}
+
+    merged = {
+        **existing,
+        **patch,
+        "source": patch.get("source") or existing.get("source") or "coach_profile_route",
+    }
+
+    return write_profile_patch(db, user_id, patch={"alex_business_project": merged})
+
+
+
+@router.get("/business-project")
+def get_my_business_project(db: Session = Depends(get_db), user=Depends(get_current_user)):  # type: ignore
+    """
+    LGD — Coach Alex FormAction
+    Retourne la mémoire projet business de l'utilisateur.
+    """
+    if get_current_user is None:
+        raise HTTPException(status_code=500, detail="Auth dependency get_current_user introuvable")
+
+    user_id = _user_id_from_user(user)
+    profile = read_profile(db, user_id)
+    project = profile.get("alex_business_project") or {}
+
+    return {
+        "user_id": user_id,
+        "alex_business_project": project if isinstance(project, dict) else {},
+    }
+
+
+@router.patch("/business-project")
+def patch_my_business_project(payload: CoachBusinessProjectPatchIn, db: Session = Depends(get_db), user=Depends(get_current_user)):  # type: ignore
+    """
+    LGD — Coach Alex FormAction
+    Sauvegarde progressive du projet business : produit digital, affiliation, ebook, plateforme, étape, mission suivante.
+    """
+    if get_current_user is None:
+        raise HTTPException(status_code=500, detail="Auth dependency get_current_user introuvable")
+
+    user_id = _user_id_from_user(user)
+    patch = _clean_project_patch(payload)
+
+    if patch_business_project is not None:
+        patch_business_project(db, user_id, patch=patch)  # type: ignore
+    else:
+        _fallback_patch_business_project(db, user_id, patch)
+
+    profile = read_profile(db, user_id)
+    project = profile.get("alex_business_project") or {}
+
+    return {
+        "user_id": user_id,
+        "alex_business_project": project if isinstance(project, dict) else {},
+    }
 
 
 @router.get("", response_model=CoachProfileOut)

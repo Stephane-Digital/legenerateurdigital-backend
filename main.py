@@ -56,6 +56,7 @@ from routes.trend_radar import router as trend_radar_router
 from routes.cmo_ai import router as cmo_ai_router
 from routes.cmo_scenarios import router as cmo_scenarios_router
 from routes import social_ai_live
+from routes.coach_market import router as coach_market_router
 
 app = FastAPI(title="Le Générateur Digital — Backend LGD 2026")
 
@@ -193,6 +194,7 @@ app.include_router(trend_radar_router)
 app.include_router(cmo_ai_router)
 app.include_router(cmo_scenarios_router)
 app.include_router(social_ai_live.router)
+app.include_router(coach_market_router)
 
 print("========== ROUTES CHARGEES ==========")
 for r in app.routes:

@@ -9,8 +9,9 @@ FALLBACK_REPLY = (
     "Je suis Alex. Donne-moi :\n"
     "1) ton objectif concret\n"
     "2) ton temps disponible par jour\n"
-    "3) ta niche ou ton idée d’offre\n\n"
-    "Et je te construis un plan d’exécution clair avec une prochaine action unique."
+    "3) si tu veux créer ton propre produit digital ou développer une activité d’affiliation\n"
+    "4) ta niche, ton idée d’offre ou l’offre que tu veux promouvoir\n\n"
+    "Et je te construis un parcours FormAction clair avec une prochaine action unique."
 )
 
 
@@ -37,6 +38,15 @@ def _compact_context(context: Dict[str, Any] | None) -> str:
         "mainBlocker",
         "level",
         "last_action",
+        "business_mode",
+        "project_type",
+        "project_name",
+        "project_status",
+        "selected_niche",
+        "selected_platform",
+        "recommended_platform",
+        "estimated_days_to_market",
+        "roadmap_step",
     )
     out = []
     for key in keys:
@@ -66,11 +76,90 @@ def _compact_context(context: Dict[str, Any] | None) -> str:
     return " | ".join(out) if out else "Contexte profil présent mais non exploitable."
 
 
-def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | None = None) -> str:
+
+def _detect_project_intent(message: str) -> str:
+    msg = _clean(message).lower()
+
+    affiliate_words = (
+        "affiliation",
+        "affilié",
+        "affilie",
+        "commission",
+        "promouvoir",
+        "recommander",
+        "code liberté",
+        "code liberte",
+        "formation en affiliation",
+        "offre existante",
+    )
+    product_words = (
+        "produit digital",
+        "ebook",
+        "e-book",
+        "créer un produit",
+        "creer un produit",
+        "produit rentable",
+        "niche rentable",
+        "niches rentables",
+        "quoi vendre",
+        "mise en vente",
+    )
+
+    if any(word in msg for word in affiliate_words):
+        return "AFFILIATE_MODE"
+    if any(word in msg for word in product_words):
+        return "PRODUCT_CREATOR_MODE"
+    return ""
+
+
+def _project_mode_prompt(message: str) -> str:
+    intent = _detect_project_intent(message)
+    if not intent:
+        return ""
+
+    common = (
+        "\n\nMODE FORMACTION ACTIVÉ — RÈGLES PRIORITAIRES:\n"
+        "- Coach Alex doit piloter LGD comme un architecte business, pas comme un chatbot.\n"
+        "- L'utilisateur ne doit pas choisir les modules seul: Alex indique le bon module au bon moment.\n"
+        "- Alex avance mission par mission. Une seule mission prioritaire à la fois.\n"
+        "- Alex doit afficher un temps estimé réaliste jusqu'à la mise en vente quand le projet s'y prête.\n"
+        "- Alex doit proposer une prochaine action courte, mesurable et réalisable aujourd'hui.\n"
+        "- Ne jamais promettre un revenu garanti. Parler de trajectoire, probabilité, clarté et exécution.\n"
+    )
+
+    if intent == "AFFILIATE_MODE":
+        return (
+            common
+            + "\nPARCOURS DÉTECTÉ: ACTIVITÉ D'AFFILIATION.\n"
+            "Si l'utilisateur veut vendre Code Liberté ou une formation existante, ne jamais présenter l'offre comme du MRR sauf si l'utilisateur le précise explicitement.\n"
+            "Alex doit traiter l'offre comme une activité d'affiliation: choisir l'audience, positionner l'offre, créer les contenus, capter des prospects, relancer, planifier.\n"
+            "Structure attendue si c'est un nouveau projet d'affiliation:\n"
+            "1) confirmer l'offre à promouvoir;\n"
+            "2) proposer 3 à 5 audiences possibles;\n"
+            "3) recommander l'audience la mieux positionnée;\n"
+            "4) estimer le temps jusqu'à première mise en vente;\n"
+            "5) donner la mission du jour.\n"
+            "Modules LGD à orchestrer: Coach Alex, Lead Engine IA, Éditeur Intelligent, Emailing IA, Planner IA, Bibliothèque.\n"
+        )
+
+    return (
+        common
+        + "\nPARCOURS DÉTECTÉ: CRÉATION DE PRODUIT DIGITAL.\n"
+        "Si l'utilisateur demande une niche rentable ou un produit digital rentable, Alex doit proposer 5 niches avec forte demande.\n"
+        "Pour chaque niche: demande, douleur principale, audience cible, produit digital possible, prix conseillé, difficulté, rapidité de lancement, concurrence, potentiel, score de réussite LGD.\n"
+        "Alex doit recommander UNE niche comme meilleure option et expliquer pourquoi.\n"
+        "L'utilisateur doit pouvoir choisir, demander une variante ou régénérer.\n"
+        "Une fois la niche validée, Alex construit le projet de A à Z: positionnement, avatar, promesse, offre, produit, bonus, prix, plateforme, lead magnet, page, emails, contenus, planner, mise en vente.\n"
+        "Alex doit recommander la meilleure plateforme de vente selon le projet: Systeme.io, Gumroad, Payhip, KDP ou autre, avec un score et une raison claire.\n"
+    )
+
+
+def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | None = None, message: str = "") -> str:
     mode_n = _clean(mode).lower() or "premium"
     focus_n = _clean(focus).lower() or "jour"
     plan_n = _clean(plan).lower() or "essentiel"
     ctx = _compact_context(context)
+    project_guidance = _project_mode_prompt(message)
 
     return (
         "Tu es Alex V3, Coach Business IA premium de Le Générateur Digital. "
@@ -94,6 +183,7 @@ def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | N
         "- ne promets jamais de résultat garanti; parle de trajectoire réaliste;\n"
         "- si le contexte contient un objectif chiffré, adapte la réponse à cet objectif;\n"
         "- évite les réponses longues: utile, clair, exploitable."
+        f"{project_guidance}"
     )
 
 
@@ -133,7 +223,7 @@ def generate_coach_reply(
         from openai import OpenAI  # type: ignore
 
         client = OpenAI(api_key=api_key)
-        sys = _system_prompt(mode=mode, focus=focus, plan=plan, context=context)
+        sys = _system_prompt(mode=mode, focus=focus, plan=plan, context=context, message=msg)
 
         meta_bits = []
         if user_name:

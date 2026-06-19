@@ -235,6 +235,112 @@ def _token_expiration(hours: int) -> datetime:
     return datetime.utcnow() + timedelta(hours=hours)
 
 
+def _ensure_systemeio_webhook_logs_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS systemeio_webhook_logs (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                event TEXT NULL,
+                email TEXT NULL,
+                payload_json JSONB NOT NULL,
+                headers_json JSONB NULL,
+                route_version TEXT NULL,
+                db_name TEXT NULL
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_systemeio_webhook_logs_created_at
+            ON systemeio_webhook_logs (created_at DESC)
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_systemeio_webhook_logs_email
+            ON systemeio_webhook_logs (LOWER(email))
+            """
+        )
+    )
+    db.flush()
+
+
+def _safe_headers_for_log(request: Request) -> dict:
+    safe_headers: dict[str, str] = {}
+    hidden_headers = {
+        "authorization",
+        "cookie",
+        "x-api-key",
+        "x-webhook-signature",
+    }
+
+    try:
+        for key, value in request.headers.items():
+            clean_key = str(key or "").strip()
+            if not clean_key:
+                continue
+            if clean_key.lower() in hidden_headers:
+                safe_headers[clean_key] = "***hidden***"
+            else:
+                safe_headers[clean_key] = str(value or "")
+    except Exception:
+        return {}
+
+    return safe_headers
+
+
+def _log_systemeio_payload(
+    db: Session,
+    *,
+    event: str,
+    email: str,
+    payload: dict,
+    headers: dict,
+) -> None:
+    try:
+        _ensure_systemeio_webhook_logs_table(db)
+        db.execute(
+            text(
+                """
+                INSERT INTO systemeio_webhook_logs (
+                    event,
+                    email,
+                    payload_json,
+                    headers_json,
+                    route_version,
+                    db_name
+                )
+                VALUES (
+                    :event,
+                    :email,
+                    CAST(:payload_json AS JSONB),
+                    CAST(:headers_json AS JSONB),
+                    :route_version,
+                    :db_name
+                )
+                """
+            ),
+            {
+                "event": str(event or "UNKNOWN"),
+                "email": str(email or "").strip().lower() or None,
+                "payload_json": json.dumps(payload or {}, ensure_ascii=False),
+                "headers_json": json.dumps(headers or {}, ensure_ascii=False),
+                "route_version": ROUTE_VERSION,
+                "db_name": _current_database_name(db),
+            },
+        )
+        db.flush()
+    except Exception as e:
+        # Diagnostic non bloquant : le webhook doit continuer même si la table/log échoue.
+        print("⚠️ WEBHOOK SIO LOG SKIPPED:", repr(e))
+
+
 def _ensure_activation_tokens_table(db: Session) -> None:
     db.execute(
         text(
@@ -532,6 +638,17 @@ async def _handle_systemeio_webhook(request: Request, db: Session) -> dict:
             if not hmac.compare_digest(signature, expected):
                 raise HTTPException(status_code=401, detail="Invalid signature")
 
+        inferred_event = _infer_event_from_payload(payload, event)
+        extracted_email = _extract_email(payload)
+
+        _log_systemeio_payload(
+            db,
+            event=inferred_event,
+            email=extracted_email,
+            payload=payload,
+            headers=_safe_headers_for_log(request),
+        )
+
         return _process_event(db=db, event=event, payload=payload)
 
     except HTTPException:
@@ -555,6 +672,15 @@ async def systemeio_webhook(request: Request, db: Session = Depends(get_db)):
 @router.post("/test")
 async def systemeio_webhook_test(data: SystemeioTestPayload, db: Session = Depends(get_db)):
     try:
+        inferred_event = _infer_event_from_payload(data.payload, data.event)
+        extracted_email = _extract_email(data.payload)
+        _log_systemeio_payload(
+            db,
+            event=inferred_event,
+            email=extracted_email,
+            payload=data.payload,
+            headers={"source": "manual_test_endpoint"},
+        )
         return _process_event(db=db, event=data.event, payload=data.payload)
     except HTTPException:
         raise

@@ -73,6 +73,20 @@ def _compact_context(context: Dict[str, Any] | None) -> str:
             except Exception:
                 pass
 
+    # FormAction : le parcours « Autre / objectif personnalisé » est enregistré
+    # dans la mémoire du projet. Le transmettre explicitement au modèle évite
+    # qu'Alex réinterprète par défaut le projet comme MRR ou affiliation.
+    project = context.get("alex_business_project")
+    if isinstance(project, dict) and project.get("parcours") == "objectif_personnalise":
+        custom_goal = _clean(project.get("customObjective"))
+        if custom_goal:
+            out.append(f"objectif_personnalise={custom_goal[:400]}")
+            out.append("parcours=objectif_personnalise; commencer par clarifier et valider, sans imposer une activité ou une promesse de revenus")
+        for field in ("offerDescription", "problemSolved", "transformationPromise", "targetAudienceDescription"):
+            value = _clean(project.get(field))
+            if value:
+                out.append(f"{field}={value[:240]}")
+
     return " | ".join(out) if out else "Contexte profil présent mais non exploitable."
 
 

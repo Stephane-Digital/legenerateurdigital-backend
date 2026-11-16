@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ except Exception:  # pragma: no cover - fallback sécurité imports prod
 
 
 router = APIRouter(prefix="/coach", tags=["Coach IA"])
+logger = logging.getLogger(__name__)
 
 
 class ChatIn(BaseModel):
@@ -30,6 +32,33 @@ class LiveStrategistIn(BaseModel):
     generatedAtISO: Optional[str] = None
     regenerationId: Optional[str] = None
     regenerationInstruction: Optional[str] = None
+
+
+def _current_user_field(user: Any, field: str) -> Any:
+    """Compatible avec l'utilisateur SQLAlchemy, Pydantic ou dictionnaire LGD."""
+    if isinstance(user, dict):
+        if field in user:
+            return user.get(field)
+        nested = user.get("user")
+        if isinstance(nested, dict):
+            return nested.get(field)
+        return getattr(nested, field, None)
+    return getattr(user, field, None)
+
+
+def _current_user_id(user: Any) -> int:
+    value = _current_user_field(user, "id")
+    if value is None:
+        value = _current_user_field(user, "user_id")
+    if value is None:
+        value = _current_user_field(user, "sub")
+    try:
+        uid = int(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+    if uid <= 0:
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+    return uid
 
 
 def _to_int(v: Any, default: int = 0) -> int:
@@ -78,6 +107,9 @@ def _detect_project_type(message: str) -> Dict[str, str]:
     La décision profonde reste dans services/ai/coach_ai.py.
     """
     msg = _clean_text(message).lower()
+    # Un choix explicite d'objectif libre interdit le reclassement par mots-clés.
+    if "objectif_personnalise" in msg:
+        return {}
 
     affiliate_keywords = (
         "affiliation",
@@ -164,16 +196,24 @@ def chat(
     - Debit is performed via services.ai_quota_service.update_quota()
       so the header (/ai-quota) reflects real consumption.
     """
-    user_id = int(getattr(current_user, "id"))
+    user_id = _current_user_id(current_user)
 
     # Ensure the canonical global bucket exists and reserve before OpenAI call.
-    q = get_or_create_quota(db, user_id, feature="global")
+    try:
+        q = get_or_create_quota(db, user_id, feature="global")
+    except Exception:
+        logger.exception("Echec de lecture des quotas Coach Chat")
+        raise
     snap = _quota_snapshot(q)
     if snap["limit"] > 0 and snap["remaining"] <= 0:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
     reserved_tokens = max(1_200, min(_estimate_tokens(payload.message) + 1_800, 5_000))
-    reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+    try:
+        reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+    except Exception:
+        logger.exception("Echec du debit des quotas Coach Chat")
+        raise
     if reserved_quota is None:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
@@ -201,8 +241,8 @@ def chat(
         focus="jour",
         context=coach_context,
         user_id=user_id,
-        user_email=getattr(current_user, "email", None),
-        user_name=getattr(current_user, "name", None) or getattr(current_user, "full_name", None),
+        user_email=_current_user_field(current_user, "email"),
+        user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
         plan=(getattr(q, "plan", None) or "essentiel"),
     )
 
@@ -243,7 +283,7 @@ def live_strategist(
     - Utilise le même bucket quota que le Coach IA: feature="global"
     - Réponse JSON strictement compatible avec live-strategist.ts
     """
-    user_id = int(getattr(current_user, "id"))
+    user_id = _current_user_id(current_user)
 
     q = get_or_create_quota(db, user_id, feature="global")
     snap = _quota_snapshot(q)
@@ -261,8 +301,8 @@ def live_strategist(
     result = generate_live_strategist(
         payload=payload.model_dump(),
         user_id=user_id,
-        user_email=getattr(current_user, "email", None),
-        user_name=getattr(current_user, "name", None) or getattr(current_user, "full_name", None),
+        user_email=_current_user_field(current_user, "email"),
+        user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
         plan=(getattr(q, "plan", None) or "essentiel"),
     )
 

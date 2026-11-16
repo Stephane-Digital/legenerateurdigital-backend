@@ -93,6 +93,9 @@ def _compact_context(context: Dict[str, Any] | None) -> str:
 
 def _detect_project_intent(message: str) -> str:
     msg = _clean(message).lower()
+    # Respect du choix explicite « Objectif personnalisé » sans classification forcée.
+    if "objectif_personnalise" in msg:
+        return ""
 
     affiliate_words = (
         "affiliation",

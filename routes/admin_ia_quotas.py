@@ -2,9 +2,10 @@ from __future__ import annotations
 
 
 import os
+from secrets import compare_digest
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -33,22 +34,28 @@ from services.user_entitlements import set_plan_override, clear_plan_override, g
 # ✅ We also update the quota row so plan+limit stay coherent across reload.
 from services.ai_quota_service import get_or_create_quota
 
-router = APIRouter(prefix="/admin/ia", tags=["admin-ia"])
+def _require_admin_key(
+    x_lgd_admin_key: Optional[str] = Header(None, alias="X-LGD-Admin-Key"),
+) -> None:
+    """S0.B: mandatory server-side verification for *all* /admin/ia endpoints.
+
+    Never accept credentials from URLs or JSON bodies. No weak legacy fallback.
+    """
+    expected = (os.getenv("LGD_ADMIN_KEY") or "").strip()
+    if len(expected) < 32:
+        raise HTTPException(status_code=503, detail="Accès administrateur non configuré")
+    if not x_lgd_admin_key:
+        raise HTTPException(status_code=401, detail="Clé administrateur requise")
+    if not compare_digest(x_lgd_admin_key, expected):
+        raise HTTPException(status_code=403, detail="Accès administrateur refusé")
 
 
-def _require_admin_key(admin_key: Optional[str]) -> None:
-    if not admin_key or not str(admin_key).strip():
-        raise HTTPException(status_code=401, detail="ADMIN KEY manquant côté backend (.env)")
-
-
-def _pick_admin_key(admin_key_q: str | None, payload: dict | None) -> str:
-    if payload and isinstance(payload, dict):
-        k = payload.get("admin_key")
-        if isinstance(k, str) and k.strip():
-            return k.strip()
-    if isinstance(admin_key_q, str) and admin_key_q.strip():
-        return admin_key_q.strip()
-    return ""
+# A router-level dependency secures existing routes and any future route added here.
+router = APIRouter(
+    prefix="/admin/ia",
+    tags=["admin-ia"],
+    dependencies=[Depends(_require_admin_key)],
+)
 
 
 def _safe_set_attr(obj: Any, name: str, value: Any) -> bool:
@@ -91,7 +98,6 @@ class QuotaLimitBody(BaseModel):
 
 @router.get("/quotas")
 def get_quotas(
-    admin_key: str = Query(...),
     feature: Optional[str] = Query(None),
     plan: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
@@ -99,7 +105,6 @@ def get_quotas(
     page_size: int = Query(10),
     db: Session = Depends(get_db),
 ) -> Any:
-    _require_admin_key(admin_key)
     return list_quotas(db=db, feature=feature, plan=plan, q=q, page=page, page_size=page_size)
 
 
@@ -108,10 +113,8 @@ def post_reset_quota(
     payload: dict | None = Body(None),
     plan: str | None = Query(None),
     months: int | None = Query(None),
-    admin_key: str = Query(...),
     db: Session = Depends(get_db),
 ) -> Any:
-    _require_admin_key(admin_key)
     payload = payload or {}
     user_id = payload.get("user_id")
     feature = payload.get("feature")
@@ -126,10 +129,8 @@ def post_set_limit(
     payload: dict | None = Body(None),
     plan: str | None = Query(None),
     months: int | None = Query(None),
-    admin_key: str = Query(...),
     db: Session = Depends(get_db),
 ) -> Any:
-    _require_admin_key(admin_key)
     payload = payload or {}
     try:
         user_id = int(payload.get("user_id"))
@@ -147,12 +148,9 @@ def post_plan_override(
     payload: dict | None = Body(None),
     plan: str | None = Query(None),
     months: int | None = Query(None),
-    admin_key: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Any:
     payload = payload or {}
-    key = _pick_admin_key(admin_key, payload)
-    _require_admin_key(key)
 
     plan_val = payload.get("plan") or plan
     months_val = payload.get("months") or payload.get("duration_months") or months or 3
@@ -199,12 +197,9 @@ def post_plan_override(
 def post_plan_clear(
     user_id: int,
     payload: dict | None = Body(None),
-    admin_key: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Any:
     payload = payload or {}
-    key = _pick_admin_key(admin_key, payload)
-    _require_admin_key(key)
 
     try:
         out = clear_plan_override(db, user_id=int(user_id))
@@ -232,7 +227,6 @@ def post_user_base_plan(
     user_id: int,
     payload: dict | None = Body(None),
     plan: str | None = Query(None),
-    admin_key: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Any:
     """Force le plan réel de base (ex : remettre un ancien essai en Azur).
@@ -243,8 +237,6 @@ def post_user_base_plan(
     - ia_quota/global = aligné sur le plan effectif final
     """
     payload = payload or {}
-    key = _pick_admin_key(admin_key, payload)
-    _require_admin_key(key)
 
     plan_val = payload.get("plan") or payload.get("base_plan") or plan
     if not plan_val:
@@ -300,12 +292,9 @@ def post_user_base_plan(
 def post_user_quota_reset(
     user_id: int,
     payload: dict | None = Body(None),
-    admin_key: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Any:
     payload = payload or {}
-    key = _pick_admin_key(admin_key, payload)
-    _require_admin_key(key)
     feature = payload.get("feature")
     try:
         return reset_quota(db=db, user_id=int(user_id), feature=feature)
@@ -319,12 +308,9 @@ def post_user_quota_limit(
     payload: dict | None = Body(None),
     plan: str | None = Query(None),
     months: int | None = Query(None),
-    admin_key: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Any:
     payload = payload or {}
-    key = _pick_admin_key(admin_key, payload)
-    _require_admin_key(key)
     feature = payload.get("feature")
     try:
         limit_tokens = int(payload.get("limit_tokens"))

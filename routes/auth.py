@@ -162,7 +162,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         print("REGISTER ERROR:", repr(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erreur interne lors de l’activation du compte")
 
 
 @router.post("/login")
@@ -243,7 +243,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
         print("LOGIN ERROR:", repr(e))
         return JSONResponse(
             status_code=500,
-            content={"detail": f"LOGIN_ERROR: {repr(e)}"},
+            content={"detail": "Erreur interne lors de la connexion"},
         )
 
 

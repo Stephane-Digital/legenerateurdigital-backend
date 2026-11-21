@@ -144,7 +144,13 @@ def write_profile_replace(
     time_per_day: Optional[int] = None,
 ) -> CoachProfile:
     cp = get_or_create(db, user_id)
-    cp.profile_json = _safe_json_dumps(profile)
+    # S3.B : un PUT de profil Business ne doit jamais effacer l'historique
+    # conversationnel, géré uniquement par les routes /coach/conversation.
+    current = _safe_json_loads(cp.profile_json)
+    next_profile = dict(profile or {})
+    if "alex_conversation_v1" in current:
+        next_profile["alex_conversation_v1"] = current["alex_conversation_v1"]
+    cp.profile_json = _safe_json_dumps(next_profile)
 
     if intent is not None:
         cp.intent = intent

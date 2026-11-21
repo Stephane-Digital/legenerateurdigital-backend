@@ -176,7 +176,12 @@ def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | N
     focus_n = _clean(focus).lower() or "jour"
     plan_n = _clean(plan).lower() or "essentiel"
     ctx = _compact_context(context)
-    project_guidance = _project_mode_prompt(message)
+    # La discussion libre ne reclasse pas le parcours par mots-clés.
+    project_guidance = (
+        "\n\nMode conversation libre : réponds au besoin présent sans imposer un parcours marketing, "
+        "et ne prétends pas avoir exécuté une action dans les modules."
+        if mode_n == "conversation" else _project_mode_prompt(message)
+    )
 
     return (
         "Tu es Alex V3, Coach Business IA premium de Le Générateur Digital. "
@@ -227,6 +232,7 @@ def generate_coach_reply(
     user_name: str | None = None,
     plan: str = "essentiel",
     depth: int | None = None,
+    history: list[Dict[str, str]] | None = None,
 ) -> Dict[str, Any] | str:
     msg = _clean(message)
     if not msg:
@@ -252,12 +258,20 @@ def generate_coach_reply(
         if meta_bits:
             sys += "\n\nMeta: " + ", ".join(meta_bits)
 
+        messages = [{"role": "system", "content": sys}]
+        # Historique de l'utilisateur connecté, avec vrais rôles OpenAI.
+        # Limité côté route/service pour maîtriser les tokens.
+        for entry in (history or [])[-8:]:
+            if not isinstance(entry, dict) or entry.get("role") not in ("user", "assistant"):
+                continue
+            content = _clean(entry.get("content"))[:750]
+            if content:
+                messages.append({"role": entry["role"], "content": content})
+        messages.append({"role": "user", "content": msg})
+
         resp = client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": sys},
-                {"role": "user", "content": msg},
-            ],
+            messages=messages,
             temperature=0.42,
             max_tokens=900,
         )

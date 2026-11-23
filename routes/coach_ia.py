@@ -10,6 +10,9 @@ from database import get_db
 from routes.auth import get_current_user
 from services.ai.coach_ai import generate_coach_reply, generate_live_strategist
 from services.ai_quota_service import get_or_create_quota, update_quota
+from services.alex_conversation_service import (
+    MAX_USER_CHARS, append_exchange, clear_conversation, list_conversation, recent_history,
+)
 try:
     from services.coach_profile_service import read_profile, write_profile_patch
 except Exception:  # pragma: no cover - fallback sécurité imports prod
@@ -23,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class ChatIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=8000)
+    conversation_mode: bool = False  # S3.B : opt-in, les appels historiques restent inchangés.
 
 
 class LiveStrategistIn(BaseModel):
@@ -184,6 +188,25 @@ def _write_project_intent_if_needed(db: Session, user_id: int, intent_patch: Dic
 
 
 
+@router.get("/conversation")
+def get_my_conversation(
+    current_user=Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Historique privé, lié uniquement à l'utilisateur authentifié."""
+    user_id = _current_user_id(current_user)
+    return {"messages": list_conversation(db, user_id), "limit": 20}
+
+
+@router.delete("/conversation")
+def delete_my_conversation(
+    current_user=Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Supprime l'historique de discussion, sans toucher au profil Business."""
+    user_id = _current_user_id(current_user)
+    clear_conversation(db, user_id)
+    return {"messages": [], "deleted": True}
+
+
 @router.post("/chat")
 def chat(
     payload: ChatIn,
@@ -197,6 +220,12 @@ def chat(
       so the header (/ai-quota) reflects real consumption.
     """
     user_id = _current_user_id(current_user)
+    if payload.conversation_mode and len(payload.message.strip()) > MAX_USER_CHARS:
+        raise HTTPException(status_code=422, detail="Message de conversation trop long")
+
+    # S3.B : seule la conversation libre réutilise l'historique serveur.
+    # L'ancien parcours et les autres clients /coach/chat conservent le même contrat.
+    history = recent_history(db, user_id) if payload.conversation_mode else []
 
     # Ensure the canonical global bucket exists and reserve before OpenAI call.
     try:
@@ -208,7 +237,10 @@ def chat(
     if snap["limit"] > 0 and snap["remaining"] <= 0:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
-    reserved_tokens = max(1_200, min(_estimate_tokens(payload.message) + 1_800, 5_000))
+    estimated_input = payload.message
+    if payload.conversation_mode:
+        estimated_input += "".join(turn["content"] for turn in history)
+    reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000))
     try:
         reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
     except Exception:
@@ -221,11 +253,13 @@ def chat(
     # On enrichit le contexte avec le profil persistant + intention projet détectée.
     # Le cerveau métier reste dans services/ai/coach_ai.py.
     profile_context = _read_user_profile_context(db, user_id)
-    project_intent = _detect_project_type(payload.message)
+    project_intent = {} if payload.conversation_mode else _detect_project_type(payload.message)
 
     if project_intent:
         _write_project_intent_if_needed(db, user_id, project_intent)
 
+    # Ne jamais injecter tout l'historique privé dans le profil/context de la réponse.
+    profile_context.pop("alex_conversation_v1", None)
     coach_context: Dict[str, Any] = {
         **profile_context,
         "alex_business_project": {
@@ -237,9 +271,10 @@ def chat(
     # Generate response (provider usage may be included)
     result = generate_coach_reply(
         message=payload.message,
-        mode="action",
-        focus="jour",
+        mode="conversation" if payload.conversation_mode else "action",
+        focus="libre" if payload.conversation_mode else "jour",
         context=coach_context,
+        history=history if payload.conversation_mode else None,
         user_id=user_id,
         user_email=_current_user_field(current_user, "email"),
         user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
@@ -259,8 +294,19 @@ def chat(
     if tokens <= 0:
         tokens = reserved_tokens
 
+    memory_saved = False
+    saved_messages = None
+    if payload.conversation_mode and reply and isinstance(result, dict) and result.get("source") == "openai":
+        try:
+            saved_messages = append_exchange(db, user_id, payload.message, reply)
+            memory_saved = True
+        except Exception:
+            db.rollback()
+            logger.exception("Échec de sauvegarde de l'historique Coach S3.B")
+
     return {
         "reply": reply,
+        **({"conversation_saved": memory_saved, "conversation_messages": saved_messages} if payload.conversation_mode else {}),
         "tokens_consumed": reserved_tokens,
         "quota": {
             "feature": "global",

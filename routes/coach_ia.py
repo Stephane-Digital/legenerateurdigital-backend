@@ -1,20 +1,69 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
 from routes.auth import get_current_user
-from services.ai.coach_ai import generate_coach_reply
+from services.ai.coach_ai import generate_coach_reply, generate_live_strategist
+from services.ai.alex_project_intelligence import detect_explicit_project
 from services.ai_quota_service import get_or_create_quota, update_quota
+from services.alex_conversation_service import (
+    MAX_USER_CHARS, append_exchange, clear_conversation, list_conversation, recent_history,
+)
+try:
+    from services.coach_profile_service import read_profile, write_profile_patch
+except Exception:  # pragma: no cover - fallback sécurité imports prod
+    read_profile = None  # type: ignore
+    write_profile_patch = None  # type: ignore
+
 
 router = APIRouter(prefix="/coach", tags=["Coach IA"])
+logger = logging.getLogger(__name__)
 
 
 class ChatIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=8000)
+    conversation_mode: bool = False  # S3.B : opt-in, les appels historiques restent inchangés.
+
+
+class LiveStrategistIn(BaseModel):
+    context: Dict[str, Any] = Field(default_factory=dict)
+    today: Optional[Dict[str, Any]] = None
+    currentMission: Optional[Dict[str, Any]] = None
+    generatedAtISO: Optional[str] = None
+    regenerationId: Optional[str] = None
+    regenerationInstruction: Optional[str] = None
+
+
+def _current_user_field(user: Any, field: str) -> Any:
+    """Compatible avec l'utilisateur SQLAlchemy, Pydantic ou dictionnaire LGD."""
+    if isinstance(user, dict):
+        if field in user:
+            return user.get(field)
+        nested = user.get("user")
+        if isinstance(nested, dict):
+            return nested.get(field)
+        return getattr(nested, field, None)
+    return getattr(user, field, None)
+
+
+def _current_user_id(user: Any) -> int:
+    value = _current_user_field(user, "id")
+    if value is None:
+        value = _current_user_field(user, "user_id")
+    if value is None:
+        value = _current_user_field(user, "sub")
+    try:
+        uid = int(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+    if uid <= 0:
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+    return uid
 
 
 def _to_int(v: Any, default: int = 0) -> int:
@@ -53,6 +102,112 @@ def _estimate_tokens(text: str) -> int:
     return max(1, int(len(text or "") / 4))
 
 
+def _clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _detect_project_type(message: str) -> Dict[str, str]:
+    """
+    Détection légère côté route pour enrichir le contexte envoyé au cerveau Alex.
+    La décision profonde reste dans services/ai/coach_ai.py.
+    """
+    msg = _clean_text(message).lower()
+    # Un choix explicite d'objectif libre interdit le reclassement par mots-clés.
+    if "objectif_personnalise" in msg:
+        return {}
+
+    affiliate_keywords = (
+        "affiliation",
+        "affilié",
+        "affilie",
+        "commission",
+        "code liberté",
+        "code liberte",
+        "vendre une formation existante",
+        "promouvoir une formation",
+        "recommander une formation",
+    )
+
+    product_keywords = (
+        "produit digital",
+        "ebook",
+        "e-book",
+        "formation digitale",
+        "créer un produit",
+        "creer un produit",
+        "niche rentable",
+        "produit rentable",
+        "quoi vendre",
+    )
+
+    if any(k in msg for k in affiliate_keywords):
+        return {
+            "business_mode": "affiliate",
+            "project_status": "INTENT_DETECTED",
+            "project_label": "Parcours Affiliation",
+        }
+
+    if any(k in msg for k in product_keywords):
+        return {
+            "business_mode": "digital_product",
+            "project_status": "INTENT_DETECTED",
+            "project_label": "Parcours Création de produit digital",
+        }
+
+    return {}
+
+
+def _read_user_profile_context(db: Session, user_id: int) -> Dict[str, Any]:
+    if read_profile is None:
+        return {}
+
+    try:
+        profile = read_profile(db, user_id) or {}
+        return profile if isinstance(profile, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_project_intent_if_needed(db: Session, user_id: int, intent_patch: Dict[str, str]) -> None:
+    if not intent_patch or write_profile_patch is None:
+        return
+
+    try:
+        write_profile_patch(
+            db,
+            user_id,
+            patch={
+                "alex_business_project": {
+                    **intent_patch,
+                    "source": "coach_chat",
+                }
+            },
+        )
+    except Exception:
+        # Ne jamais casser le chat Coach si la mémoire projet échoue.
+        pass
+
+
+
+@router.get("/conversation")
+def get_my_conversation(
+    current_user=Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Historique privé, lié uniquement à l'utilisateur authentifié."""
+    user_id = _current_user_id(current_user)
+    return {"messages": list_conversation(db, user_id), "limit": 20}
+
+
+@router.delete("/conversation")
+def delete_my_conversation(
+    current_user=Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Supprime l'historique de discussion, sans toucher au profil Business."""
+    user_id = _current_user_id(current_user)
+    clear_conversation(db, user_id)
+    return {"messages": [], "deleted": True}
+
+
 @router.post("/chat")
 def chat(
     payload: ChatIn,
@@ -61,25 +216,75 @@ def chat(
 ):
     """
     LGD — Coach V2 token debit (STABLE)
-    - Source of truth bucket: feature="coach"
+    - Source of truth bucket: feature="global"
     - Debit is performed via services.ai_quota_service.update_quota()
       so the header (/ai-quota) reflects real consumption.
     """
-    user_id = int(getattr(current_user, "id"))
+    user_id = _current_user_id(current_user)
+    if payload.conversation_mode and len(payload.message.strip()) > MAX_USER_CHARS:
+        raise HTTPException(status_code=422, detail="Message de conversation trop long")
 
-    # Ensure the canonical coach bucket exists
-    q = get_or_create_quota(db, user_id, feature="coach")
+    # S3.B : seule la conversation libre réutilise l'historique serveur.
+    # L'ancien parcours et les autres clients /coach/chat conservent le même contrat.
+    history = recent_history(db, user_id) if payload.conversation_mode else []
+
+    # Ensure the canonical global bucket exists and reserve before OpenAI call.
+    try:
+        q = get_or_create_quota(db, user_id, feature="global")
+    except Exception:
+        logger.exception("Echec de lecture des quotas Coach Chat")
+        raise
     snap = _quota_snapshot(q)
     if snap["limit"] > 0 and snap["remaining"] <= 0:
         raise HTTPException(status_code=402, detail="Quota IA atteint")
 
+    estimated_input = payload.message
+    if payload.conversation_mode:
+        estimated_input += "".join(turn["content"] for turn in history)
+    reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000))
+    try:
+        reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+    except Exception:
+        logger.exception("Echec du debit des quotas Coach Chat")
+        raise
+    if reserved_quota is None:
+        raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+    # LGD — Coach Alex FormAction V1
+    # On enrichit le contexte avec le profil persistant + intention projet détectée.
+    # Le cerveau métier reste dans services/ai/coach_ai.py.
+    profile_context = _read_user_profile_context(db, user_id)
+    # S3.C.2 : identifier un choix explicite, sans reclasser une simple question.
+    existing_project = profile_context.get("alex_business_project")
+    existing_project = existing_project if isinstance(existing_project, dict) else {}
+    project_intent = (
+        detect_explicit_project(payload.message, existing_project)
+        if payload.conversation_mode else _detect_project_type(payload.message)
+    )
+
+    if project_intent:
+        _write_project_intent_if_needed(db, user_id, project_intent)
+
+    # Ne jamais injecter tout l'historique privé dans le profil/context de la réponse.
+    profile_context.pop("alex_conversation_v1", None)
+    coach_context: Dict[str, Any] = {
+        **profile_context,
+        "alex_business_project": {
+            **(profile_context.get("alex_business_project") or {}),
+            **project_intent,
+        },
+    }
+
     # Generate response (provider usage may be included)
     result = generate_coach_reply(
         message=payload.message,
-        mode="action",
-        focus="jour",
-        context=None,
+        mode="conversation" if payload.conversation_mode else "action",
+        focus="libre" if payload.conversation_mode else "jour",
+        context=coach_context,
+        history=history if payload.conversation_mode else None,
         user_id=user_id,
+        user_email=_current_user_field(current_user, "email"),
+        user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
         plan=(getattr(q, "plan", None) or "essentiel"),
     )
 
@@ -94,20 +299,88 @@ def chat(
         reply = str(result).strip()
 
     if tokens <= 0:
-        tokens = _estimate_tokens(payload.message) + _estimate_tokens(reply)
+        tokens = reserved_tokens
 
-    updated = update_quota(db, user_id, tokens, feature="coach")
-    if updated is None:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
+    memory_saved = False
+    saved_messages = None
+    if payload.conversation_mode and reply and isinstance(result, dict) and result.get("source") == "openai":
+        try:
+            saved_messages = append_exchange(db, user_id, payload.message, reply)
+            memory_saved = True
+        except Exception:
+            db.rollback()
+            logger.exception("Échec de sauvegarde de l'historique Coach S3.B")
 
     return {
         "reply": reply,
-        "tokens_consumed": tokens,
+        **({"conversation_saved": memory_saved, "conversation_messages": saved_messages} if payload.conversation_mode else {}),
+        "tokens_consumed": reserved_tokens,
         "quota": {
-            "feature": "coach",
-            "plan": getattr(updated, "plan", None) or getattr(q, "plan", None) or "essentiel",
-            "tokens_used": _to_int(getattr(updated, "tokens_used", None), _to_int(getattr(updated, "used_tokens", None), 0)),
-            "tokens_limit": _to_int(getattr(updated, "credits", None), _to_int(getattr(updated, "tokens_limit", None), _to_int(getattr(updated, "limit_tokens", None), 0))),
-            "remaining": _to_int(getattr(updated, "remaining", None), 0),
+            "feature": "global",
+            "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
+            "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
+            "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
+            "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
         },
     }
+
+@router.post("/live-strategist")
+def live_strategist(
+    payload: LiveStrategistIn,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    LGD — Alex Stratège IA Live Premium
+    - Endpoint appelé par le front: /coach/live-strategist
+    - Utilise le même bucket quota que le Coach IA: feature="global"
+    - Réponse JSON strictement compatible avec live-strategist.ts
+    """
+    user_id = _current_user_id(current_user)
+
+    q = get_or_create_quota(db, user_id, feature="global")
+    snap = _quota_snapshot(q)
+    if snap["limit"] > 0 and snap["remaining"] <= 0:
+        raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+    # Réserve volontairement bornée: diagnostic premium + mission + actions.
+    payload_text = payload.model_dump_json(exclude_none=True)
+    reserved_tokens = max(1_800, min(_estimate_tokens(payload_text) + 2_400, 6_000))
+
+    reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+    if reserved_quota is None:
+        raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+    result = generate_live_strategist(
+        payload=payload.model_dump(),
+        user_id=user_id,
+        user_email=_current_user_field(current_user, "email"),
+        user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
+        plan=(getattr(q, "plan", None) or "essentiel"),
+    )
+
+    if not isinstance(result, dict) or result.get("success") is False:
+        return {
+            "success": False,
+            "error": "live_strategist_unavailable",
+            "tokens_consumed": reserved_tokens,
+            "quota": {
+                "feature": "global",
+                "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
+                "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
+                "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
+                "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
+            },
+        }
+
+    result["success"] = True
+    result["tokens_consumed"] = reserved_tokens
+    result["quota"] = {
+        "feature": "global",
+        "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
+        "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
+        "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
+        "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
+    }
+    return result
+

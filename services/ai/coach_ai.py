@@ -289,7 +289,14 @@ def generate_coach_reply(
             model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),
             messages=messages,
             temperature=0.42,
-            max_tokens=900,
+            # S3.C.1 : laisser de la place aux plans détaillés explicitement demandés,
+            # sans augmenter les réponses courtes par défaut.
+            max_tokens=1600 if mode == "conversation" and any(
+                term in msg.lower() for term in (
+                    "plan détaillé", "plan detaille", "chapitres", "sommaire",
+                    "étape par étape", "etape par etape", "plan complet",
+                )
+            ) else 900,
         )
 
         reply = ""

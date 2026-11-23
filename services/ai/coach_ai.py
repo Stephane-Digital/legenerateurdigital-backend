@@ -1,81 +1,382 @@
 from __future__ import annotations
 
 import json
+from services.ai.alex_project_intelligence import project_guidance
 import os
-from typing import Any, Dict, List
-
-try:
-    from openai import OpenAI
-except Exception:  # pragma: no cover
-    OpenAI = None  # type: ignore
+from typing import Any, Dict, Optional
 
 
-SYSTEM_PROMPT_DISPATCH = """
-Tu es Stratège IA Live, le cerveau stratégique business connecté au profil actif du Coach Alex.
-
-Rôle strict :
-- tu ne rédiges PAS le contenu final à la place des modules ;
-- tu analyses uniquement le contexte utilisateur fourni ;
-- tu décides le levier prioritaire ;
-- tu construis un contexte structuré exploitable par le bon module.
-
-Modules disponibles :
-- emailing : campagnes email orientées offre, séquence, objection, CTA ;
-- lead_engine : lead magnet, landing page, promesse de capture, angle prospect ;
-- editor : post/carrousel/visuel, hook, structure créative, caption directionnelle ;
-- coach : plan d'action, clarification stratégique, exécution priorisée.
-
-Règles absolues :
-- français ;
-- concret, précis, orienté business ;
-- pas de contenu générique ;
-- pas de contenu final long ;
-- chaque champ doit aider le module cible à produire une meilleure sortie ;
-- si une donnée manque, fais une hypothèse utile et explicite-la dans assumptions ;
-- ne cite jamais LGD, Le Générateur Digital, MRR ou l'affiliation LGD sauf si ces éléments sont explicitement présents dans le contexte utilisateur, l'offre, l'objectif ou la niche ;
-- le Stratège prépare le brief intelligent, le module produit ensuite.
-""".strip()
-
-SYSTEM_PROMPT_STRATEGY = """
-Tu es Stratège IA Live, le cerveau stratégique business connecté au profil actif du Coach Alex.
-Tu prends une décision marketing claire et tu fournis une action prioritaire exploitable.
-Tu dois te baser uniquement sur le contexte utilisateur fourni.
-Ne cite jamais LGD, Le Générateur Digital, MRR ou l'affiliation LGD sauf si ces éléments sont explicitement présents dans le contexte utilisateur, l'offre, l'objectif ou la niche.
-Réponse en français, concrète, directe, sans blabla.
-""".strip()
-
-_ALLOWED_MODULES = {"emailing", "lead_engine", "editor", "coach"}
+FALLBACK_REPLY = (
+    "Je suis Alex. Donne-moi :\n"
+    "1) ton objectif concret\n"
+    "2) ton temps disponible par jour\n"
+    "3) si tu veux créer ton propre produit digital ou développer une activité d’affiliation\n"
+    "4) ta niche, ton idée d’offre ou l’offre que tu veux promouvoir\n\n"
+    "Et je te construis un parcours FormAction clair avec une prochaine action unique."
+)
 
 
-def _clean(value: Any, default: str = "") -> str:
-    text = str(value or "").strip()
-    return text or default
+def _clean(s: Any) -> str:
+    return str(s or "").strip()
 
 
-def _get_client() -> "OpenAI":
-    if OpenAI is None:
-        raise RuntimeError("Le package openai n'est pas installé sur le backend.")
+def _compact_context(context: Dict[str, Any] | None) -> str:
+    if not isinstance(context, dict) or not context:
+        return "Aucun contexte profil fourni."
 
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY manquante dans l'environnement backend.")
+    keys = (
+        "goal",
+        "businessGoal",
+        "revenueGoalMonthly",
+        "deadlineDays",
+        "niche",
+        "offer",
+        "audience",
+        "audienceSize",
+        "stage",
+        "businessModel",
+        "timePerDay",
+        "mainBlocker",
+        "level",
+        "last_action",
+        "business_mode",
+        "project_type",
+        "project_name",
+        "project_status",
+        "selected_niche",
+        "selected_platform",
+        "recommended_platform",
+        "estimated_days_to_market",
+        "roadmap_step",
+    )
+    out = []
+    for key in keys:
+        value = context.get(key)
+        if value is None or value == "":
+            continue
+        out.append(f"{key}={_clean(value)[:160]}")
 
-    return OpenAI(api_key=api_key)
+    trajectory = context.get("trajectory")
+    if isinstance(trajectory, dict):
+        target = trajectory.get("targetLabel") or trajectory.get("target")
+        horizon = trajectory.get("horizonDays")
+        step = trajectory.get("currentStep")
+        forbidden = trajectory.get("forbiddenFocus")
+        if target:
+            out.append(f"trajectory_target={_clean(target)[:160]}")
+        if horizon:
+            out.append(f"trajectory_horizon_days={_clean(horizon)[:40]}")
+        if step:
+            out.append(f"trajectory_current_step={_clean(step)[:160]}")
+        if forbidden:
+            try:
+                out.append(f"forbidden_focus={json.dumps(forbidden, ensure_ascii=False)[:220]}")
+            except Exception:
+                pass
+
+    # FormAction : le parcours « Autre / objectif personnalisé » est enregistré
+    # dans la mémoire du projet. Le transmettre explicitement au modèle évite
+    # qu'Alex réinterprète par défaut le projet comme MRR ou affiliation.
+    project = context.get("alex_business_project")
+    if isinstance(project, dict) and project.get("parcours") == "objectif_personnalise":
+        custom_goal = _clean(project.get("customObjective"))
+        if custom_goal:
+            out.append(f"objectif_personnalise={custom_goal[:400]}")
+            out.append("parcours=objectif_personnalise; commencer par clarifier et valider, sans imposer une activité ou une promesse de revenus")
+        for field in ("offerDescription", "problemSolved", "transformationPromise", "targetAudienceDescription"):
+            value = _clean(project.get(field))
+            if value:
+                out.append(f"{field}={value[:240]}")
+
+    return " | ".join(out) if out else "Contexte profil présent mais non exploitable."
 
 
-def _choose_model() -> str:
+
+def _detect_project_intent(message: str) -> str:
+    msg = _clean(message).lower()
+    # Respect du choix explicite « Objectif personnalisé » sans classification forcée.
+    if "objectif_personnalise" in msg:
+        return ""
+
+    affiliate_words = (
+        "affiliation",
+        "affilié",
+        "affilie",
+        "commission",
+        "promouvoir",
+        "recommander",
+        "code liberté",
+        "code liberte",
+        "formation en affiliation",
+        "offre existante",
+    )
+    product_words = (
+        "produit digital",
+        "ebook",
+        "e-book",
+        "créer un produit",
+        "creer un produit",
+        "produit rentable",
+        "niche rentable",
+        "niches rentables",
+        "quoi vendre",
+        "mise en vente",
+    )
+
+    if any(word in msg for word in affiliate_words):
+        return "AFFILIATE_MODE"
+    if any(word in msg for word in product_words):
+        return "PRODUCT_CREATOR_MODE"
+    return ""
+
+
+def _project_mode_prompt(message: str) -> str:
+    intent = _detect_project_intent(message)
+    if not intent:
+        return ""
+
+    common = (
+        "\n\nMODE FORMACTION ACTIVÉ — RÈGLES PRIORITAIRES:\n"
+        "- Coach Alex doit piloter LGD comme un architecte business, pas comme un chatbot.\n"
+        "- L'utilisateur ne doit pas choisir les modules seul: Alex indique le bon module au bon moment.\n"
+        "- Alex avance mission par mission. Une seule mission prioritaire à la fois.\n"
+        "- Alex doit afficher un temps estimé réaliste jusqu'à la mise en vente quand le projet s'y prête.\n"
+        "- Alex doit proposer une prochaine action courte, mesurable et réalisable aujourd'hui.\n"
+        "- Ne jamais promettre un revenu garanti. Parler de trajectoire, probabilité, clarté et exécution.\n"
+    )
+
+    if intent == "AFFILIATE_MODE":
+        return (
+            common
+            + "\nPARCOURS DÉTECTÉ: ACTIVITÉ D'AFFILIATION.\n"
+            "Si l'utilisateur veut vendre Code Liberté ou une formation existante, ne jamais présenter l'offre comme du MRR sauf si l'utilisateur le précise explicitement.\n"
+            "Alex doit traiter l'offre comme une activité d'affiliation: choisir l'audience, positionner l'offre, créer les contenus, capter des prospects, relancer, planifier.\n"
+            "Structure attendue si c'est un nouveau projet d'affiliation:\n"
+            "1) confirmer l'offre à promouvoir;\n"
+            "2) proposer 3 à 5 audiences possibles;\n"
+            "3) recommander l'audience la mieux positionnée;\n"
+            "4) estimer le temps jusqu'à première mise en vente;\n"
+            "5) donner la mission du jour.\n"
+            "Modules LGD à orchestrer: Coach Alex, Lead Engine IA, Éditeur Intelligent, Emailing IA, Planner IA, Bibliothèque.\n"
+        )
+
     return (
-        os.getenv("OPENAI_CMO_MODEL", "").strip()
-        or os.getenv("OPENAI_MODEL", "").strip()
-        or "gpt-4o-mini"
+        common
+        + "\nPARCOURS DÉTECTÉ: CRÉATION DE PRODUIT DIGITAL.\n"
+        "Si l'utilisateur demande une niche rentable ou un produit digital rentable, Alex doit proposer 5 niches avec forte demande.\n"
+        "Pour chaque niche: demande, douleur principale, audience cible, produit digital possible, prix conseillé, difficulté, rapidité de lancement, concurrence, potentiel, score de réussite LGD.\n"
+        "Alex doit recommander UNE niche comme meilleure option et expliquer pourquoi.\n"
+        "L'utilisateur doit pouvoir choisir, demander une variante ou régénérer.\n"
+        "Une fois la niche validée, Alex construit le projet de A à Z: positionnement, avatar, promesse, offre, produit, bonus, prix, plateforme, lead magnet, page, emails, contenus, planner, mise en vente.\n"
+        "Alex doit recommander la meilleure plateforme de vente selon le projet: Systeme.io, Gumroad, Payhip, KDP ou autre, avec un score et une raison claire.\n"
     )
 
 
-def _safe_json_loads(raw: str) -> Dict[str, Any]:
+def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | None = None, message: str = "") -> str:
+    mode_n = _clean(mode).lower() or "premium"
+    focus_n = _clean(focus).lower() or "jour"
+    plan_n = _clean(plan).lower() or "essentiel"
+    ctx = _compact_context(context)
+    # La discussion libre ne reclasse pas le parcours par mots-clés.
+    conversation_mode_guidance = (
+        "\n\nMode conversation libre : réponds au besoin présent sans imposer un parcours marketing, "
+        "et ne prétends pas avoir exécuté une action dans les modules."
+        if mode_n == "conversation" else _project_mode_prompt(message)
+    )
+
+    s3c2_project = (context or {}).get("alex_business_project")
+    s3c2_guidance = project_guidance(s3c2_project) if mode_n == "conversation" else ""
+
+    s3c_guidance = (
+        "\n\nS3.C — ADAPTATION A L'INTENTION :\n"
+        "- Respecte la demande réelle : question, blocage, rédaction, ebook, plan complet ou action.\n"
+        "- Si un plan est demandé, fournis un plan détaillé et exploitable.\n"
+        "- Si un texte ou chapitre d'ebook est demandé, aide à le produire directement.\n"
+        "- Si une information indispensable manque, pose une seule question ciblée.\n"
+        "- Adapte-toi aux projets ebook, produits digitaux, MRR, affiliation, coaching ou libres.\n"
+        "- En affiliation, propose le Programme Ambassadeur LGD comme option non imposée.\n"
+        "- Si le Programme Ambassadeur LGD est choisi, adapte le parcours : audience, contenus, acquisition, essais, suivi, optimisation.\n"
+        "- Conditions Ambassadeur : inscription gratuite, sans abonnement LGD obligatoire, commission récurrente de 60 % soumise à validation après 30 jours actifs. Aucun revenu garanti.\n"
+        "- N'invente jamais des clics, ventes, commissions ou actions effectuées.\n"
+        "- Réponds brièvement par défaut, mais développe à la demande.\n"
+    ) if mode_n == "conversation" else ""
+
+    return (
+        "Tu es Alex V3, Coach Business IA premium de Le Générateur Digital. "
+        "Ta valeur ajoutée n’est pas de répondre comme ChatGPT. Ta valeur est de transformer une situation floue "
+        "en objectif clair, trajectoire réaliste, priorité unique et action mesurable.\n\n"
+        f"Contexte technique: mode={mode_n}, focus={focus_n}, plan={plan_n}.\n"
+        f"Contexte utilisateur disponible: {ctx}\n\n"
+        "Méthode invisible V3 à appliquer avant chaque réponse:\n"
+        "1) identifier l’objectif business réel;\n"
+        "2) identifier le blocage principal;\n"
+        "3) couper la dispersion;\n"
+        "4) choisir le levier le plus rentable selon temps/niveau/audience;\n"
+        "5) donner un plan clair A → B;\n"
+        "6) terminer par UNE prochaine action mesurable.\n\n"
+        "Règles de réponse:\n"
+        "- français naturel, direct, humain, rassurant;\n"
+        "- pas de blabla, pas de théorie générale, pas de disclaimer inutile;\n"
+        "- si l’utilisateur se disperse, dis clairement STOP puis recentre;\n"
+        "- donne toujours une priorité unique;\n"
+        "- quand c’est pertinent, structure en: Objectif / Diagnostic / Plan / Action du jour;\n"
+        "- ne promets jamais de résultat garanti; parle de trajectoire réaliste;\n"
+        "- si le contexte contient un objectif chiffré, adapte la réponse à cet objectif;\n"
+        "- évite les réponses longues: utile, clair, exploitable."
+        f"{conversation_mode_guidance}"
+        f"{s3c_guidance}"
+        f"{s3c2_guidance}"
+    )
+
+
+def _extract_usage(usage: Any) -> Optional[Dict[str, int]]:
     try:
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            return data
+        if not usage:
+            return None
+        pt = int(getattr(usage, "prompt_tokens", None) or usage.get("prompt_tokens") or 0)
+        ct = int(getattr(usage, "completion_tokens", None) or usage.get("completion_tokens") or 0)
+        tt = int(getattr(usage, "total_tokens", None) or usage.get("total_tokens") or (pt + ct))
+        return {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": tt}
+    except Exception:
+        return None
+
+
+def generate_coach_reply(
+    *,
+    message: str,
+    mode: str = "action",
+    focus: str = "jour",
+    context: Dict[str, Any] | None = None,
+    user_id: int | None = None,
+    user_email: str | None = None,
+    user_name: str | None = None,
+    plan: str = "essentiel",
+    depth: int | None = None,
+    history: list[Dict[str, str]] | None = None,
+) -> Dict[str, Any] | str:
+    msg = _clean(message)
+    if not msg:
+        return {"reply": FALLBACK_REPLY, "source": "fallback"}
+
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY") or ""
+    if not api_key:
+        return {"reply": FALLBACK_REPLY, "source": "fallback_no_key"}
+
+    try:
+        from openai import OpenAI  # type: ignore
+
+        client = OpenAI(api_key=api_key)
+        sys = _system_prompt(mode=mode, focus=focus, plan=plan, context=context, message=msg)
+
+        meta_bits = []
+        if user_name:
+            meta_bits.append(f"user_name={_clean(user_name)[:80]}")
+        if user_email:
+            meta_bits.append(f"user_email={_clean(user_email)[:120]}")
+        if user_id is not None:
+            meta_bits.append(f"user_id={int(user_id)}")
+        if meta_bits:
+            sys += "\n\nMeta: " + ", ".join(meta_bits)
+
+        messages = [{"role": "system", "content": sys}]
+        # Historique de l'utilisateur connecté, avec vrais rôles OpenAI.
+        # Limité côté route/service pour maîtriser les tokens.
+        for entry in (history or [])[-8:]:
+            if not isinstance(entry, dict) or entry.get("role") not in ("user", "assistant"):
+                continue
+            content = _clean(entry.get("content"))[:750]
+            if content:
+                messages.append({"role": entry["role"], "content": content})
+        messages.append({"role": "user", "content": msg})
+
+        resp = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),
+            messages=messages,
+            temperature=0.42,
+            # S3.C.1 : plans détaillés explicitement demandés.
+            max_tokens=1600 if mode == "conversation" and any(
+                term in msg.lower() for term in (
+                    "plan détaillé", "plan detaille", "chapitres", "sommaire",
+                    "étape par étape", "etape par etape", "plan complet",
+                )
+            ) else 900,
+        )
+
+        reply = ""
+        try:
+            reply = (resp.choices[0].message.content or "").strip()
+        except Exception:
+            reply = ""
+
+        if not reply:
+            return {"reply": FALLBACK_REPLY, "source": "fallback_empty"}
+
+        usage = _extract_usage(getattr(resp, "usage", None))
+        return {"reply": reply, "source": "openai", "usage": usage}
+
+    except Exception:
+        return {"reply": FALLBACK_REPLY, "source": "fallback_error"}
+
+def _fallback_live_result(source: str = "fallback") -> Dict[str, Any]:
+    return {
+        "success": False,
+        "source": source,
+        "title": "Diagnostic stratégique Alex",
+        "diagnostic": "Alex Live n’est pas disponible pour le moment.",
+        "realBlocker": "Le moteur local doit prendre le relais.",
+        "premiumMission": "Exécuter la mission du jour générée par le moteur Alex.",
+        "mistakeToAvoid": "Ne pas se disperser.",
+        "expectedResult": "Avoir réalisé une action mesurable aujourd’hui.",
+        "actionSteps": [
+            "Relire la mission du jour.",
+            "Faire uniquement l’action demandée.",
+            "Mesurer le KPI indiqué.",
+        ],
+        "kpiLabel": "Action réalisée",
+        "durationMin": 45,
+        "editorPrompt": "Créer un contenu simple à partir de la mission du jour.",
+    }
+
+
+def _live_strategist_system_prompt(plan: str) -> str:
+    plan_n = _clean(plan).lower() or "essentiel"
+    return (
+        "Tu es Alex Stratège IA Live Premium, coach business de Le Générateur Digital. "
+        "Tu ne dois pas produire une réponse générale. Tu dois transformer le contexte fourni "
+        "en diagnostic stratégique ultra concret, humain et exploitable.\n\n"
+        f"Plan utilisateur: {plan_n}.\n\n"
+        "Tu dois répondre uniquement en JSON valide, sans markdown, sans texte autour.\n"
+        "Structure JSON obligatoire:\n"
+        "{\n"
+        '  "title": "titre court",\n'
+        '  "diagnostic": "diagnostic humain et stratégique",\n'
+        '  "realBlocker": "blocage réel sous-jacent",\n'
+        '  "premiumMission": "mission premium du jour",\n'
+        '  "mistakeToAvoid": "erreur à éviter aujourd’hui",\n'
+        '  "expectedResult": "résultat concret attendu ce soir",\n'
+        '  "actionSteps": ["étape 1", "étape 2", "étape 3"],\n'
+        '  "kpiLabel": "KPI mesurable",\n'
+        '  "durationMin": 45,\n'
+        '  "editorPrompt": "prompt prêt pour générer le contenu dans l’éditeur"\n'
+        "}\n\n"
+        "Règles:\n"
+        "- français naturel, direct, humain, rassurant;\n"
+        "- parle comme un coach business expérimenté, pas comme un générateur de templates;\n"
+        "- priorité à la première vente, aux conversations qualifiées et à l’action du jour;\n"
+        "- ne promets jamais de résultat garanti;\n"
+        "- pas de blabla, pas de théorie, pas de longs paragraphes;\n"
+        "- actionSteps: 3 à 5 étapes maximum;\n"
+        "- durationMin doit être 25, 45 ou 60 selon le temps disponible et la mission;\n"
+        "- editorPrompt doit aider à créer un post, carrousel, story ou script DM selon la mission."
+    )
+
+
+def _safe_json_loads(text: str) -> Dict[str, Any]:
+    raw = _clean(text)
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
     except Exception:
         pass
 
@@ -83,454 +384,128 @@ def _safe_json_loads(raw: str) -> Dict[str, Any]:
     end = raw.rfind("}")
     if start >= 0 and end > start:
         try:
-            data = json.loads(raw[start : end + 1])
-            if isinstance(data, dict):
-                return data
+            return json.loads(raw[start : end + 1])
         except Exception:
-            pass
-
-    return {
-        "diagnostic": raw.strip(),
-        "decision": {
-            "recommended_module": "coach",
-            "priority_action": "Clarifier la stratégie avant de générer.",
-            "reason": "La réponse IA n'a pas pu être structurée correctement.",
-        },
-        "context": {},
-        "module_payloads": {},
-        "assumptions": ["Réponse brute conservée dans diagnostic."],
-        "warnings": ["JSON invalide retourné par le modèle."],
-    }
+            return {}
+    return {}
 
 
-def _normalize_module(value: str) -> str:
-    module = _clean(value).lower()
-    if module in {"email", "emailing", "email_campaigns", "campagne_email"}:
-        return "emailing"
-    if module in {"lead", "lead_engine", "lead-engine", "landing", "landing_page"}:
-        return "lead_engine"
-    if module in {"editor", "editeur", "éditeur", "post", "carrousel"}:
-        return "editor"
-    if module in {"coach", "coach_ia", "coach-ia"}:
-        return "coach"
-    return ""
+def _normalize_live_result(data: Dict[str, Any], usage: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    fallback = _fallback_live_result("fallback_normalize")
 
+    def text(key: str) -> str:
+        value = _clean(data.get(key))
+        return value or str(fallback.get(key) or "")
 
-def _ensure_list(value: Any) -> List[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if isinstance(value, str) and value.strip():
-        return [value.strip()]
-    return []
+    steps_raw = data.get("actionSteps")
+    steps: list[str] = []
+    if isinstance(steps_raw, list):
+        steps = [_clean(x) for x in steps_raw if _clean(x)]
+    if not steps:
+        steps = list(fallback["actionSteps"])
+    steps = steps[:5]
 
-
-def _fallback_dispatch(*, objective: str, blocker: str, target_module: str, audience: str, offer: str) -> Dict[str, Any]:
-    module = _normalize_module(target_module) or "coach"
-    clean_objective = _clean(objective, "Clarifier une action marketing rentable.")
-    clean_blocker = _clean(blocker, "Le blocage principal n'est pas encore précisé.")
-    clean_offer = _clean(offer, "offre à clarifier")
-    clean_audience = _clean(audience, "audience à préciser")
-
-    context = {
-        "objective": clean_objective,
-        "blocker": clean_blocker,
-        "offer": clean_offer,
-        "audience": clean_audience,
-        "angle": f"Partir du blocage réel pour rendre {clean_offer} plus désirable.",
-        "promise": f"Aider {clean_audience} à avancer malgré : {clean_blocker}.",
-        "cta": "Passer à l'action maintenant",
-        "tone": "premium, humain, direct",
-    }
-
-    return {
-        "diagnostic": f"L'utilisateur veut : {clean_objective}. Le blocage identifié est : {clean_blocker}. Le Stratège IA Live doit envoyer un brief structuré au module {module} au lieu de générer un contenu générique.",
-        "decision": {
-            "recommended_module": module,
-            "priority_action": "Transmettre un contexte marketing cadré au module cible.",
-            "reason": "Un brief structuré permet au module de produire un résultat aligné avec l'offre, la cible, la promesse et le CTA.",
-        },
-        "context": context,
-        "module_payloads": _build_module_payloads(context),
-        "assumptions": ["Fallback local utilisé uniquement si la sortie IA est incomplète."],
-        "warnings": [],
-    }
-
-
-def _build_module_payloads(context: Dict[str, Any]) -> Dict[str, Any]:
-    objective = _clean(context.get("objective"))
-    blocker = _clean(context.get("blocker"))
-    offer = _clean(context.get("offer"), "offre")
-    audience = _clean(context.get("audience"), "audience")
-    angle = _clean(context.get("angle"), f"Rendre {offer} évident pour {audience}")
-    promise = _clean(context.get("promise"), f"Obtenir un résultat concret avec {offer}")
-    cta = _clean(context.get("cta"), "Passer à l'action")
-    tone = _clean(context.get("tone"), "premium, humain, direct")
-
-    return {
-        "emailing": {
-            "module": "emailing",
-            "campaign_goal": objective,
-            "offer_name": offer,
-            "target_audience": audience,
-            "main_blocker": blocker,
-            "conversion_angle": angle,
-            "main_promise": promise,
-            "primary_cta": cta,
-            "tone": tone,
-            "sequence_direction": [
-                "Email 1 : faire résonner le problème et poser le coût de l'inaction.",
-                "Email 2 : présenter le mécanisme de transformation derrière l'offre.",
-                "Email 3 : lever l'objection principale et pousser vers le CTA.",
-            ],
-        },
-        "lead_engine": {
-            "module": "lead_engine",
-            "lead_goal": f"Capturer des prospects intéressés par {offer}",
-            "lead_magnet_angle": angle,
-            "lead_magnet_promise": promise,
-            "target_audience": audience,
-            "problem_to_solve": blocker,
-            "offer_bridge": offer,
-            "cta_label": "Recevoir la ressource",
-            "landing_direction": "Hero clair, bénéfice immédiat, 3 points de valeur, preuve simple, formulaire, CTA.",
-        },
-        "editor": {
-            "module": "editor",
-            "creative_goal": objective,
-            "format_recommendation": "post",
-            "hook_direction": angle,
-            "body_direction": f"Montrer le blocage ({blocker}), révéler la promesse ({promise}), puis guider vers {cta}.",
-            "visual_direction": "Visuel premium sombre/doré, message central court, contraste fort, CTA lisible.",
-            "caption_direction": "Caption courte : problème, prise de conscience, promesse, CTA.",
-        },
-        "coach": {
-            "module": "coach",
-            "mission_title": f"Plan stratégique — {offer}",
-            "brief": f"Objectif : {objective}\nBlocage : {blocker}\nOffre : {offer}\nCible : {audience}\nAngle : {angle}\nPromesse : {promise}\nCTA : {cta}",
-            "expected_output": "Plan d'action priorisé, prochaines étapes, risques à éviter, critères de validation.",
-            "duration_minutes": 45,
-        },
-    }
-
-
-def _build_dispatch_prompt(
-    *,
-    objective: str,
-    blocker: str,
-    target_module: str,
-    niche: str,
-    audience: str,
-    offer: str,
-    current_situation: str,
-    constraints: str,
-    preferred_channel: str,
-    tone: str,
-    user_level: str,
-) -> str:
-    normalized_module = _normalize_module(target_module) or "à décider"
-    return f"""
-OBJECTIF UTILISATEUR
-{objective or "non précisé"}
-
-BLOCAGE UTILISATEUR
-{blocker or "non précisé"}
-
-CONTEXTE BUSINESS
-- Module demandé : {normalized_module}
-- Niche : {niche or "non précisée"}
-- Audience : {audience or "non précisée"}
-- Offre : {offer or "non précisée"}
-- Situation actuelle : {current_situation or "non précisée"}
-- Contraintes : {constraints or "non précisées"}
-- Canal préféré : {preferred_channel or "à recommander"}
-- Ton : {tone or "premium, humain, direct"}
-- Niveau utilisateur : {user_level or "intermediate"}
-
-MISSION
-Analyse le contexte, décide le meilleur module si nécessaire, puis prépare un payload structuré pour TOUS les modules.
-Le payload du module demandé doit être le plus précis.
-Ne rédige pas de contenu final long. Donne des directions stratégiques propres.
-
-FORMAT STRICT — JSON VALIDE UNIQUEMENT
-{{
-  "diagnostic": "diagnostic marketing précis en 4 à 7 lignes",
-  "decision": {{
-    "recommended_module": "emailing | lead_engine | editor | coach",
-    "priority_action": "action prioritaire claire",
-    "reason": "pourquoi ce module ou cette action est prioritaire maintenant"
-  }},
-  "context": {{
-    "objective": "objectif reformulé",
-    "blocker": "blocage reformulé",
-    "offer": "offre claire",
-    "audience": "cible claire",
-    "niche": "niche si utile",
-    "pain": "douleur principale",
-    "desire": "désir principal",
-    "angle": "angle marketing précis",
-    "promise": "promesse spécifique et crédible",
-    "mechanism": "mécanisme ou logique de transformation",
-    "objection": "objection dominante",
-    "cta": "CTA recommandé",
-    "tone": "ton recommandé"
-  }},
-  "module_payloads": {{
-    "emailing": {{
-      "module": "emailing",
-      "campaign_goal": "...",
-      "offer_name": "...",
-      "target_audience": "...",
-      "main_blocker": "...",
-      "conversion_angle": "...",
-      "main_promise": "...",
-      "primary_cta": "...",
-      "tone": "...",
-      "sequence_direction": ["...", "...", "..."]
-    }},
-    "lead_engine": {{
-      "module": "lead_engine",
-      "lead_goal": "...",
-      "lead_magnet_angle": "...",
-      "lead_magnet_promise": "...",
-      "target_audience": "...",
-      "problem_to_solve": "...",
-      "offer_bridge": "...",
-      "cta_label": "...",
-      "landing_direction": "..."
-    }},
-    "editor": {{
-      "module": "editor",
-      "creative_goal": "...",
-      "format_recommendation": "post | carrousel",
-      "hook_direction": "...",
-      "body_direction": "...",
-      "visual_direction": "...",
-      "caption_direction": "..."
-    }},
-    "coach": {{
-      "module": "coach",
-      "mission_title": "...",
-      "brief": "...",
-      "expected_output": "...",
-      "duration_minutes": 45
-    }}
-  }},
-  "assumptions": ["hypothèse utile si une donnée manque"],
-  "warnings": ["risque ou piège à éviter"]
-}}
-""".strip()
-
-
-def _complete_dispatch(data: Dict[str, Any], *, objective: str, blocker: str, target_module: str, audience: str, offer: str) -> Dict[str, Any]:
-    fallback = _fallback_dispatch(
-        objective=objective,
-        blocker=blocker,
-        target_module=target_module,
-        audience=audience,
-        offer=offer,
-    )
-
-    decision = data.get("decision") if isinstance(data.get("decision"), dict) else {}
-    recommended_module = _normalize_module(str(decision.get("recommended_module", "")))
-    if recommended_module not in _ALLOWED_MODULES:
-        recommended_module = _normalize_module(target_module) or fallback["decision"]["recommended_module"]
-
-    context = data.get("context") if isinstance(data.get("context"), dict) else {}
-    merged_context = {**fallback["context"], **{k: v for k, v in context.items() if v not in (None, "")}}
-
-    module_payloads = data.get("module_payloads") if isinstance(data.get("module_payloads"), dict) else {}
-    completed_payloads = _build_module_payloads(merged_context)
-    for key, value in module_payloads.items():
-        normalized_key = _normalize_module(str(key))
-        if normalized_key in completed_payloads and isinstance(value, dict):
-            completed_payloads[normalized_key] = {**completed_payloads[normalized_key], **value}
+    try:
+        duration = int(data.get("durationMin") or fallback["durationMin"])
+    except Exception:
+        duration = int(fallback["durationMin"])
+    if duration not in (25, 45, 60):
+        duration = 45
 
     result = {
-        "diagnostic": _clean(data.get("diagnostic"), fallback["diagnostic"]),
-        "decision": {
-            "recommended_module": recommended_module,
-            "priority_action": _clean(decision.get("priority_action"), fallback["decision"]["priority_action"]),
-            "reason": _clean(decision.get("reason"), fallback["decision"]["reason"]),
-        },
-        "context": merged_context,
-        "module_payloads": completed_payloads,
-        "assumptions": _ensure_list(data.get("assumptions")) or fallback["assumptions"],
-        "warnings": _ensure_list(data.get("warnings")),
-        "meta": {
-            "module": "Stratège IA Live Dispatch",
-            "mode": "analyze_decide_dispatch",
-            "model": _choose_model(),
-            "content_generation": "disabled_at_cmo_level",
-        },
+        "success": True,
+        "source": "openai",
+        "title": text("title"),
+        "diagnostic": text("diagnostic"),
+        "realBlocker": text("realBlocker"),
+        "premiumMission": text("premiumMission"),
+        "mistakeToAvoid": text("mistakeToAvoid"),
+        "expectedResult": text("expectedResult"),
+        "actionSteps": steps,
+        "kpiLabel": text("kpiLabel"),
+        "durationMin": duration,
+        "editorPrompt": text("editorPrompt"),
     }
+    if usage:
+        result["usage"] = usage
     return result
 
 
-def generate_cmo_dispatch(
+def generate_live_strategist(
     *,
-    objective: str,
-    blocker: str = "",
-    target_module: str = "",
-    niche: str = "",
-    audience: str = "",
-    offer: str = "",
-    current_situation: str = "",
-    constraints: str = "",
-    preferred_channel: str = "",
-    tone: str = "premium, humain, direct",
-    user_level: str = "intermediate",
+    payload: Dict[str, Any],
+    user_id: int | None = None,
+    user_email: str | None = None,
+    user_name: str | None = None,
+    plan: str = "essentiel",
 ) -> Dict[str, Any]:
-    if not _clean(objective):
-        raise ValueError("objective est requis.")
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY") or ""
+    if not api_key:
+        return _fallback_live_result("fallback_no_key")
 
-    prompt = _build_dispatch_prompt(
-        objective=_clean(objective),
-        blocker=_clean(blocker),
-        target_module=_clean(target_module),
-        niche=_clean(niche),
-        audience=_clean(audience),
-        offer=_clean(offer),
-        current_situation=_clean(current_situation),
-        constraints=_clean(constraints),
-        preferred_channel=_clean(preferred_channel),
-        tone=_clean(tone, "premium, humain, direct"),
-        user_level=_clean(user_level, "intermediate"),
-    )
-
-    client = _get_client()
-    response = client.chat.completions.create(
-        model=_choose_model(),
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT_DISPATCH},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.32,
-        max_tokens=1400,
-        response_format={"type": "json_object"},
-    )
-
-    content = ""
     try:
-        content = (response.choices[0].message.content or "").strip()
-    except Exception:
+        from openai import OpenAI  # type: ignore
+
+        client = OpenAI(api_key=api_key)
+        sys = _live_strategist_system_prompt(plan)
+
+        meta: Dict[str, Any] = {}
+        if user_id is not None:
+            meta["user_id"] = int(user_id)
+        if user_email:
+            meta["user_email"] = _clean(user_email)[:120]
+        if user_name:
+            meta["user_name"] = _clean(user_name)[:80]
+
+        regeneration_id = _clean(payload.get("regenerationId"))
+        regeneration_instruction = _clean(payload.get("regenerationInstruction"))
+
+        instruction = (
+            "Analyse le questionnaire, la mission locale et le contexte. "
+            "Produis une mission premium unique, plus humaine que le fallback local. "
+            "Tu dois préserver le positionnement LGD: business digital, action concrète, vente douce, zéro promesse agressive."
+        )
+
+        if regeneration_id:
+            instruction += (
+                "\n\nRÉGÉNÉRATION MANUELLE: l'utilisateur a cliqué sur Régénérer l'analyse. "
+                "Tu dois produire une variation réellement différente: nouvel angle stratégique, nouveaux mots, nouvelles actions, "
+                "sans changer l'objectif business ni inventer de nouvelle offre. "
+                f"Identifiant de variation: {regeneration_id}."
+            )
+            if regeneration_instruction:
+                instruction += f"\nInstruction frontend: {regeneration_instruction}"
+
+        user_payload = {
+            "meta": meta,
+            "payload": payload,
+            "instruction": instruction,
+        }
+
+        resp = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL_COACH_LIVE", os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini")),
+            messages=[
+                {"role": "system", "content": sys},
+                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)[:14000]},
+            ],
+            temperature=0.72 if _clean(payload.get("regenerationId")) else 0.58,
+            max_tokens=1200,
+            response_format={"type": "json_object"},
+        )
+
         content = ""
+        try:
+            content = (resp.choices[0].message.content or "").strip()
+        except Exception:
+            content = ""
 
-    if not content:
-        raise RuntimeError("Réponse OpenAI vide pour Stratège IA Live Dispatch.")
+        data = _safe_json_loads(content)
+        if not data:
+            return _fallback_live_result("fallback_empty")
 
-    data = _safe_json_loads(content)
-    return _complete_dispatch(data, objective=objective, blocker=blocker, target_module=target_module, audience=audience, offer=offer)
+        usage = _extract_usage(getattr(resp, "usage", None))
+        return _normalize_live_result(data, usage)
 
-
-def _build_strategy_prompt(
-    *,
-    objective: str,
-    niche: str,
-    audience: str,
-    offer: str,
-    current_situation: str,
-    constraints: str,
-    preferred_channel: str,
-    tone: str,
-    user_level: str,
-) -> str:
-    return f"""
-OBJECTIF UTILISATEUR
-{objective or "non précisé"}
-
-CONTEXTE BUSINESS
-- Niche : {niche or "non précisée"}
-- Audience : {audience or "non précisée"}
-- Offre : {offer or "non précisée"}
-- Situation actuelle : {current_situation or "non précisée"}
-- Contraintes : {constraints or "non précisées"}
-- Canal préféré : {preferred_channel or "à recommander"}
-- Ton : {tone or "premium, humain, direct"}
-- Niveau utilisateur : {user_level or "intermediate"}
-
-RÈGLES DE CONTEXTE
-- Base-toi sur le contexte actif du Coach Alex.
-- Si le profil est incomplet, reste neutre et universel.
-- N'invente jamais que l'utilisateur vend LGD, du MRR, une formation marketing ou de l'affiliation si ce n'est pas écrit dans le contexte.
-- Si l'objectif actif parle de yoga, immobilier, coaching, nutrition ou tout autre domaine, reste strictement dans ce domaine.
-
-FORMAT STRICT — JSON VALIDE UNIQUEMENT
-{{
-  "diagnostic": "diagnostic clair en 3 à 6 lignes",
-  "priority_action": "une action prioritaire claire",
-  "why_this_action": "pourquoi cette action est la plus rentable maintenant",
-  "execution_plan": [
-    {{"step": 1, "title": "...", "detail": "..."}},
-    {{"step": 2, "title": "...", "detail": "..."}}
-  ],
-  "generated_content": {{
-    "post": "",
-    "email": "",
-    "cta": "CTA clair",
-    "lead_magnet_idea": "idée courte si pertinent"
-  }},
-  "next_best_action": "la prochaine action à faire juste après",
-  "risk_to_avoid": "le piège principal à éviter"
-}}
-""".strip()
-
-
-def generate_cmo_strategy(
-    *,
-    objective: str,
-    niche: str = "",
-    audience: str = "",
-    offer: str = "",
-    current_situation: str = "",
-    constraints: str = "",
-    preferred_channel: str = "",
-    tone: str = "premium, humain, direct",
-    user_level: str = "intermediate",
-) -> Dict[str, Any]:
-    """
-    Ancienne fonction conservée pour compatibilité.
-    Le nouveau système propre passe par generate_cmo_dispatch().
-    """
-    if not _clean(objective):
-        raise ValueError("objective est requis.")
-
-    prompt = _build_strategy_prompt(
-        objective=_clean(objective),
-        niche=_clean(niche),
-        audience=_clean(audience),
-        offer=_clean(offer),
-        current_situation=_clean(current_situation),
-        constraints=_clean(constraints),
-        preferred_channel=_clean(preferred_channel),
-        tone=_clean(tone, "premium, humain, direct"),
-        user_level=_clean(user_level, "intermediate"),
-    )
-
-    client = _get_client()
-    response = client.chat.completions.create(
-        model=_choose_model(),
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT_STRATEGY},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.45,
-        max_tokens=1200,
-        response_format={"type": "json_object"},
-    )
-
-    content = ""
-    try:
-        content = (response.choices[0].message.content or "").strip()
     except Exception:
-        content = ""
+        return _fallback_live_result("fallback_error")
 
-    if not content:
-        raise RuntimeError("Réponse OpenAI vide pour Stratège IA Live.")
-
-    data = _safe_json_loads(content)
-    data["meta"] = {
-        "module": "Stratège IA Live",
-        "mode": "legacy_strategy_compat",
-        "model": _choose_model(),
-    }
-    return data

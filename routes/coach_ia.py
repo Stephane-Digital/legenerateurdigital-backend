@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routes.auth import get_current_user
 from services.ai.coach_ai import generate_coach_reply, generate_live_strategist
+from services.ai.alex_project_intelligence import detect_explicit_project
 from services.ai_quota_service import get_or_create_quota, update_quota
 from services.alex_conversation_service import (
     MAX_USER_CHARS, append_exchange, clear_conversation, list_conversation, recent_history,
@@ -253,7 +254,13 @@ def chat(
     # On enrichit le contexte avec le profil persistant + intention projet détectée.
     # Le cerveau métier reste dans services/ai/coach_ai.py.
     profile_context = _read_user_profile_context(db, user_id)
-    project_intent = {} if payload.conversation_mode else _detect_project_type(payload.message)
+    # S3.C.2 : identifier un choix explicite, sans reclasser une simple question.
+    existing_project = profile_context.get("alex_business_project")
+    existing_project = existing_project if isinstance(existing_project, dict) else {}
+    project_intent = (
+        detect_explicit_project(payload.message, existing_project)
+        if payload.conversation_mode else _detect_project_type(payload.message)
+    )
 
     if project_intent:
         _write_project_intent_if_needed(db, user_id, project_intent)

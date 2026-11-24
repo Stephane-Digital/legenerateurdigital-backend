@@ -4,6 +4,7 @@ import json
 from services.ai.alex_project_intelligence import project_guidance
 from services.ai.alex_lgd_knowledge import lgd_operational_guidance
 import os
+import unicodedata
 from services.ai.alex_lgd_commercial import commercial_question, commercial_reply
 from typing import Any, Dict, Optional
 
@@ -239,7 +240,7 @@ def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | N
         "Règles de réponse:\n"
         "- français naturel, direct, humain, rassurant;\n"
         "- pas de blabla, pas de théorie générale, pas de disclaimer inutile;\n"
-        "- si l’utilisateur se disperse, dis clairement STOP puis recentre;\n"
+        "- recentre avec bienveillance uniquement en cas de dispersion réelle; si la demande est claire, réponds directement sans STOP;\n"
         "- donne toujours une priorité unique;\n"
         "- quand c’est pertinent, structure en: Objectif / Diagnostic / Plan / Action du jour;\n"
         "- ne promets jamais de résultat garanti; parle de trajectoire réaliste;\n"
@@ -262,6 +263,18 @@ def _extract_usage(usage: Any) -> Optional[Dict[str, int]]:
         return {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": tt}
     except Exception:
         return None
+
+
+def coach_output_limit(message: str, mode: str = "action") -> int:
+    """Shared output budget for generation and quota reservation."""
+    if mode != "conversation":
+        return 900
+    msg = "".join(c for c in unicodedata.normalize("NFKD", message.lower()) if not unicodedata.combining(c))
+    if any(term in msg for term in ("redige", "redaction", "chapitre", "introduction", "integralement", "texte complet", "ebook complet", "e-book complet", "strategie complete")):
+        return 4000
+    if any(term in msg for term in ("plan detaille", "sommaire", "etape par etape", "plan complet", "precisement", "en detail", "guide-moi", "guide moi", "debutant")):
+        return 2500
+    return 900
 
 
 def generate_coach_reply(
@@ -319,14 +332,7 @@ def generate_coach_reply(
             model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),
             messages=messages,
             temperature=0.42,
-            # S3.C.1 : plans détaillés explicitement demandés.
-            max_tokens=1600 if mode == "conversation" and any(
-                term in msg.lower() for term in (
-                    "plan détaillé", "plan detaille", "chapitres", "sommaire",
-                    "étape par étape", "etape par etape", "plan complet",
-                    "rédige", "redige", "introduction", "intégralement", "integralement",
-                )
-            ) else 900,
+            max_tokens=coach_output_limit(msg, mode),
         )
 
         reply = ""

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routes.auth import get_current_user
-from services.ai.coach_ai import generate_coach_reply, generate_live_strategist
+from services.ai.coach_ai import generate_coach_reply, generate_live_strategist, coach_output_limit
 from services.ai.alex_project_intelligence import detect_explicit_project
 from services.ai.alex_lgd_commercial import commercial_question, commercial_reply
 from services.ai_quota_service import get_or_create_quota, update_quota
@@ -270,7 +270,8 @@ def chat(
         estimated_input = payload.message
         if payload.conversation_mode:
             estimated_input += "".join(turn["content"] for turn in history)
-        reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000))
+        output_extra = max(0, coach_output_limit(payload.message, "conversation" if payload.conversation_mode else "action") - 900)
+        reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000)) + output_extra
         try:
             reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
         except Exception:

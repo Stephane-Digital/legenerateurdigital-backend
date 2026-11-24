@@ -328,9 +328,9 @@ def chat(
         "quota": {
             "feature": "global",
             "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
-            "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
-            "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
-            "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
+            "tokens_used": _quota_snapshot(reserved_quota)["used"],
+            "tokens_limit": _quota_snapshot(reserved_quota)["limit"],
+            "remaining": _quota_snapshot(reserved_quota)["remaining"],
         },
     }
 
@@ -377,9 +377,9 @@ def live_strategist(
             "quota": {
                 "feature": "global",
                 "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
-                "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
-                "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
-                "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
+                "tokens_used": _quota_snapshot(reserved_quota)["used"],
+                "tokens_limit": _quota_snapshot(reserved_quota)["limit"],
+                "remaining": _quota_snapshot(reserved_quota)["remaining"],
             },
         }
 
@@ -388,9 +388,9 @@ def live_strategist(
     result["quota"] = {
         "feature": "global",
         "plan": getattr(reserved_quota, "plan", None) or getattr(q, "plan", None) or "essentiel",
-        "tokens_used": _to_int(getattr(reserved_quota, "tokens_used", None), _to_int(getattr(reserved_quota, "used_tokens", None), 0)),
-        "tokens_limit": _to_int(getattr(reserved_quota, "credits", None), _to_int(getattr(reserved_quota, "tokens_limit", None), _to_int(getattr(reserved_quota, "limit_tokens", None), 0))),
-        "remaining": _to_int(getattr(reserved_quota, "remaining", None), 0),
+        "tokens_used": _quota_snapshot(reserved_quota)["used"],
+        "tokens_limit": _quota_snapshot(reserved_quota)["limit"],
+        "remaining": _quota_snapshot(reserved_quota)["remaining"],
     }
     return result
 

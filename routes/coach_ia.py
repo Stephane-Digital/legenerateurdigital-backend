@@ -179,7 +179,7 @@ def _write_project_intent_if_needed(db: Session, user_id: int, intent_patch: Dic
             patch={
                 "alex_business_project": {
                     **intent_patch,
-                    "source": "coach_chat",
+                    "source": intent_patch.get("source") or "coach_chat",
                 }
             },
         )

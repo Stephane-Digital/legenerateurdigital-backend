@@ -4,6 +4,7 @@ import json
 from services.ai.alex_project_intelligence import project_guidance
 from services.ai.alex_lgd_knowledge import lgd_operational_guidance
 import os
+from services.ai.alex_lgd_commercial import commercial_question, commercial_reply
 from typing import Any, Dict, Optional
 
 
@@ -280,6 +281,9 @@ def generate_coach_reply(
     if not msg:
         return {"reply": FALLBACK_REPLY, "source": "fallback"}
 
+    if mode == "conversation" and commercial_question(msg, context):
+        return {"reply": commercial_reply(), "source": "lgd_commercial_reference"}
+
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY") or ""
     if not api_key:
         return {"reply": FALLBACK_REPLY, "source": "fallback_no_key"}
@@ -320,6 +324,7 @@ def generate_coach_reply(
                 term in msg.lower() for term in (
                     "plan détaillé", "plan detaille", "chapitres", "sommaire",
                     "étape par étape", "etape par etape", "plan complet",
+                    "rédige", "redige", "introduction", "intégralement", "integralement",
                 )
             ) else 900,
         )
@@ -334,6 +339,8 @@ def generate_coach_reply(
             return {"reply": FALLBACK_REPLY, "source": "fallback_empty"}
 
         usage = _extract_usage(getattr(resp, "usage", None))
+        if mode == "conversation" and getattr(resp.choices[0], "finish_reason", None) == "length":
+            reply += "\n\n*La réponse a atteint sa limite de longueur. Demande-moi de poursuivre à partir de ce passage.*"
         return {"reply": reply, "source": "openai", "usage": usage}
 
     except Exception:

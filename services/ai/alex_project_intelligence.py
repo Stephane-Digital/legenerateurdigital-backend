@@ -1,4 +1,4 @@
-"""S3.C.2 — reconnaissance prudente du projet pour la conversation libre.
+"""S3.C.3 — reconnaissance prudente du projet pour la conversation libre.
 
 Pas d'appel IA, pas de quota, pas de DB. Ne persiste que les intentions explicites.
 """
@@ -30,7 +30,7 @@ def detect_explicit_project(message: str, current: Dict[str, Any] | None = None)
     existing = current if isinstance(current, dict) else {}
     explicit = bool(re.search(
         r"\b(je veux|je souhaite|j'aimerais|je voudrais|mon projet est|mon objectif est|"
-        r"je choisis|je me lance|je vais|je decide|je compte|je souhaite devenir)\b", msg
+        r"je choisis|je change|je me lance|je vais|je decide|je compte|je souhaite devenir)\b", msg
     ))
     if not explicit:
         return {}
@@ -51,7 +51,7 @@ def detect_explicit_project(message: str, current: Dict[str, Any] | None = None)
         return {}
 
     previous = str(existing.get("project_type") or "")
-    if previous and previous != kind and not re.search(r"\b(je change|je choisis plutot|nouveau projet|a la place|desormais)\b", msg):
+    if previous and previous != kind and not (kind == "lgd_ambassador" and re.search(r"\b(je souhaite|je veux|je voudrais|j\'aimerais) devenir (?:un |une )?(?:ambassadeur|ambassadrice) lgd\b", msg)) and not re.search(r"\b(je change|je choisis plutot|nouveau projet|a la place|desormais)\b", msg):
         return {}
 
     return {
@@ -59,7 +59,7 @@ def detect_explicit_project(message: str, current: Dict[str, Any] | None = None)
         "business_mode": "affiliate" if kind in ("affiliate", "lgd_ambassador") else "digital_product",
         "project_label": PROJECT_LABELS[kind],
         "project_status": "INTENT_DETECTED",
-        "source": "alex_conversation_s3c2",
+        "source": "alex_conversation_s3c3",
     }
 
 
@@ -67,6 +67,10 @@ def project_guidance(project: Dict[str, Any] | None) -> str:
     """Instructions ciblées, injectées seulement dans le mode conversation."""
     project = project if isinstance(project, dict) else {}
     kind = str(project.get("project_type") or "")
+    if project.get("parcours") == "objectif_personnalise":
+        return "\nOBJECTIF PERSONNALISÉ : respecte le projet libre."
+    if not kind and project.get("parcours") == "affiliation":
+        kind = "affiliate"
     if kind == "ebook":
         return (
             "\nPROJET CONFIRMÉ : EBOOK. Aide à définir lecteur, problème, promesse, "
@@ -88,13 +92,21 @@ def project_guidance(project: Dict[str, Any] | None) -> str:
         )
     if kind == "lgd_ambassador":
         return (
-            "\nPROJET CONFIRMÉ : AMBASSADEUR LGD. Accompagne étape par étape : "
-            "1) vérifier l'inscription gratuite Systeme.io et le lien ?sa=ID ; "
-            "2) identifier l'audience et son problème ; 3) bâtir un message de recommandation honnête ; "
-            "4) créer un premier contenu avec l'Éditeur Intelligent ; 5) orienter vers l'essai LGD "
-            "de 7 jours sans carte bancaire ; 6) suivre les conversations et les résultats réels ; "
-            "7) ajuster selon les retours. Ne prétends pas activer un compte ou mesurer les ventes. "
-            "Commission : 60 % récurrente sur abonnements éligibles, validée après 30 jours "
-            "d'abonnement actif, sans revenu garanti. Une mission mesurable à la fois."
+            "\nS3.C.3 — MENTOR AMBASSADEUR LGD : ces règles priment sur le plan marketing générique. "
+            "Pour une demande de démarrage, explique brièvement : inscription Ambassadeur gratuite, "
+            "aucun abonnement LGD obligatoire, 60 % de commission récurrente sur abonnements éligibles, "
+            "validation après 30 jours actifs, aucun revenu garanti. Essai LGD 7 jours sans carte ni engagement. "
+            "Utilise les réponses FormAction disponibles sans les redemander. "
+            "Première mission si inscription ou lien non confirmé : vérifier l'inscription au programme "
+            "et obtenir son lien personnel via le Centre de Croissance Ambassadeur, avec identifiant Systeme.io. "
+            "Page programme : https://legenerateurdigital.systeme.io/affiliation-lgd ; "
+            "lien essai : https://legenerateurdigital.systeme.io/trial?sa=ID (ID à remplacer, jamais inventer). "
+            "Puis, seulement selon les acquis déclarés : identifier des prospects pertinents, préparer un message "
+            "honnête, créer un contenu avec l'Éditeur Intelligent si utile, présenter l'essai, suivre les retours. "
+            "Ne rends pas obligatoire une audience, une nouvelle niche, plusieurs réseaux ou une liste email. "
+            "Pour le coaching progressif, donne UNE mission mesurable adaptée au temps disponible, "
+            "avec résultat attendu et une question de validation. Ne suppose jamais une étape accomplie. "
+            "Si un plan complet ou un livrable est demandé, fournis-le sans bloquer. "
+            "Ne prétends jamais créer un compte, activer un lien ou consulter les ventes."
         )
     return ""

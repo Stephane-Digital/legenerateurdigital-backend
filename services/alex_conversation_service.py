@@ -19,7 +19,7 @@ from services.coach_profile_service import get_or_create
 MEMORY_KEY = "alex_conversation_v1"
 MAX_MESSAGES = 20  # Dix échanges au maximum ; les plus anciens sont évincés.
 MAX_USER_CHARS = 1500
-MAX_ASSISTANT_CHARS = 2000
+MAX_ASSISTANT_CHARS = 40000
 MAX_CONTEXT_MESSAGES = 8
 MAX_CONTEXT_CHARS = 750
 

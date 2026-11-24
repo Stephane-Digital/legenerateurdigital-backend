@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from services.ai.alex_project_intelligence import project_guidance
+from services.ai.alex_lgd_knowledge import lgd_operational_guidance
 import os
 from typing import Any, Dict, Optional
 
@@ -246,6 +247,7 @@ def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | N
         f"{conversation_mode_guidance}"
         f"{s3c_guidance}"
         f"{s3c2_guidance}"
+        f"{lgd_operational_guidance() if mode_n == 'conversation' else ''}"
     )
 
 

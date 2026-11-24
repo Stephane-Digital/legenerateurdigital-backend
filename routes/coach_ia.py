@@ -10,6 +10,7 @@ from database import get_db
 from routes.auth import get_current_user
 from services.ai.coach_ai import generate_coach_reply, generate_live_strategist
 from services.ai.alex_project_intelligence import detect_explicit_project
+from services.ai.alex_lgd_commercial import commercial_question, commercial_reply
 from services.ai_quota_service import get_or_create_quota, update_quota
 from services.alex_conversation_service import (
     MAX_USER_CHARS, append_exchange, clear_conversation, list_conversation, recent_history,
@@ -228,28 +229,6 @@ def chat(
     # L'ancien parcours et les autres clients /coach/chat conservent le même contrat.
     history = recent_history(db, user_id) if payload.conversation_mode else []
 
-    # Ensure the canonical global bucket exists and reserve before OpenAI call.
-    try:
-        q = get_or_create_quota(db, user_id, feature="global")
-    except Exception:
-        logger.exception("Echec de lecture des quotas Coach Chat")
-        raise
-    snap = _quota_snapshot(q)
-    if snap["limit"] > 0 and snap["remaining"] <= 0:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
-
-    estimated_input = payload.message
-    if payload.conversation_mode:
-        estimated_input += "".join(turn["content"] for turn in history)
-    reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000))
-    try:
-        reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
-    except Exception:
-        logger.exception("Echec du debit des quotas Coach Chat")
-        raise
-    if reserved_quota is None:
-        raise HTTPException(status_code=402, detail="Quota IA atteint")
-
     # LGD — Coach Alex FormAction V1
     # On enrichit le contexte avec le profil persistant + intention projet détectée.
     # Le cerveau métier reste dans services/ai/coach_ai.py.
@@ -262,9 +241,6 @@ def chat(
         if payload.conversation_mode else _detect_project_type(payload.message)
     )
 
-    if project_intent:
-        _write_project_intent_if_needed(db, user_id, project_intent)
-
     # Ne jamais injecter tout l'historique privé dans le profil/context de la réponse.
     profile_context.pop("alex_conversation_v1", None)
     coach_context: Dict[str, Any] = {
@@ -275,18 +251,52 @@ def chat(
         },
     }
 
+    is_commercial = payload.conversation_mode and commercial_question(payload.message.strip(), coach_context)
+
+    # Ensure the canonical global bucket exists and reserve before OpenAI call.
+    try:
+        q = get_or_create_quota(db, user_id, feature="global")
+    except Exception:
+        logger.exception("Echec de lecture des quotas Coach Chat")
+        raise
+    if is_commercial:
+        reserved_tokens = 0
+        reserved_quota = q
+    else:
+        snap = _quota_snapshot(q)
+        if snap["limit"] > 0 and snap["remaining"] <= 0:
+            raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+        estimated_input = payload.message
+        if payload.conversation_mode:
+            estimated_input += "".join(turn["content"] for turn in history)
+        reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000))
+        try:
+            reserved_quota = update_quota(db, user_id, reserved_tokens, feature="global")
+        except Exception:
+            logger.exception("Echec du debit des quotas Coach Chat")
+            raise
+        if reserved_quota is None:
+            raise HTTPException(status_code=402, detail="Quota IA atteint")
+
+    if project_intent:
+        _write_project_intent_if_needed(db, user_id, project_intent)
+
     # Generate response (provider usage may be included)
-    result = generate_coach_reply(
-        message=payload.message,
-        mode="conversation" if payload.conversation_mode else "action",
-        focus="libre" if payload.conversation_mode else "jour",
-        context=coach_context,
-        history=history if payload.conversation_mode else None,
-        user_id=user_id,
-        user_email=_current_user_field(current_user, "email"),
-        user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
-        plan=(getattr(q, "plan", None) or "essentiel"),
-    )
+    if is_commercial:
+        result = {"reply": commercial_reply(), "source": "lgd_commercial_reference"}
+    else:
+        result = generate_coach_reply(
+            message=payload.message,
+            mode="conversation" if payload.conversation_mode else "action",
+            focus="libre" if payload.conversation_mode else "jour",
+            context=coach_context,
+            history=history if payload.conversation_mode else None,
+            user_id=user_id,
+            user_email=_current_user_field(current_user, "email"),
+            user_name=_current_user_field(current_user, "name") or _current_user_field(current_user, "full_name"),
+            plan=(getattr(q, "plan", None) or "essentiel"),
+        )
 
     reply = ""
     tokens = 0
@@ -303,7 +313,7 @@ def chat(
 
     memory_saved = False
     saved_messages = None
-    if payload.conversation_mode and reply and isinstance(result, dict) and result.get("source") == "openai":
+    if payload.conversation_mode and reply and isinstance(result, dict) and result.get("source") in ("openai", "lgd_commercial_reference"):
         try:
             saved_messages = append_exchange(db, user_id, payload.message, reply)
             memory_saved = True

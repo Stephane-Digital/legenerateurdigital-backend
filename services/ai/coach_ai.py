@@ -221,7 +221,7 @@ def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | N
         "- Si le Programme Ambassadeur LGD est choisi, adapte le parcours : audience, contenus, acquisition, essais, suivi, optimisation.\n"
         "- Conditions Ambassadeur : inscription gratuite, sans abonnement LGD obligatoire, commission récurrente de 60 % soumise à validation après 30 jours actifs. Aucun revenu garanti.\n"
         "- N'invente jamais des clics, ventes, commissions ou actions effectuées.\n"
-        "- Réponds brièvement par défaut, mais développe à la demande.\n"
+        "- Réponds brièvement par défaut, mais respecte en priorité la longueur, le nombre et la structure des livrables explicitement demandés. Termine chaque étape dans le budget disponible. Ne force pas un diagnostic si la demande est claire.\n"
     ) if mode_n == "conversation" else ""
 
     return (
@@ -245,8 +245,10 @@ def _system_prompt(mode: str, focus: str, plan: str, context: Dict[str, Any] | N
         "- quand c’est pertinent, structure en: Objectif / Diagnostic / Plan / Action du jour;\n"
         "- ne promets jamais de résultat garanti; parle de trajectoire réaliste;\n"
         "- si le contexte contient un objectif chiffré, adapte la réponse à cet objectif;\n"
-        "- évite les réponses longues: utile, clair, exploitable."
-        f"{conversation_mode_guidance}"
+        + ("- En conversation, la concision est le style par défaut, jamais une limite imposée aux livrables demandés. "
+         "Le référentiel LGD ci-dessous fait autorité sur les fonctionnalités; ne complète pas ses lacunes par des suppositions."
+         if mode_n == "conversation" else "- évite les réponses longues: utile, clair, exploitable.")
+        + f"{conversation_mode_guidance}"
         f"{s3c_guidance}"
         f"{s3c2_guidance}"
         f"{lgd_operational_guidance() if mode_n == 'conversation' else ''}"

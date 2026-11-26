@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from services.ai.alex_project_intelligence import project_guidance
 from services.ai.alex_lgd_knowledge import lgd_operational_guidance
 import os
@@ -330,12 +332,38 @@ def generate_coach_reply(
                 messages.append({"role": entry["role"], "content": content})
         messages.append({"role": "user", "content": msg})
 
-        resp = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),
-            messages=messages,
-            temperature=0.42,
-            max_tokens=coach_output_limit(msg, mode),
-        )
+        conversation_model = os.getenv("OPENAI_MODEL_COACH_CONVERSATION", "").strip() if mode == "conversation" else ""
+        if conversation_model:
+            # S3.C.4.5 QUATER: activation explicite, conversation uniquement.
+            reasoning = os.getenv("OPENAI_REASONING_COACH_CONVERSATION", "none").strip() or "none"
+            logger = logging.getLogger(__name__)
+            started = time.monotonic()
+            try:
+                if conversation_model != "gpt-6-luna" or reasoning != "none":
+                    raise ValueError("Unsupported conversation configuration")
+                resp = client.chat.completions.create(
+                    model=conversation_model,
+                    messages=messages,
+                    reasoning_effort=reasoning,
+                    temperature=0.42,
+                    max_completion_tokens=coach_output_limit(msg, mode),
+                )
+            except Exception as exc:
+                logger.warning("LGD conversation migration error: type=%s elapsed=%.3fs", type(exc).__name__, time.monotonic() - started)
+                raise
+            logger.info(
+                "LGD conversation migration: model=%s effort=%s elapsed=%.3fs usage=%s finish=%s",
+                conversation_model, reasoning, time.monotonic() - started,
+                _extract_usage(getattr(resp, "usage", None)),
+                getattr(resp.choices[0], "finish_reason", None) if resp.choices else None,
+            )
+        else:
+            resp = client.chat.completions.create(
+                model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),
+                messages=messages,
+                temperature=0.42,
+                max_tokens=coach_output_limit(msg, mode),
+            )
 
         reply = ""
         try:

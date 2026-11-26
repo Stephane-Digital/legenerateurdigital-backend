@@ -336,7 +336,6 @@ def generate_coach_reply(
         if conversation_model:
             # S3.C.4.5 QUATER: activation explicite, conversation uniquement.
             reasoning = os.getenv("OPENAI_REASONING_COACH_CONVERSATION", "none").strip() or "none"
-            logger = logging.getLogger(__name__)
             started = time.monotonic()
             try:
                 if conversation_model != "gpt-6-luna" or reasoning != "none":
@@ -349,14 +348,31 @@ def generate_coach_reply(
                     max_completion_tokens=coach_output_limit(msg, mode),
                 )
             except Exception as exc:
-                logger.warning("LGD conversation migration error: type=%s elapsed=%.3fs", type(exc).__name__, time.monotonic() - started)
+                try:
+                    logging.getLogger("uvicorn.error").warning(
+                        "LGD_COACH_CONVERSATION error_type=%s requested_model=%s effort=%s elapsed=%.3fs",
+                        type(exc).__name__, conversation_model, reasoning, time.monotonic() - started,
+                    )
+                except Exception:
+                    pass  # La télémétrie ne doit jamais masquer une erreur API.
                 raise
-            logger.info(
-                "LGD conversation migration: model=%s effort=%s elapsed=%.3fs usage=%s finish=%s",
-                conversation_model, reasoning, time.monotonic() - started,
-                _extract_usage(getattr(resp, "usage", None)),
-                getattr(resp.choices[0], "finish_reason", None) if resp.choices else None,
-            )
+            try:
+                def field(obj, key):
+                    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+                usage = field(resp, "usage")
+                choices = field(resp, "choices")
+                logging.getLogger("uvicorn.error").info(
+                    "LGD_COACH_CONVERSATION requested_model=%s returned_model=%s effort=%s elapsed=%.3fs "
+                    "input_tokens=%s output_tokens=%s reasoning_tokens=%s cached_tokens=%s total_tokens=%s finish=%s",
+                    conversation_model, field(resp, "model"), reasoning, time.monotonic() - started,
+                    field(usage, "prompt_tokens"), field(usage, "completion_tokens"),
+                    field(field(usage, "completion_tokens_details"), "reasoning_tokens"),
+                    field(field(usage, "prompt_tokens_details"), "cached_tokens"),
+                    field(usage, "total_tokens"), field(choices[0], "finish_reason") if choices else None,
+                )
+            except Exception:
+                pass  # Une erreur de télémétrie ne doit jamais bloquer la réponse.
         else:
             resp = client.chat.completions.create(
                 model=os.getenv("OPENAI_MODEL_COACH", "gpt-4o-mini"),

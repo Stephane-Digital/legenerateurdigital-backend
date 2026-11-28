@@ -56,8 +56,9 @@ jobs:
               assert recent_history(db, 1)[-1]["content"].endswith("Introduction terminée")
               assert len(list_conversation(db, 1)[-1]["content"]) > 10000
               assert progress_context(db, 2) == ""
-              append_exchange(db, 1, "Nouvel ebook jardinage", "Nouveau sommaire", project_changed=True)
+              append_exchange(db, 1, "Nouvel ebook jardinage", "Nouveau sommaire", project_changed=True, active_project={"project_type":"ebook"})
           with Session() as db:
+              assert read_profile(db, 1)["alex_conversation_v1"]["active_project"] == {"project_type":"ebook"}
               assert len(list_conversation(db, 1)) == 4
               assert len(recent_history(db, 1)) == 2
               assert progress_context(db, 1, exclude_recent=True) == ""

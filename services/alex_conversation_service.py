@@ -88,7 +88,7 @@ def compact_history(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     return result
 
 
-def append_exchange(db: Session, user_id: int, message: str, answer: str, *, project_changed: bool = False, commercial: bool = False) -> List[Dict[str, str]]:
+def append_exchange(db: Session, user_id: int, message: str, answer: str, *, project_changed: bool = False, commercial: bool = False, active_project: Dict[str, Any] | None = None) -> List[Dict[str, str]]:
     user_text = _text(message, MAX_USER_CHARS)
     assistant_text = _text(answer, MAX_ASSISTANT_CHARS)
     if not user_text or not assistant_text:
@@ -109,6 +109,10 @@ def append_exchange(db: Session, user_id: int, message: str, answer: str, *, pro
     progress = update_progress(raw.get("progress"), user_text, assistant_text, project_changed=project_changed, commercial=commercial)
     boundary = stored[-2]["id"] if project_changed else raw.get("project_start_id")
     profile[MEMORY_KEY] = {"version": 1, "messages": stored, "progress": progress, "project_start_id": boundary}
+    if isinstance(active_project, dict) and not commercial:
+        profile[MEMORY_KEY]["active_project"] = dict(active_project)
+    elif not project_changed and isinstance(raw.get("active_project"), dict):
+        profile[MEMORY_KEY]["active_project"] = raw["active_project"]
     cp.profile_json = json.dumps(profile, ensure_ascii=False)
     cp.updated_at = datetime.utcnow()
     db.add(cp)

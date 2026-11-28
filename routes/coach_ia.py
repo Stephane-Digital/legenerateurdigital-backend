@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routes.auth import get_current_user
 from services.ai.coach_ai import generate_coach_reply, generate_live_strategist, coach_output_limit
-from services.ai.alex_project_intelligence import detect_explicit_project
+from services.ai.alex_project_intelligence import detect_explicit_project, explicit_project_switch
 from services.ai.alex_lgd_commercial import commercial_question, commercial_reply
 from services.ai_quota_service import get_or_create_quota, update_quota
 from services.alex_conversation_service import (
@@ -251,15 +251,16 @@ def chat(
         },
     }
 
-    project_changed = bool(project_intent and any(
-        project_intent.get(key) != existing_project.get(key)
-        for key in ("project_type", "project_label") if key in project_intent
-    ))
-    progress = progress_context(db, user_id) if payload.conversation_mode and not project_changed else ""
+    is_commercial = payload.conversation_mode and commercial_question(payload.message.strip(), coach_context)
+    project_changed = bool(payload.conversation_mode and not is_commercial and
+                           explicit_project_switch(payload.message, existing_project, project_intent))
+    if project_changed:
+        history = []
+        # Preserve the stored Business profile; omit stale project details for this request.
+        coach_context["alex_business_project"] = dict(project_intent)
+    progress = progress_context(db, user_id, exclude_recent=True) if payload.conversation_mode and not project_changed and not is_commercial else ""
     if progress:
         coach_context["alex_progress_evidence"] = progress
-
-    is_commercial = payload.conversation_mode and commercial_question(payload.message.strip(), coach_context)
 
     # Ensure the canonical global bucket exists and reserve before OpenAI call.
     try:
@@ -288,7 +289,7 @@ def chat(
         if reserved_quota is None:
             raise HTTPException(status_code=402, detail="Quota IA atteint")
 
-    if project_intent:
+    if project_intent and not is_commercial:
         _write_project_intent_if_needed(db, user_id, project_intent)
 
     # Generate response (provider usage may be included)

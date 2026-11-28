@@ -256,14 +256,15 @@ def chat(
         },
     }
 
-    is_commercial = payload.conversation_mode and commercial_question(payload.message.strip(), coach_context)
-    project_changed = bool(payload.conversation_mode and not is_commercial and
+    project_changed = bool(payload.conversation_mode and
                            explicit_project_switch(payload.message, existing_project, project_intent))
     if project_changed:
         history = []
     if payload.conversation_mode and (project_changed or isolated):
         # Conversation-specific project: never merge old FormAction or niche data.
         coach_context = {"alex_business_project": {**({} if project_changed else existing_project), **project_intent}}
+    is_commercial = bool(payload.conversation_mode and not project_changed and
+                         commercial_question(payload.message.strip(), coach_context))
     progress = progress_context(db, user_id, exclude_recent=True) if payload.conversation_mode and not project_changed and not is_commercial else ""
     if progress:
         coach_context["alex_progress_evidence"] = progress

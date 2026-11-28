@@ -88,7 +88,7 @@ def compact_history(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     return result
 
 
-def append_exchange(db: Session, user_id: int, message: str, answer: str) -> List[Dict[str, str]]:
+def append_exchange(db: Session, user_id: int, message: str, answer: str, *, project_changed: bool = False, commercial: bool = False) -> List[Dict[str, str]]:
     user_text = _text(message, MAX_USER_CHARS)
     assistant_text = _text(answer, MAX_ASSISTANT_CHARS)
     if not user_text or not assistant_text:
@@ -104,7 +104,10 @@ def append_exchange(db: Session, user_id: int, message: str, answer: str) -> Lis
         {"id": uuid4().hex, "role": "user", "content": user_text, "created_at": now},
         {"id": uuid4().hex, "role": "assistant", "content": assistant_text, "created_at": now},
     ])[-MAX_MESSAGES:]
-    profile[MEMORY_KEY] = {"version": 1, "messages": stored}
+    raw = profile.get(MEMORY_KEY)
+    raw = raw if isinstance(raw, dict) else {}
+    progress = update_progress(raw.get("progress"), user_text, assistant_text, project_changed=project_changed, commercial=commercial)
+    profile[MEMORY_KEY] = {"version": 1, "messages": stored, "progress": progress}
     cp.profile_json = json.dumps(profile, ensure_ascii=False)
     cp.updated_at = datetime.utcnow()
     db.add(cp)
@@ -122,3 +125,36 @@ def clear_conversation(db: Session, user_id: int) -> None:
         cp.updated_at = datetime.utcnow()
         db.add(cp)
         db.commit()
+
+# S3.C.4.7.D: bounded evidence, not inferred task completion.
+def update_progress(previous: Any, message: str, answer: str, *, project_changed: bool = False, commercial: bool = False) -> List[Dict[str, str]]:
+    records = []
+    if not project_changed and isinstance(previous, list):
+        for item in previous[-6:]:
+            if isinstance(item, dict):
+                request = _text(item.get("user_statement"), 240)
+                response = _text(item.get("alex_excerpt"), 360)
+                if request and response:
+                    records.append({"user_statement": request, "alex_excerpt": response})
+    if commercial:
+        return records
+    request = _text(message, MAX_USER_CHARS)
+    response = _text(answer, MAX_ASSISTANT_CHARS)
+    if request and response:
+        def excerpt(value: str, limit: int) -> str:
+            if len(value) <= limit:
+                return value
+            marker = " […] "
+            head = (limit - len(marker)) // 2
+            return value[:head] + marker + value[-(limit-len(marker)-head):]
+        records.append({"user_statement": excerpt(request, 240), "alex_excerpt": excerpt(response, 360)})
+    return records[-6:]
+
+
+def progress_context(db: Session, user_id: int) -> str:
+    cp = get_or_create(db, user_id)
+    raw = _parse_json(cp.profile_json).get(MEMORY_KEY)
+    if not isinstance(raw, dict):
+        return ""
+    records = update_progress(raw.get("progress"), "", "")
+    return json.dumps(records, ensure_ascii=False) if records else ""

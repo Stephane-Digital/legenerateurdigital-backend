@@ -20,12 +20,17 @@ def commercial_facts() -> str:
 
 def commercial_question(message: str, context=None) -> bool:
     msg = ''.join(c for c in unicodedata.normalize('NFKD', message.lower()) if not unicodedata.combining(c))
-    project = (context or {}).get('alex_business_project') or {}
-    explicit = bool(re.search(r'\b(ambassadeur|ambassadrice|lgd)\b', msg))
-    active = isinstance(project, dict) and project.get('project_type') == 'lgd_ambassador'
-    pricing = bool(re.search(r'\b(tarifs?|prix|commissions?|formules?|percevoir|combien|abonnements?)\b', msg))
-    # Narrow deterministic route: no unrelated project or hypothetical simulation.
-    return pricing and (explicit or active) and not re.search(r'\b(ebook|e-book|autre produit|simul\w*|hypothet\w*)\b', msg)
+    msg = re.sub(r"[’']", " ", msg)
+    project = (context or {}).get("alex_business_project") or {}
+    active = isinstance(project, dict) and project.get("project_type") == "lgd_ambassador"
+    # Personalized work must not be replaced by a fixed commercial answer.
+    if re.search(r"\b(ebook|e-book|autre produit|simul\w*|hypothet\w*|strategie|commercialisation|modules?|plan d action|mon prix|mes prix|mon produit|mon projet|mon offre|mon public|ma niche|sept jours|7 jours de vente)\b", msg):
+        return False
+    subject = bool(re.search(r"\b(ambassadeur|ambassadrice|lgd|programme ambassadeur)\b", msg))
+    pricing = bool(re.search(r"\b(tarifs?|prix|commissions?|formules?|percevoir|combien|abonnements?)\b", msg))
+    # Require a direct official-facts question, not mere co-occurrence of words.
+    direct = bool(re.search(r"\b(tarifs?|prix|formules?|abonnements?)\s+(?:de\s+|du\s+|des\s+)?(?:lgd|le generateur digital)\b|\b(?:lgd|ambassadeur|ambassadrice)\s*[:,-]?\s*(?:tarifs?|prix|commissions?|formules?)\b|\b(?:taux|montant|pourcentage|calcul)\s+(?:de\s+|des\s+|la\s+)*commissions?\b|\bcommissions?\s+(?:du\s+|de\s+|des\s+)?(?:programme\s+)?(?:lgd|ambassadeur|ambassadrice)\b|\bcombien\b.{0,100}\b(?:commission|commissions|rapporte|percevoir|touche|gagne|coute)\b", msg))
+    return pricing and direct and (subject or active)
 
 
 def commercial_reply() -> str:

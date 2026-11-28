@@ -1,0 +1,88 @@
+name: S3.C.4.7.E TER - Integrated Coach validation
+on:
+  push:
+    branches: [test/s3-c-4-7-memory]
+permissions:
+  contents: read
+jobs:
+  integrated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: memory_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U test -d memory_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/memory_test
+      SECRET_KEY: isolated-ci-test-only-not-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: '30'
+      BACKEND_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:3000
+      ADMIN_API_KEY: isolated-ci-test-only
+      OPENAI_API_KEY: test-no-network
+      OPENAI_MODEL_COACH_CONVERSATION: gpt-6-luna
+      OPENAI_REASONING_COACH_CONVERSATION: none
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: FastAPI startup and Coach HTTP contract
+        run: |
+          python <<'PY'
+          from types import SimpleNamespace as NS
+          from unittest.mock import patch
+          from fastapi.testclient import TestClient
+          from main import app
+          from routes import coach_ia as route
+          from services.ai import coach_ai
+          from sqlalchemy.orm import configure_mappers
+          configure_mappers()
+          calls, debits = [], []
+          q = NS(tokens_used=0, credits=100000, plan="ultime")
+          def debit(db, uid, amount, feature):
+              assert feature == "global"
+              debits.append(amount)
+              q.tokens_used += amount
+              return q
+          def completion(**kwargs):
+              calls.append(kwargs)
+              return NS(model=kwargs["model"], choices=[NS(message=NS(content="Réponse de test"), finish_reason="stop")], usage={"prompt_tokens":100,"completion_tokens":20,"total_tokens":120})
+          provider = NS(chat=NS(completions=NS(create=completion)))
+          profile = {"alex_business_project":{"project_type":"ebook","offerDescription":"OLD_OFFER"}, "coach_v2":{"context":{"offerDescription":"OLD_FORM"}}, "niche":"OLD_NICHE"}
+          history = [{"role":"user","content":"Ancien projet"},{"role":"assistant","content":"Ancien résultat"}]
+          app.dependency_overrides[route.get_current_user] = lambda: {"id":1}
+          app.dependency_overrides[route.get_db] = lambda: NS(rollback=lambda:None)
+          with patch("openai.OpenAI", return_value=provider), patch.object(route,"read_profile",side_effect=lambda *a: dict(profile)), patch.object(route,"recent_history",return_value=history), patch.object(route,"progress_context",return_value="OLDER_EVIDENCE"), patch.object(route,"get_or_create_quota",return_value=q), patch.object(route,"update_quota",side_effect=debit), patch.object(route,"append_exchange",return_value=[]), patch.object(route,"write_profile_patch"):
+              with TestClient(app) as client:
+                  assert client.get("/health").status_code == 200
+                  def chat(msg, mode=True):
+                      response=client.post("/coach/chat",json={"message":msg,"conversation_mode":mode})
+                      assert response.status_code == 200, response.text
+                      return response.json()
+                  result=chat("Quelle est la prochaine étape ?")
+                  assert len(calls)==1 and calls[-1]["model"]=="gpt-6-luna"
+                  assert calls[-1]["reasoning_effort"]=="none"
+                  assert any("OLDER_EVIDENCE" in m["content"] for m in calls[-1]["messages"])
+                  assert result["tokens_consumed"]==debits[-1] and result["conversation_saved"]
+                  result=chat("Quels sont les tarifs LGD ?")
+                  assert result["tokens_consumed"]==0 and len(calls)==1 and len(debits)==1
+                  result=chat("Je veux créer un nouvel ebook sur le jardinage")
+                  assert len(calls)==2
+                  messages=calls[-1]["messages"]
+                  assert not any("Ancien résultat" in m["content"] or "OLDER_EVIDENCE" in m["content"] for m in messages)
+                  chat("Une action du jour",False)
+                  assert len(calls)==3 and calls[-1]["model"]!="gpt-6-luna"
+                  assert not any("OLDER_EVIDENCE" in m["content"] for m in calls[-1]["messages"])
+                  print("HTTP, provider payload, commercial zero debit and action mode checks passed")
+                  stale=[s for s in ("OLD_OFFER","OLD_FORM","OLD_NICHE") if any(s in m["content"] for m in messages)]
+                  assert not stale, "Stale project context after switch: "+str(stale)
+          PY

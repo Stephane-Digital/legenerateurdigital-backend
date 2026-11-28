@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m py_compile services/alex_conversation_service.py routes/coach_ia.py services/ai/coach_ai.py
+      - run: python -m py_compile services/alex_conversation_service.py routes/coach_ia.py services/ai/coach_ai.py services/ai/alex_project_intelligence.py
       - name: Test persistence with isolated database doubles
         run: |
           python <<'PY'
@@ -64,5 +64,27 @@ jobs:
           clear_conversation(db, 1)
           assert progress_context(db, 1) == "" and list_conversation(db, 1) == []
           assert json.loads(db.rows[1].profile_json)["business"]["keep"]
-          print("Structured memory persistence checks passed (database doubles)")
+          from services.alex_conversation_service import recent_history
+          from services.ai.alex_project_intelligence import detect_explicit_project, explicit_project_switch
+          current = {"project_type": "ebook"}
+          for msg in ("Je veux créer un nouvel ebook sur le jardinage", "Je change de projet"):
+              assert explicit_project_switch(msg, current, detect_explicit_project(msg, current))
+          for msg in ("Comment créer un autre ebook ?", "Je veux rédiger le chapitre 2 de mon ebook"):
+              assert not explicit_project_switch(msg, current, detect_explicit_project(msg, current))
+          append_exchange(db, 1, "Ancien projet", "Ancien contenu")
+          append_exchange(db, 1, "Nouveau projet", "Nouveau contenu", project_changed=True)
+          assert len(list_conversation(db, 1)) == 4
+          assert [m["content"] for m in recent_history(db, 1)] == ["Nouveau projet", "Nouveau contenu"]
+          assert progress_context(db, 1, exclude_recent=True) == ""
+          for i in range(5):
+              append_exchange(db, 1, "Suite "+str(i), "Contenu "+str(i))
+          older = json.loads(progress_context(db, 1, exclude_recent=True))
+          assert len(older) == 2 and older[0]["user_statement"] == "Nouveau projet"
+          for i in range(12):
+              append_exchange(db, 1, "Etape "+str(i), "Résultat "+str(i))
+          assert len(recent_history(db, 1)) == 8
+          assert all("Ancien" not in m["content"] for m in recent_history(db, 1))
+          clear_conversation(db, 1)
+          assert recent_history(db, 1) == [] and progress_context(db, 1) == ""
+          print("Structured memory and project isolation checks passed (database doubles)")
           PY

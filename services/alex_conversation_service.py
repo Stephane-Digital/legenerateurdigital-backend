@@ -66,10 +66,26 @@ def list_conversation(db: Session, user_id: int) -> List[Dict[str, str]]:
 
 def recent_history(db: Session, user_id: int) -> List[Dict[str, str]]:
     """Historique structuré transmis comme rôles OpenAI, jamais comme système."""
-    return [
-        {"role": item["role"], "content": item["content"][:MAX_CONTEXT_CHARS]}
-        for item in list_conversation(db, user_id)[-MAX_CONTEXT_MESSAGES:]
-    ]
+    return compact_history(list_conversation(db, user_id))
+
+
+def compact_history(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Bounded excerpts: preserve user decisions and assistant endings."""
+    result = []
+    for item in messages[-MAX_CONTEXT_MESSAGES:]:
+        role = item.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        content = _text(item.get("content"), MAX_USER_CHARS if role == "user" else MAX_ASSISTANT_CHARS)
+        limit = MAX_USER_CHARS if role == "user" else MAX_CONTEXT_CHARS
+        if len(content) > limit:
+            marker = "\n[Extrait : passage intermédiaire omis]\n"
+            head = (limit - len(marker)) // 2
+            tail = limit - len(marker) - head
+            content = content[:head] + marker + content[-tail:]
+        if content:
+            result.append({"role": role, "content": content})
+    return result
 
 
 def append_exchange(db: Session, user_id: int, message: str, answer: str) -> List[Dict[str, str]]:

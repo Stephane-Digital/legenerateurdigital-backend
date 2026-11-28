@@ -236,6 +236,11 @@ def chat(
     # S3.C.2 : identifier un choix explicite, sans reclasser une simple question.
     existing_project = profile_context.get("alex_business_project")
     existing_project = existing_project if isinstance(existing_project, dict) else {}
+    memory = profile_context.get("alex_conversation_v1")
+    active_project = memory.get("active_project") if isinstance(memory, dict) else None
+    isolated = payload.conversation_mode and isinstance(active_project, dict)
+    if isolated:
+        existing_project = active_project
     project_intent = (
         detect_explicit_project(payload.message, existing_project)
         if payload.conversation_mode else _detect_project_type(payload.message)
@@ -256,8 +261,9 @@ def chat(
                            explicit_project_switch(payload.message, existing_project, project_intent))
     if project_changed:
         history = []
-        # Preserve the stored Business profile; omit stale project details for this request.
-        coach_context["alex_business_project"] = dict(project_intent)
+    if payload.conversation_mode and (project_changed or isolated):
+        # Conversation-specific project: never merge old FormAction or niche data.
+        coach_context = {"alex_business_project": {**({} if project_changed else existing_project), **project_intent}}
     progress = progress_context(db, user_id, exclude_recent=True) if payload.conversation_mode and not project_changed and not is_commercial else ""
     if progress:
         coach_context["alex_progress_evidence"] = progress
@@ -289,7 +295,7 @@ def chat(
         if reserved_quota is None:
             raise HTTPException(status_code=402, detail="Quota IA atteint")
 
-    if project_intent and not is_commercial:
+    if project_intent and not is_commercial and not (payload.conversation_mode and (project_changed or isolated)):
         _write_project_intent_if_needed(db, user_id, project_intent)
 
     # Generate response (provider usage may be included)
@@ -325,7 +331,7 @@ def chat(
     saved_messages = None
     if payload.conversation_mode and reply and isinstance(result, dict) and result.get("source") in ("openai", "lgd_commercial_reference"):
         try:
-            saved_messages = append_exchange(db, user_id, payload.message, reply, project_changed=project_changed, commercial=is_commercial)
+            saved_messages = append_exchange(db, user_id, payload.message, reply, project_changed=project_changed, commercial=is_commercial, active_project=coach_context["alex_business_project"] if (project_changed or isolated) and not is_commercial else None)
             memory_saved = True
         except Exception:
             db.rollback()

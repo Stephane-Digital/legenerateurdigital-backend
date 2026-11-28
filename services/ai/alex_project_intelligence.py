@@ -110,3 +110,17 @@ def project_guidance(project: Dict[str, Any] | None) -> str:
             "Ne prétends jamais créer un compte, activer un lien ou consulter les ventes."
         )
     return ""
+
+
+def explicit_project_switch(message: str, current: Dict[str, Any], patch: Dict[str, str]) -> bool:
+    """Explicit switch only; a new title alone may be a revision."""
+    msg = _normalized(message.strip())
+    if not current:
+        return False
+    if patch.get("project_type") and patch["project_type"] != current.get("project_type"):
+        return True
+    return bool(re.search(
+        r"\b(?:je change de projet|je passe a un autre projet|je commence un nouveau projet|"
+        r"je veux (?:creer|ecrire|rediger) (?:un autre|un nouvel|un nouveau) (?:ebook|e-book|produit digital)|"
+        r"je souhaite (?:creer|ecrire|rediger) (?:un autre|un nouvel|un nouveau) (?:ebook|e-book|produit digital))\b", msg
+    ))

@@ -1,0 +1,65 @@
+name: S3.C.4.7.E - PostgreSQL integration
+on:
+  push:
+    branches: [test/s3-c-4-7-memory]
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: memory_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U test -d memory_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install SQLAlchemy==2.0.32 psycopg2-binary==2.9.9
+      - name: Real PostgreSQL persistence across sessions
+        run: |
+          python <<'PY'
+          import sys, types, json
+          from sqlalchemy import create_engine, Table, Column, Integer
+          from sqlalchemy.orm import declarative_base, sessionmaker
+          Base = declarative_base()
+          database = types.ModuleType("database")
+          database.Base = Base
+          sys.modules["database"] = database
+          Table("users", Base.metadata, Column("id", Integer, primary_key=True))
+          from models.coach_profile_model import CoachProfile
+          from services.coach_profile_service import write_profile_patch, read_profile
+          from services.alex_conversation_service import append_exchange, recent_history, progress_context, list_conversation, clear_conversation
+          engine = create_engine("postgresql+psycopg2://test:test@localhost:5432/memory_test")
+          Base.metadata.create_all(engine)
+          with engine.begin() as conn:
+              conn.execute(Base.metadata.tables["users"].insert(), [{"id":1},{"id":2}])
+          Session = sessionmaker(bind=engine)
+          with Session() as db:
+              write_profile_patch(db, 1, {"business":{"keep":True}})
+              append_exchange(db, 1, "Ebook productivité", "Sommaire " + "x"*10000 + "Introduction terminée")
+          with Session() as db:
+              assert recent_history(db, 1)[-1]["content"].endswith("Introduction terminée")
+              assert len(list_conversation(db, 1)[-1]["content"]) > 10000
+              assert progress_context(db, 2) == ""
+              append_exchange(db, 1, "Nouvel ebook jardinage", "Nouveau sommaire", project_changed=True)
+          with Session() as db:
+              assert len(list_conversation(db, 1)) == 4
+              assert len(recent_history(db, 1)) == 2
+              assert progress_context(db, 1, exclude_recent=True) == ""
+              clear_conversation(db, 1)
+          with Session() as db:
+              assert list_conversation(db, 1) == []
+              assert progress_context(db, 1) == ""
+              assert read_profile(db, 1)["business"]["keep"] is True
+          print("PostgreSQL persistence, isolation and reset passed")
+          PY

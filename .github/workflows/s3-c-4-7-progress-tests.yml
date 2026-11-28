@@ -1,0 +1,68 @@
+name: S3.C.4.7.D BIS - Structured memory tests
+on:
+  push:
+    branches: [test/s3-c-4-7-memory]
+permissions:
+  contents: read
+jobs:
+  progress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile services/alex_conversation_service.py routes/coach_ia.py services/ai/coach_ai.py
+      - name: Test persistence with isolated database doubles
+        run: |
+          python <<'PY'
+          import sys, types, json
+          def stub(name, **attrs):
+              mod = types.ModuleType(name)
+              mod.__dict__.update(attrs)
+              sys.modules[name] = mod
+          class Field:
+              def __eq__(self, value): return value
+          class Profile:
+              user_id = Field()
+              def __init__(self): self.profile_json = '{"business":{"keep":true}}'
+          class DB:
+              def __init__(self): self.rows = {}
+              def query(self, model): return self
+              def filter(self, uid): self.uid = uid; return self
+              def with_for_update(self): return self
+              def one(self): return self.rows[self.uid]
+              def add(self, row): pass
+              def commit(self): pass
+          def get_or_create(db, uid): return db.rows.setdefault(uid, Profile())
+          stub("sqlalchemy")
+          stub("sqlalchemy.orm", Session=DB)
+          stub("models.coach_profile_model", CoachProfile=Profile)
+          stub("services.coach_profile_service", get_or_create=get_or_create)
+          from services.alex_conversation_service import append_exchange, progress_context, clear_conversation, list_conversation, update_progress
+          db = DB()
+          assert progress_context(db, 1) == ""
+          append_exchange(db, 1, "Rédige mon ebook", "Sommaire " + "x"*10000 + "Introduction rédigée")
+          records = json.loads(progress_context(db, 1))
+          assert records[0]["user_statement"] == "Rédige mon ebook"
+          assert records[0]["alex_excerpt"].endswith("Introduction rédigée")
+          assert len(records[0]["alex_excerpt"]) <= 360
+          assert set(records[0]) == {"user_statement", "alex_excerpt"}
+          assert progress_context(db, 2) == ""
+          before = progress_context(db, 1)
+          append_exchange(db, 1, "Prix LGD ?", "29 euros", commercial=True)
+          assert progress_context(db, 1) == before
+          for i in range(12): append_exchange(db, 1, "Décision "+str(i), "Réponse "+str(i))
+          assert len(json.loads(progress_context(db, 1))) == 6
+          assert len(list_conversation(db, 1)) == 20
+          append_exchange(db, 1, "Nouveau projet", "Nouvelle réponse", project_changed=True)
+          assert len(json.loads(progress_context(db, 1))) == 1
+          assert update_progress([None, {}, {"user_statement": 42}], "", "") == []
+          clear_conversation(db, 1)
+          assert progress_context(db, 1) == "" and list_conversation(db, 1) == []
+          assert json.loads(db.rows[1].profile_json)["business"]["keep"]
+          print("Structured memory persistence checks passed (database doubles)")
+          PY

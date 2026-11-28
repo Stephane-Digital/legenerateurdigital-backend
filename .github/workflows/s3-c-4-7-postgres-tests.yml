@@ -29,6 +29,7 @@ jobs:
         run: |
           python <<'PY'
           import sys, types, json
+          from pathlib import Path
           from sqlalchemy import create_engine, Table, Column, Integer
           from sqlalchemy.orm import declarative_base, sessionmaker
           Base = declarative_base()
@@ -36,6 +37,10 @@ jobs:
           database.Base = Base
           sys.modules["database"] = database
           Table("users", Base.metadata, Column("id", Integer, primary_key=True))
+          # Load only the real CoachProfile model, not unrelated package bootstrap mappers.
+          models = types.ModuleType("models")
+          models.__path__ = [str(Path("models").resolve())]
+          sys.modules["models"] = models
           from models.coach_profile_model import CoachProfile
           from services.coach_profile_service import write_profile_patch, read_profile
           from services.alex_conversation_service import append_exchange, recent_history, progress_context, list_conversation, clear_conversation

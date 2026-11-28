@@ -13,7 +13,7 @@ from services.ai.alex_project_intelligence import detect_explicit_project
 from services.ai.alex_lgd_commercial import commercial_question, commercial_reply
 from services.ai_quota_service import get_or_create_quota, update_quota
 from services.alex_conversation_service import (
-    MAX_USER_CHARS, append_exchange, clear_conversation, list_conversation, recent_history,
+    MAX_USER_CHARS, append_exchange, clear_conversation, list_conversation, recent_history, progress_context,
 )
 try:
     from services.coach_profile_service import read_profile, write_profile_patch
@@ -251,6 +251,14 @@ def chat(
         },
     }
 
+    project_changed = bool(project_intent and any(
+        project_intent.get(key) != existing_project.get(key)
+        for key in ("project_type", "project_label") if key in project_intent
+    ))
+    progress = progress_context(db, user_id) if payload.conversation_mode and not project_changed else ""
+    if progress:
+        coach_context["alex_progress_evidence"] = progress
+
     is_commercial = payload.conversation_mode and commercial_question(payload.message.strip(), coach_context)
 
     # Ensure the canonical global bucket exists and reserve before OpenAI call.
@@ -269,7 +277,7 @@ def chat(
 
         estimated_input = payload.message
         if payload.conversation_mode:
-            estimated_input += "".join(turn["content"] for turn in history)
+            estimated_input += "".join(turn["content"] for turn in history) + progress
         output_extra = max(0, coach_output_limit(payload.message, "conversation" if payload.conversation_mode else "action") - 900)
         reserved_tokens = max(1_200, min(_estimate_tokens(estimated_input) + 1_800, 5_000)) + output_extra
         try:
@@ -316,7 +324,7 @@ def chat(
     saved_messages = None
     if payload.conversation_mode and reply and isinstance(result, dict) and result.get("source") in ("openai", "lgd_commercial_reference"):
         try:
-            saved_messages = append_exchange(db, user_id, payload.message, reply)
+            saved_messages = append_exchange(db, user_id, payload.message, reply, project_changed=project_changed, commercial=is_commercial)
             memory_saved = True
         except Exception:
             db.rollback()

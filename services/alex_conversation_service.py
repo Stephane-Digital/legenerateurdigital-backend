@@ -66,7 +66,7 @@ def list_conversation(db: Session, user_id: int) -> List[Dict[str, str]]:
 
 def recent_history(db: Session, user_id: int) -> List[Dict[str, str]]:
     """Historique structuré transmis comme rôles OpenAI, jamais comme système."""
-    return compact_history(list_conversation(db, user_id))
+    return compact_history(active_messages(db, user_id))
 
 
 def compact_history(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -107,7 +107,8 @@ def append_exchange(db: Session, user_id: int, message: str, answer: str, *, pro
     raw = profile.get(MEMORY_KEY)
     raw = raw if isinstance(raw, dict) else {}
     progress = update_progress(raw.get("progress"), user_text, assistant_text, project_changed=project_changed, commercial=commercial)
-    profile[MEMORY_KEY] = {"version": 1, "messages": stored, "progress": progress}
+    boundary = stored[-2]["id"] if project_changed else raw.get("project_start_id")
+    profile[MEMORY_KEY] = {"version": 1, "messages": stored, "progress": progress, "project_start_id": boundary}
     cp.profile_json = json.dumps(profile, ensure_ascii=False)
     cp.updated_at = datetime.utcnow()
     db.add(cp)
@@ -151,10 +152,31 @@ def update_progress(previous: Any, message: str, answer: str, *, project_changed
     return records[-6:]
 
 
-def progress_context(db: Session, user_id: int) -> str:
+def active_messages(db: Session, user_id: int) -> List[Dict[str, str]]:
+    cp = get_or_create(db, user_id)
+    profile = _parse_json(cp.profile_json)
+    messages = _valid_messages(profile)
+    raw = profile.get(MEMORY_KEY)
+    boundary = raw.get("project_start_id") if isinstance(raw, dict) else None
+    if boundary:
+        for index, item in enumerate(messages):
+            if item["id"] == boundary:
+                return messages[index:]
+    # A boundary evicted from the bounded history precedes all remaining messages.
+    return messages
+
+
+def progress_context(db: Session, user_id: int, *, exclude_recent: bool = False) -> str:
     cp = get_or_create(db, user_id)
     raw = _parse_json(cp.profile_json).get(MEMORY_KEY)
     if not isinstance(raw, dict):
         return ""
     records = update_progress(raw.get("progress"), "", "")
+    if exclude_recent:
+        recent = active_messages(db, user_id)[-MAX_CONTEXT_MESSAGES:]
+        for index in range(len(recent)-1):
+            if recent[index]["role"] == "user" and recent[index+1]["role"] == "assistant":
+                pair = update_progress([], recent[index]["content"], recent[index+1]["content"])
+                if pair:
+                    records = [item for item in records if item != pair[0]]
     return json.dumps(records, ensure_ascii=False) if records else ""

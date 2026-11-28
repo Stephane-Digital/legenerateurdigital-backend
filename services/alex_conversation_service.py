@@ -66,7 +66,21 @@ def list_conversation(db: Session, user_id: int) -> List[Dict[str, str]]:
 
 def recent_history(db: Session, user_id: int) -> List[Dict[str, str]]:
     """Historique structuré transmis comme rôles OpenAI, jamais comme système."""
-    return compact_history(active_messages(db, user_id))
+    return compact_history(_without_commercial_pairs(active_messages(db, user_id)))
+
+
+def _without_commercial_pairs(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Keep official reference replies visible in UI, not in project context."""
+    from services.ai.alex_lgd_commercial import commercial_reply
+    reference = commercial_reply().strip()
+    result = []
+    for item in messages:
+        if item.get("role") == "assistant" and item.get("content", "").strip() == reference:
+            if result and result[-1].get("role") == "user":
+                result.pop()
+            continue
+        result.append(item)
+    return result
 
 
 def compact_history(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -177,7 +191,7 @@ def progress_context(db: Session, user_id: int, *, exclude_recent: bool = False)
         return ""
     records = update_progress(raw.get("progress"), "", "")
     if exclude_recent:
-        recent = active_messages(db, user_id)[-MAX_CONTEXT_MESSAGES:]
+        recent = _without_commercial_pairs(active_messages(db, user_id))[-MAX_CONTEXT_MESSAGES:]
         for index in range(len(recent)-1):
             if recent[index]["role"] == "user" and recent[index+1]["role"] == "assistant":
                 pair = update_progress([], recent[index]["content"], recent[index+1]["content"])
